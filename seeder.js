@@ -1,67 +1,46 @@
 // backend/seeder.js
-import mongoose from "mongoose";
-import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import User from "./models/User.js";
 
-dotenv.config();
-
-// ================== MongoDB Connection ==================
-const connectDB = async () => {
+export const seedSuperAdmin = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log("✅ MongoDB connected");
-  } catch (err) {
-    console.error("❌ MongoDB connection error:", err);
-    process.exit(1);
-  }
-};
+    console.log("🛠️ Starting superadmin seeding...");
 
-// ================== Seeder Function ==================
-const seedSuperAdmin = async () => {
-  try {
-    // 1️⃣ Delete existing superadmin (if any)
-    const existing = await User.findOne({ role: "superadmin" });
-    if (existing) {
-      await User.deleteOne({ role: "superadmin" });
-      console.log("🗑️ Existing superadmin deleted");
+    // Env vars
+    const superAdminEmail = process.env.SUPERADMIN_EMAIL;
+    const plainPassword = process.env.SUPERADMIN_PASSWORD;
+    const superAdminName = process.env.SUPERADMIN_NAME || "Super Admin";
+
+    if (!superAdminEmail || !plainPassword) {
+      console.error("❌ SUPERADMIN_EMAIL or SUPERADMIN_PASSWORD not set in environment variables");
+      return;
     }
 
-    // 2️⃣ Define superadmin credentials
-    const plainPassword = "ImThere4you@anycost"; // <-- set your desired superadmin password here ✅
-    const hashedPassword = await bcrypt.hash(plainPassword, 10); // 10 salt rounds
+    // Check if superadmin exists
+    const existing = await User.findOne({ role: "superadmin" });
+    if (existing) {
+      console.log("🗑️ Existing superadmin found. Deleting...");
+      await User.deleteOne({ role: "superadmin" });
+      console.log("✅ Existing superadmin deleted");
+    }
 
-    const superAdminEmail = "rahmathussain.hjp@gmail.com"; // <-- set your desired superadmin email here ✅
+    // Hash password
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
-    // 3️⃣ Create new superadmin
+    // Create superadmin
     await User.create({
-      name: "Super Admin",
-      email: superAdminEmail,   // <-- email for DB ✅
-      password: hashedPassword, // <-- hashed password stored in DB ✅
+      name: superAdminName,
+      email: superAdminEmail,
+      password: hashedPassword,
       role: "superadmin",
       isVerified: true,
       isActive: true,
     });
 
-    // 4️⃣ Console output (for reference only, DB me plain password store nahi hota)
     console.log("✅ New superadmin created successfully!");
-    console.log("📧 Email:", superAdminEmail);  // <-- displayed in console ✅
-    console.log("🔑 Password:", plainPassword); // <-- displayed in console ✅
-
-    process.exit();
+    console.log("📧 Email:", superAdminEmail);
+    console.log("🔑 Password:", plainPassword);
   } catch (err) {
     console.error("❌ Seeder error:", err);
-    process.exit(1);
   }
 };
-
-// ================== Run Seeder ==================
-const runSeeder = async () => {
-  await connectDB();
-  await seedSuperAdmin();
-};
-
-runSeeder();
