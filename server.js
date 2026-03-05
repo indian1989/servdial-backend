@@ -4,9 +4,6 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
 
-// Seeder import
-import { seedSuperAdmin } from "./seeder.js";
-
 dotenv.config();
 
 const app = express();
@@ -66,11 +63,6 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   // 1️⃣ Connect to MongoDB Atlas
   await connectDB();
-
-  // 2️⃣ Seed Superadmin AFTER DB connection
-  console.log("🛠️ Starting superadmin seeding...");
-  await seedSuperAdmin();
-  console.log("🛠️ Superadmin seeding completed");
 
   // 3️⃣ Start Express Server
   const server = app.listen(PORT, () => {

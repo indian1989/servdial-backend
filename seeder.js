@@ -4,7 +4,7 @@ import User from "./models/User.js";
 
 export const seedSuperAdmin = async () => {
   try {
-    console.log("🛠️ Starting superadmin seeding...");
+    console.log("🛠️ Checking for existing superadmin...");
 
     // Env vars
     const superAdminEmail = process.env.SUPERADMIN_EMAIL;
@@ -12,16 +12,17 @@ export const seedSuperAdmin = async () => {
     const superAdminName = process.env.SUPERADMIN_NAME || "Super Admin";
 
     if (!superAdminEmail || !plainPassword) {
-      console.error("❌ SUPERADMIN_EMAIL or SUPERADMIN_PASSWORD not set in environment variables");
+      console.error(
+        "❌ SUPERADMIN_EMAIL or SUPERADMIN_PASSWORD not set in environment variables"
+      );
       return;
     }
 
-    // Check if superadmin exists
-    const existing = await User.findOne({ role: "superadmin" });
+    // ✅ Only create if superadmin with the given email doesn't exist
+    const existing = await User.findOne({ email: superAdminEmail, role: "superadmin" });
     if (existing) {
-      console.log("🗑️ Existing superadmin found. Deleting...");
-      await User.deleteOne({ role: "superadmin" });
-      console.log("✅ Existing superadmin deleted");
+      console.log("✅ Superadmin already exists. Skipping creation.");
+      return;
     }
 
     // Hash password
@@ -44,3 +45,8 @@ export const seedSuperAdmin = async () => {
     console.error("❌ Seeder error:", err);
   }
 };
+
+// Optional: Run manually from terminal
+if (process.argv[2] === "--run") {
+  seedSuperAdmin().then(() => process.exit(0));
+}
