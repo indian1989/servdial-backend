@@ -185,18 +185,22 @@ export const toggleFeatured = async (req, res) => {
   }
 };
 
-
 // ================= Indexes =================
-// For fast search & filtering
-businessSchema.index({ name: "text", description: "text", city: 1, category: 1 });
-businessSchema.index({ location: "2dsphere" });
-BusinessSchema.index({ city: 1, category: 1 });
 
-BusinessSchema.index({
+// Text search for business search
+businessSchema.index({
   name: "text",
+  description: "text",
   category: "text",
   city: "text",
 });
+
+// Geo location search
+businessSchema.index({ location: "2dsphere" });
+
+// Fast filter by city + category
+businessSchema.index({ city: 1, category: 1 });
+
 
 
 export default mongoose.model("Business", businessSchema);
