@@ -209,24 +209,31 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
 
 
 // ================= SEARCH SUGGESTIONS =================
-export const suggestSearch = asyncHandler(async (req, res) => {
+export const suggestSearch = async (req, res) => {
 
   const { q } = req.query;
 
-  if (!q) {
+  if(!q){
     return res.json({ suggestions: [] });
   }
 
-  const categories = await Business.distinct("category", {
-    category: new RegExp(q, "i"),
-  });
+  try{
 
-  res.json({
-    suggestions: categories.slice(0, 8),
-  });
+    const categories = await Business.distinct("category", {
+      category: new RegExp(q, "i")
+    });
 
-});
+    res.json({
+      suggestions: categories.slice(0,8)
+    });
 
+  }catch(err){
+    res.status(500).json({
+      message:"Suggestion error"
+    });
+  }
+
+};
 
 // ================= Paid Feature Placeholder =================
 export const paidFeatureNotice = asyncHandler(async (req, res) => {

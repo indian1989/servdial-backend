@@ -7,7 +7,7 @@ import {
   deleteBusiness,
   paidFeatureNotice,
   searchBusinesses,
-  suggestedSearch,
+  suggestSearch,
 } from "../controllers/businessController.js";
 
 import { protect } from "../middleware/authMiddleware.js";
