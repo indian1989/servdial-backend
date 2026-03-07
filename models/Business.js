@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import slugify from "slugify";
+import Business from "../models/Business.js";
+
 
 const businessSchema = new mongoose.Schema(
   {
@@ -115,6 +117,74 @@ businessSchema.pre("save", function (next) {
   }
   next();
 });
+
+// ================= GET ALL BUSINESSES =================
+export const getAllBusinesses = async (req, res) => {
+  try {
+    const businesses = await Business.find()
+      .populate("owner", "name email")
+      .sort({ createdAt: -1 });
+
+    res.json(businesses);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================= APPROVE BUSINESS =================
+export const approveBusiness = async (req, res) => {
+  try {
+    const business = await Business.findByIdAndUpdate(
+      req.params.id,
+      { status: "approved" },
+      { new: true }
+    );
+
+    res.json(business);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================= REJECT BUSINESS =================
+export const rejectBusiness = async (req, res) => {
+  try {
+    const business = await Business.findByIdAndUpdate(
+      req.params.id,
+      { status: "rejected" },
+      { new: true }
+    );
+
+    res.json(business);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================= DELETE BUSINESS =================
+export const deleteBusiness = async (req, res) => {
+  try {
+    await Business.findByIdAndDelete(req.params.id);
+    res.json({ message: "Business deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================= FEATURE BUSINESS =================
+export const toggleFeatured = async (req, res) => {
+  try {
+    const business = await Business.findById(req.params.id);
+
+    business.isFeatured = !business.isFeatured;
+    await business.save();
+
+    res.json(business);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 
 // ================= Indexes =================
 // For fast search & filtering
