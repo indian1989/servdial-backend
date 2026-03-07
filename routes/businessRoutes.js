@@ -15,11 +15,18 @@ import { protect } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 // ================= PUBLIC ROUTES =================
-router.get("/", getBusinesses);
-router.get("/:id", getBusinessById);
+
+// search businesses
 router.get("/search", searchBusinesses);
+
+// search suggestions
 router.get("/suggest", suggestSearch);
 
+// get all businesses
+router.get("/", getBusinesses);
+
+// get single business
+router.get("/:id", getBusinessById);
 
 // ================= PROTECTED ROUTES =================
 router.post("/", protect, createBusiness);
