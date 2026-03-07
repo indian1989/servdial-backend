@@ -190,5 +190,13 @@ export const toggleFeatured = async (req, res) => {
 // For fast search & filtering
 businessSchema.index({ name: "text", description: "text", city: 1, category: 1 });
 businessSchema.index({ location: "2dsphere" });
+BusinessSchema.index({ city: 1, category: 1 });
+
+BusinessSchema.index({
+  name: "text",
+  category: "text",
+  city: "text",
+});
+
 
 export default mongoose.model("Business", businessSchema);
