@@ -22,7 +22,7 @@ import adminBusinessRoutes from "./routes/adminBusinessRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import cityRoutes from "./routes/cityRoutes.js";
 import bannerRoutes from "./routes/bannerRoutes.js";
-import homepageRoutes from "./routes/homepagrRoutes.js";
+import homepageRoutes from "./routes/homepageRoutes.js";
 
 app.get("/", (req, res) => {
   res.json({ message: "🚀 ServDial API Running..." });
