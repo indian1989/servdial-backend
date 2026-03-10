@@ -244,3 +244,63 @@ export const paidFeatureNotice = asyncHandler(async (req, res) => {
   });
 
 });
+
+// ============= Featured Business ==================
+export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
+
+  const limit = Number(req.query.limit) || 8;
+
+  const businesses = await Business.find({
+    status: "approved",
+    featured: true
+  })
+    .sort({ rating: -1 })
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    businesses
+  });
+
+});
+
+// =============== Top Rated Business ================
+export const getTopRatedBusinesses = asyncHandler(async (req, res) => {
+
+  const limit = Number(req.query.limit) || 8;
+
+  const businesses = await Business.find({
+    status: "approved"
+  })
+    .sort({ rating: -1 })
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    businesses
+  });
+
+});
+
+// ================== Nearby Businesses ===============
+export const getNearbyBusinesses = asyncHandler(async (req, res) => {
+
+  const { lat, lng, limit = 8 } = req.query;
+
+  if (!lat || !lng) {
+    return res.status(400).json({
+      success: false,
+      message: "Latitude and longitude required"
+    });
+  }
+
+  const businesses = await Business.find({
+    status: "approved"
+  }).limit(Number(limit));
+
+  res.status(200).json({
+    success: true,
+    businesses
+  });
+
+});
