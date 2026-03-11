@@ -23,6 +23,7 @@ import categoryRoutes from "./routes/categoryRoutes.js";
 import cityRoutes from "./routes/cityRoutes.js";
 import bannerRoutes from "./routes/bannerRoutes.js";
 import homepageRoutes from "./routes/homepageRoutes.js";
+import searchRoutes from "./routes/searchRoutes.js";
 
 app.get("/", (req, res) => {
   res.json({ message: "🚀 ServDial API Running..." });
@@ -38,6 +39,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/cities", cityRoutes);
 app.use("/api/banner", bannerRoutes);
 app.use("/api/homepage", homepageRoutes);
+app.use("/api/search", searchRoutes);
 // ================= MongoDB Connection =================
 const connectDB = async () => {
   try {

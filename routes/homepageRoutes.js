@@ -1,39 +1,42 @@
 import express from "express";
+import asyncHandler from "express-async-handler";
+
 import Business from "../models/Business.js";
 import Category from "../models/Category.js";
 import City from "../models/City.js";
 
 const router = express.Router();
 
-router.get("/", async (req, res) => {
-  try {
+// ================= Homepage Data =================
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
 
-    const featuredBusinesses = await Business.find({ isFeatured: true }).limit(8);
+    const featuredBusinesses = await Business.find({ featured: true })
+      .limit(8)
+      .sort({ createdAt: -1 });
 
-    const topRatedBusinesses = await Business.find({})
+    const topRatedBusinesses = await Business.find()
       .sort({ rating: -1 })
       .limit(8);
 
-    const categories = await Category.find({}).limit(12);
+    const categories = await Category.find()
+      .sort({ name: 1 })
+      .limit(24);
 
-    const cities = await City.find({}).limit(8);
+    const cities = await City.find()
+      .sort({ name: 1 })
+      .limit(20);
 
     res.json({
+      success: true,
       featuredBusinesses,
       topRatedBusinesses,
       categories,
-      cities,
+      cities
     });
 
-  } catch (error) {
-
-    console.error("Homepage error:", error);
-
-    res.status(500).json({
-      message: "Homepage API failed",
-    });
-
-  }
-});
+  })
+);
 
 export default router;
