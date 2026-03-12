@@ -41,17 +41,6 @@ app.use("/api/banner", bannerRoutes);
 app.use("/api/homepage", homepageRoutes);
 app.use("/api/search", searchRoutes);
 
-import path from "path";
-
-const __dirname = path.resolve();
-
-// Serve frontend build
-app.use(express.static(path.join(__dirname, "../frontend/dist")));
-
-// React router fallback
-app.get("*", (req, res) => {
-  res.sendFile(path.resolve(__dirname, "../frontend/dist", "index.html"));
-});
 // ================= MongoDB Connection =================
 const connectDB = async () => {
   try {
