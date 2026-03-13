@@ -130,10 +130,10 @@ router.post(
       throw new Error("City name and state are required");
     }
 
-    name = name.toLowerCase();
-    state = state.toLowerCase();
-
-    const exists = await City.findOne({ name, state });
+    const exists = await City.findOne({
+  name: { $regex: `^${name}$`, $options: "i" },
+  state: { $regex: `^${state}$`, $options: "i" }
+});
 
     if (exists) {
       res.status(400);
