@@ -1,5 +1,6 @@
 import Business from "../models/Business.js";
 import asyncHandler from "express-async-handler";
+import { uploadImage } from "../utils/uploadToCloudinary.js";
 
 // ================= Role Check =================
 const isAdmin = (user) =>
@@ -23,10 +24,19 @@ export const createBusiness = asyncHandler(async (req, res) => {
       ? "pending"
       : "approved";
 
+  let imageUrl = "";
+
+  // Upload image to Cloudinary
+  if (req.file) {
+    const result = await uploadImage(req.file.buffer);
+    imageUrl = result.secure_url;
+  }
+
   const business = new Business({
     ...req.body,
     owner: ownerId,
     status,
+    image: imageUrl
   });
 
   await business.save();
@@ -36,8 +46,8 @@ export const createBusiness = asyncHandler(async (req, res) => {
     message: "Business created successfully",
     business,
   });
-});
 
+});
 
 // ================= GET Businesses (Search + Filters) =================
 export const getBusinesses = asyncHandler(async (req, res) => {

@@ -14,6 +14,7 @@ import {
 } from "../controllers/businessController.js";
 
 import { protect } from "../middleware/authMiddleware.js";
+import upload from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
 
@@ -43,7 +44,7 @@ router.get("/:id", getBusinessById);
 
 // ================= PROTECTED ROUTES =================
 
-router.post("/", protect, createBusiness);
+router.post("/", protect, upload.single("image"), createBusiness);
 router.put("/:id", protect, updateBusiness);
 router.delete("/:id", protect, deleteBusiness);
 
