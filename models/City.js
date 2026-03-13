@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import slugify from "../utils/slugify";
 
 const citySchema = new mongoose.Schema(
   {
@@ -55,10 +56,7 @@ const citySchema = new mongoose.Schema(
 citySchema.pre("save", function (next) {
 
   if (this.isModified("name")) {
-    this.slug = this.name
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^\w-]+/g, "");
+    this.slug = slugify(this.name)
   }
 
   next();

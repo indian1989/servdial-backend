@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import slugify from "slugify";
+import slugify from "../utils/slugify.js";
 import Business from "../models/Business.js";
 
 

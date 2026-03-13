@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-
+import slugify from "../utils/slugify";
 const categorySchema = new mongoose.Schema(
   {
     name: {
@@ -34,12 +34,7 @@ categorySchema.pre("save", function (next) {
 
   if (this.isModified("name")) {
 
-    this.slug = this.name
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/[^\w-]+/g, "");
-
+    this.slug = slugify(this.name);
   }
 
   next();
