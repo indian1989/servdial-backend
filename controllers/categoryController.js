@@ -1,5 +1,5 @@
 import Category from "../models/Category.js";
-import slugify from "slugify";
+import slugify from "../utils/slugify.js";
 
 // GET ALL CATEGORIES
 export const getCategories = async (req, res) => {
