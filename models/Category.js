@@ -17,36 +17,18 @@ const categorySchema = new mongoose.Schema(
 
     icon: {
       type: String,
-      default: "",
     },
 
     image: {
       type: String,
-      default: "",
-    },
-
-    description: {
-      type: String,
-      default: "",
-    },
-
-    isTrending: {
-      type: Boolean,
-      default: false,
-    },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-
-    order: {
-      type: Number,
-      default: 0,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
+
+
 // ================= AUTO CREATE SLUG =================
 categorySchema.pre("save", function (next) {
 
