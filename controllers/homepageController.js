@@ -1,27 +1,25 @@
-import express from "express";
-import asyncHandler from "express-async-handler";
-
-import Business from "../models/Business.js";
 import Category from "../models/Category.js";
+import Business from "../models/Business.js";
 import City from "../models/City.js";
+import Banner from "../models/Banner.js";
 
-const router = express.Router();
-
-// ================= Homepage Data =================
-router.get(
-  "/",
-  asyncHandler(async (req, res) => {
+export const getHomepageData = async (req, res) => {
+  try {
 
     const [
+      categories,
       featuredBusinesses,
       topRatedBusinesses,
       latestBusinesses,
-      categories,
-      cities
+      cities,
+      banners
     ] = await Promise.all([
 
-      Business.find({ featured: true, isApproved: true })
-        .sort({ createdAt: -1 })
+      Category.find({ isActive: true })
+        .sort({ order: 1 })
+        .limit(12),
+
+      Business.find({ isFeatured: true, isApproved: true })
         .limit(8)
         .populate("category city"),
 
@@ -35,25 +33,30 @@ router.get(
         .limit(8)
         .populate("category city"),
 
-      Category.find({ isActive: true })
-        .sort({ name: 1 })
-        .limit(24),
-
       City.find({ isPopular: true })
-        .sort({ name: 1 })
-        .limit(20)
+        .limit(8),
+
+      Banner.find({ isActive: true })
     ]);
 
     res.json({
       success: true,
+      categories,
       featuredBusinesses,
       topRatedBusinesses,
       latestBusinesses,
-      categories,
-      cities
+      cities,
+      banners
     });
 
-  })
-);
+  } catch (error) {
 
-export default router;
+    console.error("Homepage error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load homepage"
+    });
+
+  }
+};
