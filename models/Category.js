@@ -47,5 +47,21 @@ const categorySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+// ================= AUTO CREATE SLUG =================
+categorySchema.pre("save", function (next) {
+
+  if (this.isModified("name")) {
+
+    this.slug = this.name
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^\w-]+/g, "");
+
+  }
+
+  next();
+
+});
 
 export default mongoose.model("Category", categorySchema);
