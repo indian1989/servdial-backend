@@ -312,6 +312,7 @@ export const getNearbyBusinesses = asyncHandler(async (req, res) => {
 
 });
 
+// =================== Similar Businesses =================
 export const getSimilarBusinesses = asyncHandler(async (req, res) => {
 
   const { category } = req.query;
