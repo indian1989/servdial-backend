@@ -40,7 +40,7 @@ export const protect = asyncHandler(async (req, res, next) => {
 /* ===============================
    ROLE BASED AUTHORIZATION
 ================================ */
-export const authorizeRoles = (...roles) => {
+export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
