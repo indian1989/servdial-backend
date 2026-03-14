@@ -11,6 +11,7 @@ import {
   getFeaturedBusinesses,
   getTopRatedBusinesses,
   getNearbyBusinesses,
+  getSimilarBusinesses,
 } from "../controllers/businessController.js";
 
 import { protect } from "../middleware/authMiddleware.js";
@@ -36,7 +37,7 @@ router.get("/top-rated", getTopRatedBusinesses);
 router.get("/nearby", getNearbyBusinesses);
 
 // get similar businesses
-router.get("/similar", getSimilarBusinesses);
+router.get("/similar/:id", getSimilarBusinesses);
 
 // get all businesses
 router.get("/", getBusinesses);
