@@ -81,10 +81,23 @@ const businessSchema = new mongoose.Schema(
       default: 0,
     },
 
-    isFeatured: {
-      type: Boolean,
-      default: false,
-    },
+    // Featured system fields
+
+isFeatured: {
+  type: Boolean,
+  default: false
+},
+
+featureRequest: {
+  type: Boolean,
+  default: false
+},
+
+featureStatus: {
+  type: String,
+  enum: ["none", "pending", "approved", "rejected"],
+  default: "none"
+},
 
     featuredUntill: {
       type: Date
