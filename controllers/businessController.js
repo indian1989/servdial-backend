@@ -191,6 +191,9 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
 
   const { city, category, page = 1, limit = 12 } = req.query;
 
+  const pageNum = Number(page);
+  const limitNum = Number(limit);
+
   const query = { status: "approved" };
 
   if (city) {
@@ -202,9 +205,9 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
   }
 
   const businesses = await Business.find(query)
-    .skip((page - 1) * limit)
-    .limit(Number(limit))
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .skip((pageNum - 1) * limitNum)
+    .limit(limitNum);
 
   const total = await Business.countDocuments(query);
 
@@ -212,38 +215,32 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     success: true,
     businesses,
     total,
-    page: Number(page),
-    pages: Math.ceil(total / limit),
+    page: pageNum,
+    pages: Math.ceil(total / limitNum),
   });
+
 });
 
-
 // ================= SEARCH SUGGESTIONS =================
-export const suggestSearch = async (req, res) => {
+export const suggestSearch = asyncHandler(async (req, res) => {
 
   const { q } = req.query;
 
-  if(!q){
+  if (!q) {
     return res.json({ suggestions: [] });
   }
 
-  try{
+  const businesses = await Business.find({
+    name: new RegExp(q, "i")
+  })
+    .select("name city")
+    .limit(8);
 
-    const categories = await Business.distinct("category", {
-      category: new RegExp(q, "i")
-    });
+  res.json({
+    suggestions: businesses
+  });
 
-    res.json({
-      suggestions: categories.slice(0,8)
-    });
-
-  }catch(err){
-    res.status(500).json({
-      message:"Suggestion error"
-    });
-  }
-
-};
+});
 
 // ================= Paid Feature Placeholder =================
 export const paidFeatureNotice = asyncHandler(async (req, res) => {
@@ -312,5 +309,24 @@ export const getNearbyBusinesses = asyncHandler(async (req, res) => {
     success: true,
     businesses
   });
+
+});
+
+export const getSimilarBusinesses = asyncHandler(async (req, res) => {
+
+  const { category } = req.query;
+
+  if (!category) {
+    return res.json([]);
+  }
+
+  const businesses = await Business.find({
+    category,
+    status: "approved"
+  })
+  .limit(6)
+  .sort({ rating: -1 });
+
+  res.json(businesses);
 
 });

@@ -12,46 +12,58 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
 
-    const [
-      featuredBusinesses,
-      topRatedBusinesses,
-      latestBusinesses,
-      categories,
-      cities
-    ] = await Promise.all([
+  const [
+  featuredBusinesses,
+  topRatedBusinesses,
+  latestBusinesses,
+  categories,
+  cities
+] = await Promise.all([
 
-      Business.find({ featured: true, isApproved: true })
-        .sort({ createdAt: -1 })
-        .limit(8)
-        .populate("category city"),
+  Business.find({
+    featured: true,
+    status: "approved"
+  })
+    .sort({ createdAt: -1 })
+    .limit(8)
+    .populate("category city")
+    .lean(),
 
-      Business.find({ isApproved: true })
-        .sort({ rating: -1 })
-        .limit(8)
-        .populate("category city"),
+  Business.find({
+    status: "approved"
+  })
+    .sort({ rating: -1 })
+    .limit(8)
+    .populate("category city")
+    .lean(),
 
-      Business.find({ isApproved: true })
-        .sort({ createdAt: -1 })
-        .limit(8)
-        .populate("category city"),
+  Business.find({
+    status: "approved"
+  })
+    .sort({ createdAt: -1 })
+    .limit(8)
+    .populate("category city")
+    .lean(),
 
-      Category.find({ isActive: true })
-        .sort({ name: 1 })
-        .limit(24),
+  Category.find({ isActive: true })
+    .sort({ name: 1 })
+    .limit(24)
+    .lean(),
 
-      City.find({ isPopular: true })
-        .sort({ name: 1 })
-        .limit(20)
-    ]);
+  City.find({ isPopular: true })
+    .sort({ name: 1 })
+    .limit(20)
+    .lean()
+]);
 
-    res.json({
-      success: true,
-      featuredBusinesses,
-      topRatedBusinesses,
-      latestBusinesses,
-      categories,
-      cities
-    });
+res.json({
+  success: true,
+  featuredBusinesses,
+  topRatedBusinesses,
+  latestBusinesses,
+  categories,
+  cities
+});
 
   })
 );

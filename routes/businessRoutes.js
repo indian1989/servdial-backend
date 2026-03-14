@@ -35,6 +35,9 @@ router.get("/top-rated", getTopRatedBusinesses);
 // nearby businesses
 router.get("/nearby", getNearbyBusinesses);
 
+// get similar businesses
+router.get("/similar", getSimilarBusinesses);
+
 // get all businesses
 router.get("/", getBusinesses);
 

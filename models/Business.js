@@ -86,6 +86,10 @@ const businessSchema = new mongoose.Schema(
       default: false,
     },
 
+    featuredUntill: {
+      type: Date
+    },
+
     // Future Paid Service Flags
     paidServices: {
       gstRegistered: { type: Boolean, default: false },
