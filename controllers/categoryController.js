@@ -62,7 +62,7 @@ export const createCategory = async (req, res) => {
   try {
     const { name, icon, image, description, isTrending } = req.body;
 
-    const slug = slugify(name, { lower: true });
+    const slug = slugify(name);
 
     const category = await Category.create({
       name,
