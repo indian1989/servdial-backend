@@ -21,7 +21,7 @@ router.get("/featured", getFeaturedCities);
 router.put(
   "/feature/:id",
   protect,
-  authorize("admin", "superadmin"),
+  authorizeRoles("admin", "superadmin"),
   markCityAsFeatured
 );
 
@@ -29,7 +29,7 @@ router.put(
 router.put(
   "/unfeature/:id",
   protect,
-  authorize("admin", "superadmin"),
+  authorizeRoles("admin", "superadmin"),
   unmarkCityAsFeatured
 );
 export default router;
