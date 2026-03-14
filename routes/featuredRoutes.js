@@ -4,7 +4,7 @@ import {
   getFeaturedBusinesses,
 } from "../controllers/featuredController.js";
 
-import { protect, authorize } from "../middleware/authMiddleware.js";
+import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -20,7 +20,7 @@ router.get("/", getFeaturedBusinesses);
 router.put(
   "/:id",
   protect,
-  authorize("admin", "superadmin"),
+  authorizeRoles("admin", "superadmin"),
   markAsFeatured
 );
 
