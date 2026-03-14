@@ -5,6 +5,7 @@ import { getCities,
     markCityAsFeatured,
     unmarkCityAsFeatured
 } from "../controllers/cityController.js";
+import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
