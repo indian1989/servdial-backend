@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 import slugify from "../utils/slugify.js";
-import Business from "../models/Business.js";
 
 
 const businessSchema = new mongoose.Schema(

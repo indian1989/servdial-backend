@@ -12,28 +12,54 @@ export const createBusiness = async (req, res) => {
     const {
       name,
       category,
-      city,
       address,
-      phone
+      city,
+      district,
+      state,
+      phone,
+      description,
+      ownerName,
+      images
     } = req.body;
 
-    if (!name || !category || !city || !phone) {
+    const role = req.user.role;
+
+    // Required for everyone
+    if (!name || !category || !city || !district || !state || !phone) {
       return res.status(400).json({
-        message: "Name, category, city and phone are required"
+        message: "Required fields missing"
       });
     }
 
-    const business = new Business({
+    // Provider-specific validation
+    if (role === "provider") {
+
+      if (!ownerName) {
+        return res.status(400).json({
+          message: "Owner name is required for providers"
+        });
+      }
+
+      if (!images || images.length === 0) {
+        return res.status(400).json({
+          message: "At least one image is required"
+        });
+      }
+
+    }
+
+    const business = await Business.create({
       name,
       category,
-      city,
       address,
+      city,
+      district,
+      state,
       phone,
-      status: "pending",
-      featured: false
+      description,
+      images: images || [],
+      owner: req.user._id
     });
-
-    await business.save();
 
     res.status(201).json({
       success: true,
@@ -46,13 +72,11 @@ export const createBusiness = async (req, res) => {
     console.error("Create business error:", error);
 
     res.status(500).json({
-      message: "Server Error",
-      error: error.message
+      message: error.message
     });
 
   }
 };
-
 
 /* =========================
    CITY
