@@ -9,18 +9,47 @@ import User from "../models/User.js";
 export const createBusiness = async (req, res) => {
   try {
 
-    const business = await Business.create(req.body);
+    const {
+      name,
+      category,
+      city,
+      address,
+      phone
+    } = req.body;
+
+    if (!name || !category || !city || !phone) {
+      return res.status(400).json({
+        message: "Name, category, city and phone are required"
+      });
+    }
+
+    const business = new Business({
+      name,
+      category,
+      city,
+      address,
+      phone,
+      status: "pending",
+      featured: false
+    });
+
+    await business.save();
 
     res.status(201).json({
+      success: true,
       message: "Business created successfully",
       business
     });
 
   } catch (error) {
-    console.error(error);
+
+    console.error("Create business error:", error);
+
     res.status(500).json({
-      message: "Server Error"
+      message: "Server Error",
+      error: error.message
     });
+
   }
 };
 
