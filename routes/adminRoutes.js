@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import City from "../models/City.js";
 import Category from "../models/Category.js";
-
+import { createBusiness } from "../controllers/adminController.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -38,6 +38,7 @@ router.get(
   })
 );
 
+router.post("/admin/business", createBusiness);
 
 // ================= CREATE ADMIN (SUPERADMIN) =================
 router.post(
