@@ -40,8 +40,19 @@ router.get(
   })
 );
 
-router.post("/business", createBusiness);
-router.put("/business/feature/:id", toggleFeatured);
+router.post(
+  "/business",
+  protect,
+  authorizeRoles("admin","superadmin","provider"),
+  createBusiness
+);
+
+router.put(
+  "/business/feature/:id",
+  protect,
+  authorizeRoles("admin", "superadmin"),
+  toggleFeatured
+);
 
 
 // ================= CREATE ADMIN (SUPERADMIN) =================
