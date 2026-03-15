@@ -137,3 +137,36 @@ export const getBusinessStats = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
+
+// Featured Business
+
+export const toggleFeatured = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+
+    const business = await Business.findById(id);
+
+    if (!business) {
+      return res.status(404).json({ message: "Business not found" });
+    }
+
+    business.featured = !business.featured;
+
+    await business.save();
+
+    res.json({
+      message: "Featured status updated",
+      featured: business.featured
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      message: "Server error"
+    });
+
+  }
+};

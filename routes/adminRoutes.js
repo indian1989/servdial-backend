@@ -8,6 +8,8 @@ import User from "../models/User.js";
 import City from "../models/City.js";
 import Category from "../models/Category.js";
 import { createBusiness } from "../controllers/adminController.js";
+import { toggleFeatured } from "../controllers/adminController.js";
+
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -39,6 +41,8 @@ router.get(
 );
 
 router.post("/admin/business", createBusiness);
+router.put("/admin/business/feature/:id", toggleFeatured);
+
 
 // ================= CREATE ADMIN (SUPERADMIN) =================
 router.post(
