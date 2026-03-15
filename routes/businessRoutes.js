@@ -14,6 +14,12 @@ import {
   getSimilarBusinesses,
 } from "../controllers/businessController.js";
 
+import {
+  incrementViews,
+  phoneClick,
+  whatsappClick
+} from "../controllers/businessController.js";
+
 import { protect } from "../middleware/authMiddleware.js";
 import upload from "../middleware/uploadMiddleware.js";
 
@@ -44,6 +50,14 @@ router.get("/", getBusinesses);
 
 // get single business
 router.get("/:id", getBusinessById);
+
+/* BUSINESS ANALYTICS */
+
+router.put("/business/:id/view", incrementViews);
+
+router.put("/business/:id/phone", phoneClick);
+
+router.put("/business/:id/whatsapp", whatsappClick);
 
 
 // ================= PROTECTED ROUTES =================

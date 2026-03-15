@@ -80,6 +80,21 @@ const businessSchema = new mongoose.Schema(
       default: 0,
     },
 
+    views: {
+  type: Number,
+  default: 0,
+},
+
+phoneClicks: {
+  type: Number,
+  default: 0,
+},
+
+whatsappClicks: {
+  type: Number,
+  default: 0,
+},
+
     // Featured system fields
 
 isFeatured: {
