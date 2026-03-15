@@ -1,10 +1,11 @@
-import City from "../models/City.js";
-import Category from "../models/Category.js";
 import Business from "../models/Business.js";
+import Category from "../models/Category.js";
+import City from "../models/City.js";
 import User from "../models/User.js";
 
-
-// Create Business
+/* ================================
+   CREATE BUSINESS
+================================ */
 
 export const createBusiness = async (req, res) => {
   try {
@@ -18,39 +19,52 @@ export const createBusiness = async (req, res) => {
       state,
       phone,
       description,
-      ownerName,
-      images
+      images,
+      ownerName
     } = req.body;
 
     const role = req.user.role;
 
-    // Required for everyone
     if (!name || !category || !city || !district || !state || !phone) {
       return res.status(400).json({
         message: "Required fields missing"
       });
     }
 
-    // Provider-specific validation
+    /* ================= CATEGORY FIX ================= */
+
+    let categoryName = category;
+
+    const categoryDoc = await Category.findById(category);
+
+    if (categoryDoc) {
+      categoryName = categoryDoc.name;
+    }
+
+    /* ================= PROVIDER VALIDATION ================= */
+
     if (role === "provider") {
 
       if (!ownerName) {
         return res.status(400).json({
-          message: "Owner name is required for providers"
+          message: "Owner name required for provider"
         });
       }
 
       if (!images || images.length === 0) {
         return res.status(400).json({
-          message: "At least one image is required"
+          message: "At least one image required"
         });
       }
 
     }
 
+    /* ================= BUSINESS CREATE ================= */
+
     const business = await Business.create({
+
       name,
-      category,
+      category: categoryName,
       address,
       city,
       district,
@@ -58,7 +72,11 @@ export const createBusiness = async (req, res) => {
       phone,
       description,
       images: images || [],
-      owner: req.user._id
+      owner: req.user._id,
+
+      // Admin auto approval
+      status: role === "provider" ? "pending" : "approved"
+
     });
 
     res.status(201).json({
@@ -70,6 +88,213 @@ export const createBusiness = async (req, res) => {
   } catch (error) {
 
     console.error("Create business error:", error);
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+/* ================================
+   GET ALL BUSINESSES
+================================ */
+
+export const getAllBusinesses = async (req, res) => {
+  try {
+
+    const businesses = await Business.find()
+      .populate("owner", "name email")
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      businesses
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+/* ================================
+   APPROVE BUSINESS
+================================ */
+
+export const approveBusiness = async (req, res) => {
+  try {
+
+    const business = await Business.findByIdAndUpdate(
+      req.params.id,
+      { status: "approved" },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      business
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+/* ================================
+   REJECT BUSINESS
+================================ */
+
+export const rejectBusiness = async (req, res) => {
+  try {
+
+    const business = await Business.findByIdAndUpdate(
+      req.params.id,
+      { status: "rejected" },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      business
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+/* ================================
+   DELETE BUSINESS
+================================ */
+
+export const deleteBusiness = async (req, res) => {
+  try {
+
+    await Business.findByIdAndDelete(req.params.id);
+
+    res.json({
+      success: true,
+      message: "Business deleted successfully"
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+/* ================================
+   FEATURE BUSINESS
+================================ */
+
+export const toggleFeatured = async (req, res) => {
+  try {
+
+    const business = await Business.findById(req.params.id);
+
+    if (!business) {
+      return res.status(404).json({
+        message: "Business not found"
+      });
+    }
+
+    business.isFeatured = !business.isFeatured;
+
+    await business.save();
+
+    res.json({
+      success: true,
+      featured: business.isFeatured
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+/* ================================
+   DASHBOARD STATS
+================================ */
+
+export const getDashboardStats = async (req, res) => {
+  try {
+
+    const users = await User.countDocuments({ role: "user" });
+    const admins = await User.countDocuments({ role: "admin" });
+
+    const cities = await City.countDocuments();
+    const categories = await Category.countDocuments();
+
+    res.json({
+      stats: {
+        users,
+        admins,
+        cities,
+        categories
+      }
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: error.message
+    });
+
+  }
+};
+
+
+/* ================================
+   BUSINESS STATS
+================================ */
+
+export const getBusinessStats = async (req, res) => {
+  try {
+
+    const total = await Business.countDocuments();
+
+    const pending = await Business.countDocuments({
+      status: "pending"
+    });
+
+    const featured = await Business.countDocuments({
+      isFeatured: true
+    });
+
+    res.json({
+      stats: {
+        total,
+        pending,
+        featured
+      }
+    });
+
+  } catch (error) {
 
     res.status(500).json({
       message: error.message
@@ -132,94 +357,3 @@ export const createCategory = async (req, res) => {
 };
 
 
-/* =========================
-   ADMIN DASHBOARD STATS
-========================= */
-
-export const getDashboardStats = async (req, res) => {
-  try {
-
-    const users = await User.countDocuments({ role: "user" });
-    const admins = await User.countDocuments({ role: "admin" });
-
-    const cities = await City.countDocuments();
-    const categories = await Category.countDocuments();
-
-    res.json({
-      stats: {
-        users,
-        admins,
-        cities,
-        categories
-      }
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error" });
-  }
-};
-
-/* =========================
-   BUSINESS STATS
-========================= */
-
-export const getBusinessStats = async (req, res) => {
-  try {
-
-    const total = await Business.countDocuments();
-
-    const pending = await Business.countDocuments({
-      status: "pending"
-    });
-
-    const featured = await Business.countDocuments({
-      featured: true
-    });
-
-    res.json({
-      stats: {
-        total,
-        pending,
-        featured
-      }
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error" });
-  }
-};
-
-// Featured Business
-
-export const toggleFeatured = async (req, res) => {
-  try {
-
-    const { id } = req.params;
-
-    const business = await Business.findById(id);
-
-    if (!business) {
-      return res.status(404).json({ message: "Business not found" });
-    }
-
-    business.featured = !business.featured;
-
-    await business.save();
-
-    res.json({
-      message: "Featured status updated",
-      featured: business.featured
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    res.status(500).json({
-      message: "Server error"
-    });
-
-  }
-};
