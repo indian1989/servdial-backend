@@ -26,6 +26,8 @@ import homepageRoutes from "./routes/homepageRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
 import leadRoutes from "./routes/leadRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
+import recommendationRoutes from "./routes/recommendationRoutes.js";
+
 
 app.get("/", (req, res) => {
   res.json({ message: "🚀 ServDial API Running..." });
@@ -44,6 +46,8 @@ app.use("/api/homepage", homepageRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/recommendations", recommendationRoutes);
+
 
 // ================= MongoDB Connection =================
 const connectDB = async () => {

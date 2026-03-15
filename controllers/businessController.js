@@ -272,22 +272,38 @@ export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
 });
 
 // =============== Top Rated Business ================
-export const getTopRatedBusinesses = asyncHandler(async (req, res) => {
+// ================= TOP RATED BUSINESSES =================
 
-  const limit = Number(req.query.limit) || 8;
+export const getTopRatedBusinesses = async (req, res) => {
+  try {
+    const { city } = req.query;
 
-  const businesses = await Business.find({
-    status: "approved"
-  })
-    .sort({ rating: -1 })
-    .limit(limit);
+    let query = { status: "approved" };
 
-  res.status(200).json({
-    success: true,
-    businesses
-  });
+    const businesses = await Business.find(query)
+      .populate("city")
+      .populate("category")
+      .sort({ rating: -1 })   // highest rating first
+      .limit(8);
 
-});
+    let filtered = businesses;
+
+    if (city) {
+      filtered = businesses.filter(
+        (b) =>
+          b.city?.name?.toLowerCase() === city.toLowerCase()
+      );
+    }
+
+    res.json(filtered);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
 
 // ================== Nearby Businesses ===============
 export const getNearbyBusinesses = asyncHandler(async (req, res) => {
