@@ -15,7 +15,7 @@ const router = express.Router();
 
 // ================= DASHBOARD STATS =================
 router.get(
-  "/dashboard",
+  "/admin/dashboard",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -41,7 +41,7 @@ router.get(
 
 // ================= CREATE ADMIN (SUPERADMIN) =================
 router.post(
-  "/create-admin",
+  "/admin/create-admin",
   protect,
   authorizeRoles("superadmin"),
   asyncHandler(async (req, res) => {
@@ -82,7 +82,7 @@ router.post(
 
 // ================= GET ADMINS (SUPERADMIN) =================
 router.get(
-  "/admins",
+  "/admin/admins",
   protect,
   authorizeRoles("superadmin"),
   asyncHandler(async (req, res) => {
@@ -100,7 +100,7 @@ router.get(
 
 // ================= GET USERS =================
 router.get(
-  "/users",
+  "/admin/users",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -118,7 +118,7 @@ router.get(
 
 // ================= ADD CITY =================
 router.post(
-  "/city",
+  "/admin/city",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -153,7 +153,7 @@ router.post(
 
 // ================= GET CITIES =================
 router.get(
-  "/cities",
+  "admin/cities",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -171,7 +171,7 @@ router.get(
 
 // ================= DELETE CITY =================
 router.delete(
-  "/city/:id",
+  "/admin/city/:id",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -196,7 +196,7 @@ router.delete(
 
 // ================= ADD CATEGORY =================
 router.post(
-  "/category",
+  "/admin/category",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -230,7 +230,7 @@ router.post(
 
 // ================= GET CATEGORIES =================
 router.get(
-  "/categories",
+  "/admin/categories",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -248,7 +248,7 @@ router.get(
 
 // ================= DELETE CATEGORY =================
 router.delete(
-  "/category/:id",
+  "/admin/category/:id",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -273,7 +273,7 @@ router.delete(
 
 // ================= CHANGE PASSWORD =================
 router.put(
-  "/change-password",
+  "/admin/change-password",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {

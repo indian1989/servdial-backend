@@ -11,7 +11,7 @@ const router = express.Router();
 
 // ================= GET ALL BUSINESSES =================
 router.get(
-  "/businesses",
+  "/admin/businesses",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -33,7 +33,7 @@ router.get(
 
 // ================= GET PENDING BUSINESSES =================
 router.get(
-  "/businesses/pending",
+  "/admin/businesses/pending",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -54,7 +54,7 @@ router.get(
 
 // ================= APPROVE BUSINESS =================
 router.put(
-  "/business/:id/approve",
+  "/admin/business/:id/approve",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -82,7 +82,7 @@ router.put(
 
 // ================= REJECT BUSINESS =================
 router.put(
-  "/business/:id/reject",
+  "/admin/business/:id/reject",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -110,7 +110,7 @@ router.put(
 
 // ================= FEATURE BUSINESS =================
 router.put(
-  "/business/:id/feature",
+  "/admin/business/:id/feature",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -138,7 +138,7 @@ router.put(
 
 // ================= DELETE BUSINESS =================
 router.delete(
-  "/business/:id",
+  "/admin/business/:id",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -163,7 +163,7 @@ router.delete(
 
 // ================= BUSINESS STATS =================
 router.get(
-  "/business-stats",
+  "/admin/business-stats",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
