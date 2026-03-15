@@ -347,3 +347,45 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
   res.json(businesses);
 
 });
+
+// ================= INCREMENT VIEWS =================
+export const incrementViews = async (req, res) => {
+  try {
+    const business = await Business.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { views: 1 } },
+      { new: true }
+    );
+    res.json(business);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================= PHONE CLICK =================
+export const phoneClick = async (req, res) => {
+  try {
+    const business = await Business.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { phoneClicks: 1 } },
+      { new: true }
+    );
+    res.json(business);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ================= WHATSAPP CLICK =================
+export const whatsappClick = async (req, res) => {
+  try {
+    const business = await Business.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { whatsappClicks: 1 } },
+      { new: true }
+    );
+    res.json(business);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
