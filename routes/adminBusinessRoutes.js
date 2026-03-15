@@ -5,13 +5,20 @@ import asyncHandler from "express-async-handler";
 
 import Business from "../models/Business.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
+import {
+  createCity,
+  createCategory,
+  getDashboardStats,
+  getBusinessStats
+} from "../controllers/adminController.js";
+
 
 const router = express.Router();
 
 
 // ================= GET ALL BUSINESSES =================
 router.get(
-  "/admin/businesses",
+  "/businesses",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -33,7 +40,7 @@ router.get(
 
 // ================= GET PENDING BUSINESSES =================
 router.get(
-  "/admin/businesses/pending",
+  "/businesses/pending",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -54,7 +61,7 @@ router.get(
 
 // ================= APPROVE BUSINESS =================
 router.put(
-  "/admin/business/:id/approve",
+  "/business/:id/approve",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -82,7 +89,7 @@ router.put(
 
 // ================= REJECT BUSINESS =================
 router.put(
-  "/admin/business/:id/reject",
+  "/business/:id/reject",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -110,7 +117,7 @@ router.put(
 
 // ================= FEATURE BUSINESS =================
 router.put(
-  "/admin/business/:id/feature",
+  "/business/:id/feature",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -138,7 +145,7 @@ router.put(
 
 // ================= DELETE BUSINESS =================
 router.delete(
-  "/admin/business/:id",
+  "/business/:id",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -163,7 +170,7 @@ router.delete(
 
 // ================= BUSINESS STATS =================
 router.get(
-  "/admin/business-stats",
+  "/business-stats",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -188,5 +195,10 @@ router.get(
   })
 );
 
+router.post("/admin/city", createCity);
+router.post("/admin/category", createCategory);
+
+router.get("/admin/dashboard", getDashboardStats);
+router.get("/admin/business-stats", getBusinessStats);
 
 export default router;
