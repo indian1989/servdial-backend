@@ -40,8 +40,8 @@ router.get(
   })
 );
 
-router.post("/admin/business", createBusiness);
-router.put("/admin/business/feature/:id", toggleFeatured);
+router.post("/business", createBusiness);
+router.put("/business/feature/:id", toggleFeatured);
 
 
 // ================= CREATE ADMIN (SUPERADMIN) =================

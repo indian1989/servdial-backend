@@ -4,6 +4,27 @@ import Business from "../models/Business.js";
 import User from "../models/User.js";
 
 
+// Create Business
+
+export const createBusiness = async (req, res) => {
+  try {
+
+    const business = await Business.create(req.body);
+
+    res.status(201).json({
+      message: "Business created successfully",
+      business
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Server Error"
+    });
+  }
+};
+
+
 /* =========================
    CITY
 ========================= */
@@ -85,27 +106,6 @@ export const getDashboardStats = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
-
-//Create Business
-
-export const createBusiness = async (req, res) => {
-  try {
-
-    const business = await Business.create(req.body);
-
-    res.status(201).json({
-      message: "Business created successfully",
-      business
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Server Error"
-    });
-  }
-};
-
 
 /* =========================
    BUSINESS STATS
