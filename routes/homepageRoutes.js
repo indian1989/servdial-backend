@@ -12,58 +12,60 @@ router.get(
   "/",
   asyncHandler(async (req, res) => {
 
-  const [
-  featuredBusinesses,
-  topRatedBusinesses,
-  latestBusinesses,
-  categories,
-  cities
-] = await Promise.all([
+    const [
+      featuredBusinesses,
+      topRatedBusinesses,
+      latestBusinesses,
+      categories,
+      cities
+    ] = await Promise.all([
 
-  Business.find({
-    featured: true,
-    status: "approved"
-  })
-    .sort({ createdAt: -1 })
-    .limit(8)
-    .populate("category city")
-    .lean(),
+      // Featured Businesses
+      Business.find({
+        isFeatured: true,
+        status: "approved"
+      })
+        .sort({ featurePriority: -1, createdAt: -1 })
+        .limit(8)
+        .lean(),
 
-  Business.find({
-    status: "approved"
-  })
-    .sort({ rating: -1 })
-    .limit(8)
-    .populate("category city")
-    .lean(),
+      // Top Rated Businesses
+      Business.find({
+        status: "approved"
+      })
+        .sort({ averageRating: -1 })
+        .limit(8)
+        .lean(),
 
-  Business.find({
-    status: "approved"
-  })
-    .sort({ createdAt: -1 })
-    .limit(8)
-    .populate("category city")
-    .lean(),
+      // Latest Businesses
+      Business.find({
+        status: "approved"
+      })
+        .sort({ createdAt: -1 })
+        .limit(8)
+        .lean(),
 
-  Category.find({ isActive: true })
-    .sort({ name: 1 })
-    .limit(24)
-    .lean(),
+      // Categories
+      Category.find({ isActive: true })
+        .sort({ name: 1 })
+        .limit(24)
+        .lean(),
 
-  City.find({ isPopular: true })
-    .sort({ name: 1 })
-    .limit(20)
-    .lean()
-]);
+      // Popular Cities
+      City.find({ isPopular: true })
+        .sort({ name: 1 })
+        .limit(20)
+        .lean()
+    ]);
 
-res.json({
-  success: true,
-  featuredBusinesses,
-  topRatedBusinesses,
-  latestBusinesses,
-  categories,
-  cities
-});
+    res.json({
+      success: true,
+      featuredBusinesses,
+      topRatedBusinesses,
+      latestBusinesses,
+      categories,
+      cities
+    });
 
   })
 );

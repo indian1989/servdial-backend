@@ -1,237 +1,276 @@
+// backend/models/Business.js
+
 import mongoose from "mongoose";
 import slugify from "../utils/slugify.js";
 
-
 const businessSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+{
+  // ================= BASIC INFO =================
 
-    slug: {
-      type: String,
-      unique: true,
-      index: true,
-    },
-
-    category: {
-      type: String,
-      required: true,
-      index: true,
-    },
-
-    address: {
-      type: String,
-      trim: true,
-    },
-
-    city: {
-      type: String,
-      required: true,
-      index: true,
-    },
-
-    district: {
-      type: String,
-      required: true,
-      index: true,
-    },
-
-    state: {
-      type: String,
-      required: true,
-      index: true,
-    },
-
-    phone: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-
-    description: {
-      type: String,
-      trim: true,
-    },
-
-    images: [String],
-
-    location: {
-      type: {
-        type: String,
-        enum: ["Point"],
-        default: "Point",
-      },
-      coordinates: {
-        type: [Number], // [longitude, latitude] → Leaflet compatible
-        default: [0, 0],
-      },
-    },
-
-    averageRating: {
-      type: Number,
-      default: 0,
-    },
-
-    totalReviews: {
-      type: Number,
-      default: 0,
-    },
-
-    views: {
-  type: Number,
-  default: 0,
-},
-
-phoneClicks: {
-  type: Number,
-  default: 0,
-},
-
-whatsappClicks: {
-  type: Number,
-  default: 0,
-},
-
-    // Featured system fields
-
-isFeatured: {
-  type: Boolean,
-  default: false
-},
-
-featureRequest: {
-  type: Boolean,
-  default: false
-},
-
-featureStatus: {
-  type: String,
-  enum: ["none", "pending", "approved", "rejected"],
-  default: "none"
-},
-
-    featuredUntill: {
-      type: Date
-    },
-
-    // Future Paid Service Flags
-    paidServices: {
-      gstRegistered: { type: Boolean, default: false },
-      premiumListing: { type: Boolean, default: false },
-      verifiedBadge: { type: Boolean, default: false },
-    },
-
-    status: {
-      type: String,
-      enum: ["pending", "approved", "rejected"],
-      default: "pending",
-    },
-
-    owner: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
+  name: {
+    type: String,
+    required: true,
+    trim: true
   },
-  {
-    timestamps: true,
+
+  slug: {
+    type: String,
+    unique: true,
+    index: true
+  },
+
+  description: {
+    type: String,
+    trim: true
+  },
+
+  logo: String,
+
+  images: [String],
+
+
+  // ================= CATEGORY =================
+
+  category: {
+    type: String,
+    required: true,
+    index: true
+  },
+
+  subCategory: {
+    type: String,
+    index: true
+  },
+
+  services: [String],
+
+
+  // ================= LOCATION =================
+
+  address: String,
+
+  city: {
+    type: String,
+    required: true,
+    index: true
+  },
+
+  district: {
+    type: String,
+    required: true,
+    index: true
+  },
+
+  state: {
+    type: String,
+    required: true,
+    index: true
+  },
+
+  pincode: String,
+
+
+  location: {
+    type: {
+      type: String,
+      enum: ["Point"],
+      default: "Point"
+    },
+   coordinates: {
+  type: [Number],
+  validate: {
+    validator: function(val){
+      return val.length === 2
+    },
+    message: "Coordinates must be [longitude, latitude]"
+  },
+  default: [0,0]
+}
+  },
+
+
+  // ================= CONTACT =================
+
+  phone: {
+    type: String,
+    required: true,
+    unique: true
+  },
+
+  whatsapp: String,
+
+  email: String,
+
+  website: String,
+
+
+  // ================= SOCIAL =================
+
+  socialLinks: {
+    facebook: String,
+    instagram: String,
+    youtube: String,
+    twitter: String
+  },
+
+
+  // ================= BUSINESS HOURS =================
+
+  businessHours: {
+    monday: { open: String, close: String },
+    tuesday: { open: String, close: String },
+    wednesday: { open: String, close: String },
+    thursday: { open: String, close: String },
+    friday: { open: String, close: String },
+    saturday: { open: String, close: String },
+    sunday: { open: String, close: String }
+  },
+
+
+  // ================= REVIEWS =================
+
+  averageRating: {
+    type: Number,
+    default: 0
+  },
+
+  totalReviews: {
+    type: Number,
+    default: 0
+  },
+
+
+  // ================= ANALYTICS =================
+
+  views: {
+    type: Number,
+    default: 0
+  },
+
+  phoneClicks: {
+    type: Number,
+    default: 0
+  },
+
+  whatsappClicks: {
+    type: Number,
+    default: 0
+  },
+
+  searchAppearances: {
+    type: Number,
+    default: 0
+  },
+
+
+  // ================= SEARCH / SEO =================
+
+  tags: [String],
+
+  keywords: [String],
+
+
+  // ================= FEATURED / RANKING =================
+
+  isFeatured: {
+    type: Boolean,
+    default: false
+  },
+
+  featurePriority: {
+    type: Number,
+    default: 0
+  },
+
+  featureRequest: {
+    type: Boolean,
+    default: false
+  },
+
+  featureStatus: {
+    type: String,
+    enum: ["none","pending","approved","rejected"],
+    default: "none"
+  },
+
+  featuredUntil: {
+    type: Date
+  },
+
+  isVerified: {
+  type: Boolean,
+  default: false
+},
+
+isClaimed: {
+  type: Boolean,
+  default: false
+},
+
+  // ================= PAID SERVICES =================
+
+  paidServices: {
+    gstRegistered: { type: Boolean, default: false },
+    premiumListing: { type: Boolean, default: false },
+    verifiedBadge: { type: Boolean, default: false }
+  },
+
+  // ================= BUSINESS STATUS =================
+
+  status: {
+    type: String,
+    enum: ["pending","approved","rejected","suspended"],
+    default: "pending"
+  },
+
+
+  // ================= OWNER =================
+
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true
   }
-);
 
-// ================= Slug Auto-generate =================
-businessSchema.pre("save", function (next) {
-  if (!this.slug && this.name) {
-    this.slug = slugify(this.name, { lower: true, strict: true });
+},
+{
+  timestamps: true
+}
+)
+
+
+// ================= AUTO SLUG =================
+
+businessSchema.pre("save", async function(next){
+
+  if(!this.slug && this.name){
+    let baseSlug = slugify(this.name)
+    let slug = baseSlug
+    let counter = 1
+
+    while(await mongoose.models.Business.findOne({ slug })){
+      slug = `${baseSlug}-${counter++}`
+    }
+
+    this.slug = slug
   }
-  next();
-});
 
-// ================= GET ALL BUSINESSES =================
-export const getAllBusinesses = async (req, res) => {
-  try {
-    const businesses = await Business.find()
-      .populate("owner", "name email")
-      .sort({ createdAt: -1 });
+  next()
+})
 
-    res.json(businesses);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+// ================= INDEXES =================
 
-// ================= APPROVE BUSINESS =================
-export const approveBusiness = async (req, res) => {
-  try {
-    const business = await Business.findByIdAndUpdate(
-      req.params.id,
-      { status: "approved" },
-      { new: true }
-    );
-
-    res.json(business);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ================= REJECT BUSINESS =================
-export const rejectBusiness = async (req, res) => {
-  try {
-    const business = await Business.findByIdAndUpdate(
-      req.params.id,
-      { status: "rejected" },
-      { new: true }
-    );
-
-    res.json(business);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ================= DELETE BUSINESS =================
-export const deleteBusiness = async (req, res) => {
-  try {
-    await Business.findByIdAndDelete(req.params.id);
-    res.json({ message: "Business deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ================= FEATURE BUSINESS =================
-export const toggleFeatured = async (req, res) => {
-  try {
-    const business = await Business.findById(req.params.id);
-
-    business.isFeatured = !business.isFeatured;
-    await business.save();
-
-    res.json(business);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ================= Indexes =================
-
-// Text search for business search
 businessSchema.index({
   name: "text",
   description: "text",
   category: "text",
   city: "text",
-});
+  tags: "text",
+  services: "text"
+})
 
-// Geo location search
-businessSchema.index({ location: "2dsphere" });
+businessSchema.index({ location: "2dsphere" })
 
-// Fast filter by city + category
-businessSchema.index({ city: 1, category: 1 });
-
-
+businessSchema.index({ city: 1, category: 1, isFeatured: -1, averageRating: -1 })
 
 export default mongoose.model("Business", businessSchema);

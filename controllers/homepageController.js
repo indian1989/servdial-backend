@@ -1,62 +1,78 @@
+import asyncHandler from "express-async-handler";
+
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
 import City from "../models/City.js";
 import Banner from "../models/Banner.js";
 
-export const getHomepageData = async (req, res) => {
-  try {
 
-    const [
-      categories,
-      featuredBusinesses,
-      topRatedBusinesses,
-      latestBusinesses,
-      cities,
-      banners
-    ] = await Promise.all([
+// ================= HOMEPAGE DATA =================
+export const getHomepageData = asyncHandler(async (req, res) => {
 
-      Category.find({ isActive: true })
-        .sort({ order: 1 })
-        .limit(12),
+  const [
+    categories,
+    featuredBusinesses,
+    topRatedBusinesses,
+    latestBusinesses,
+    cities,
+    banners
+  ] = await Promise.all([
 
-      Business.find({ isFeatured: true, isApproved: true })
-        .limit(8)
-        .populate("category city"),
+    // Categories
+    Category.find({ isActive: true })
+      .sort({ order: 1 })
+      .limit(12)
+      .lean(),
 
-      Business.find({ isApproved: true })
-        .sort({ rating: -1 })
-        .limit(8)
-        .populate("category city"),
+    // Featured Businesses
+    Business.find({
+      isFeatured: true,
+      status: "approved"
+    })
+      .sort({ featurePriority: -1, createdAt: -1 })
+      .limit(8)
+      .select("name slug city logo averageRating images")
+      .lean(),
 
-      Business.find({ isApproved: true })
-        .sort({ createdAt: -1 })
-        .limit(8)
-        .populate("category city"),
+    // Top Rated Businesses
+    Business.find({
+      status: "approved"
+    })
+      .sort({ averageRating: -1 })
+      .limit(8)
+      .select("name slug city logo averageRating images")
+      .lean(),
 
-      City.find({ isPopular: true })
-        .limit(8),
+    // Latest Businesses
+    Business.find({
+      status: "approved"
+    })
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .select("name slug city logo averageRating images")
+      .lean(),
 
-      Banner.find({ isActive: true })
-    ]);
+    // Popular Cities
+    City.find({ isPopular: true })
+      .sort({ name: 1 })
+      .limit(8)
+      .lean(),
 
-    res.json({
-      success: true,
-      categories,
-      featuredBusinesses,
-      topRatedBusinesses,
-      latestBusinesses,
-      cities,
-      banners
-    });
+    // Active Banners
+    Banner.find({ isActive: true })
+      .sort({ createdAt: -1 })
+      .lean()
 
-  } catch (error) {
+  ]);
 
-    console.error("Homepage error:", error);
+  res.status(200).json({
+    success: true,
+    categories,
+    featuredBusinesses,
+    topRatedBusinesses,
+    latestBusinesses,
+    cities,
+    banners
+  });
 
-    res.status(500).json({
-      success: false,
-      message: "Failed to load homepage"
-    });
-
-  }
-};
+});

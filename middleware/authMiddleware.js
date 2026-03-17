@@ -1,4 +1,4 @@
-// backend/middleware/authMiddleware.jsx
+// backend/middleware/authMiddleware.js
 import jwt from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
 import User from "../models/User.js";
@@ -9,31 +9,40 @@ import User from "../models/User.js";
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
     try {
       // Extract token
       token = req.headers.authorization.split(" ")[1];
 
+      if (!process.env.JWT_SECRET) {
+        throw new Error("JWT_SECRET not configured");
+      }
+
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Find user
+      // Get user without password
       const user = await User.findById(decoded.id).select("-password");
 
       if (!user) {
         res.status(401);
-        throw new Error("User not found");
+        throw new Error("User no longer exists");
       }
 
       req.user = user;
+
       next();
+
     } catch (error) {
       res.status(401);
-      throw new Error("Not authorized, token failed");
+      throw new Error("Not authorized, invalid token");
     }
   } else {
     res.status(401);
-    throw new Error("Not authorized, no token");
+    throw new Error("Not authorized, no token provided");
   }
 });
 
@@ -42,10 +51,11 @@ export const protect = asyncHandler(async (req, res, next) => {
 ================================ */
 export const authorizeRoles = (...roles) => {
   return (req, res, next) => {
+
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: "Not authenticated",
+        message: "Authentication required",
       });
     }
 

@@ -47,7 +47,7 @@ app.use("/api/search", searchRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/recommendations", recommendationRoutes);
-app.use("/api", providerRoutes);
+app.use("/api/provider", providerRoutes);
 
 // ================= MongoDB Connection =================
 const connectDB = async () => {

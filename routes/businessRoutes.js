@@ -1,4 +1,5 @@
 import express from "express";
+
 import {
   createBusiness,
   getBusinesses,
@@ -12,9 +13,8 @@ import {
   getTopRatedBusinesses,
   getNearbyBusinesses,
   getSimilarBusinesses,
-} from "../controllers/businessController.js";
-
-import {
+  getLatestBusinesses,
+  getBusinessBySlug,
   incrementViews,
   phoneClick,
   whatsappClick
@@ -24,6 +24,7 @@ import { protect } from "../middleware/authMiddleware.js";
 import upload from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
+
 
 // ================= PUBLIC ROUTES =================
 
@@ -42,33 +43,41 @@ router.get("/top-rated", getTopRatedBusinesses);
 // nearby businesses
 router.get("/nearby", getNearbyBusinesses);
 
-// get similar businesses
+// latest businesses
+router.get("/latest", getLatestBusinesses);
+
+// similar businesses
 router.get("/similar/:id", getSimilarBusinesses);
 
 // get all businesses
 router.get("/", getBusinesses);
 
-// get single business
+// get business by slug (SEO)
+router.get("/slug/:slug", getBusinessBySlug);
+
+// get single business by ID
 router.get("/:id", getBusinessById);
 
-/* BUSINESS ANALYTICS */
 
-router.put("/business/:id/view", incrementViews);
+// ================= BUSINESS ANALYTICS =================
 
-router.put("/business/:id/phone", phoneClick);
-
-router.put("/business/:id/whatsapp", whatsappClick);
+router.put("/:id/view", incrementViews);
+router.put("/:id/phone", phoneClick);
+router.put("/:id/whatsapp", whatsappClick);
 
 
 // ================= PROTECTED ROUTES =================
 
 router.post("/", protect, upload.single("image"), createBusiness);
+
 router.put("/:id", protect, updateBusiness);
+
 router.delete("/:id", protect, deleteBusiness);
 
 
 // ================= PAID FEATURE PLACEHOLDER =================
 
 router.use("/paid-feature", protect, paidFeatureNotice);
+
 
 export default router;
