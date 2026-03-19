@@ -52,8 +52,19 @@ router.get("/similar/:id", getSimilarBusinesses);
 // get all businesses
 router.get("/", getBusinesses);
 
-// get business by slug (SEO)
+
+// ================= SEO BUSINESS ROUTES =================
+
+// industry standard SEO URL
+// example: /delhi/plumber/abc-plumbing
+
+router.get("/:city/:category/:slug", getBusinessBySlug);
+
+// existing slug route (kept for compatibility)
 router.get("/slug/:slug", getBusinessBySlug);
+
+
+// ================= SINGLE BUSINESS =================
 
 // get single business by ID
 router.get("/:id", getBusinessById);
@@ -68,10 +79,13 @@ router.put("/:id/whatsapp", whatsappClick);
 
 // ================= PROTECTED ROUTES =================
 
+// create business
 router.post("/", protect, upload.single("image"), createBusiness);
 
+// update business
 router.put("/:id", protect, updateBusiness);
 
+// delete business
 router.delete("/:id", protect, deleteBusiness);
 
 

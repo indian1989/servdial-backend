@@ -253,8 +253,9 @@ export const getTrendingBusinesses = asyncHandler(async (req, res) => {
 // ================= GET BUSINESS BY SLUG =================
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
-  const { slug } = req.params;
+  const { slug, city, category } = req.params;
 
+  // find business
   const business = await Business.findOne({
     slug,
     status: "approved"
@@ -267,8 +268,29 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     });
   }
 
-  // increase view count
-  business.views += 1;
+  // ================= OPTIONAL SEO VALIDATION =================
+  // if route includes city/category, ensure URL is correct
+
+  if (city && category) {
+
+    const correctCity = business.city?.toLowerCase();
+    const correctCategory = business.category?.toLowerCase();
+
+    if (city !== correctCity || category !== correctCategory) {
+
+      return res.redirect(
+        301,
+        `https://servdial.com/${correctCity}/${correctCategory}/${business.slug}`
+      );
+
+    }
+
+  }
+
+  // ================= INCREMENT VIEW =================
+
+  business.views = (business.views || 0) + 1;
+
   await business.save();
 
   res.status(200).json({
