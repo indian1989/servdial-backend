@@ -1,10 +1,14 @@
 import Category from "../models/Category.js";
 import slugify from "../utils/slugify.js";
 
+// ==============================
 // GET ALL CATEGORIES
+// ==============================
 export const getCategories = async (req, res) => {
   try {
-    const categories = await Category.find({ isActive: true }).sort({ order: 1 });
+    const categories = await Category
+      .find({ status: "active" }) // ✅ FIXED
+      .sort({ createdAt: -1 });   // ✅ FIXED (no 'order' field)
 
     res.json({
       success: true,
@@ -12,16 +16,22 @@ export const getCategories = async (req, res) => {
       categories,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("GET CATEGORIES ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
+// ==============================
 // TRENDING CATEGORIES
+// ==============================
 export const getTrendingCategories = async (req, res) => {
   try {
     const categories = await Category.find({
       isTrending: true,
-      isActive: true,
+      status: "active", // ✅ FIXED
     }).limit(8);
 
     res.json({
@@ -29,16 +39,24 @@ export const getTrendingCategories = async (req, res) => {
       categories,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("TRENDING CATEGORY ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
+// ==============================
 // CATEGORY BY SLUG
+// ==============================
 export const getCategoryBySlug = async (req, res) => {
   try {
+    const { slug } = req.params;
+
     const category = await Category.findOne({
-      slug: req.params.slug,
-      isActive: true,
+      slug,
+      status: "active", // ✅ FIXED
     });
 
     if (!category) {
@@ -53,11 +71,17 @@ export const getCategoryBySlug = async (req, res) => {
       category,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("GET CATEGORY BY SLUG ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
-// CREATE CATEGORY (ADMIN)
+// ==============================
+// CREATE CATEGORY
+// ==============================
 export const createCategory = async (req, res) => {
   try {
     const { name, icon, image, description, isTrending } = req.body;
@@ -71,6 +95,7 @@ export const createCategory = async (req, res) => {
       image,
       description,
       isTrending,
+      status: "active", // ✅ ensure active
     });
 
     res.json({
@@ -78,20 +103,33 @@ export const createCategory = async (req, res) => {
       category,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to create category" });
+    console.error("CREATE CATEGORY ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create category",
+    });
   }
 };
 
+// ==============================
 // UPDATE CATEGORY
+// ==============================
 export const updateCategory = async (req, res) => {
   try {
     const { name } = req.body;
 
-    const slug = slugify(name, { lower: true });
+    const slug = name
+      ? slugify(name, { lower: true })
+      : undefined;
+
+    const updateData = {
+      ...req.body,
+      ...(slug && { slug }),
+    };
 
     const category = await Category.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, slug },
+      updateData,
       { new: true }
     );
 
@@ -100,11 +138,17 @@ export const updateCategory = async (req, res) => {
       category,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Update failed" });
+    console.error("UPDATE CATEGORY ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Update failed",
+    });
   }
 };
 
+// ==============================
 // DELETE CATEGORY
+// ==============================
 export const deleteCategory = async (req, res) => {
   try {
     await Category.findByIdAndDelete(req.params.id);
@@ -114,6 +158,10 @@ export const deleteCategory = async (req, res) => {
       message: "Category deleted",
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Delete failed" });
+    console.error("DELETE CATEGORY ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Delete failed",
+    });
   }
 };
