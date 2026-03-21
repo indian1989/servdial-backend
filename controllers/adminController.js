@@ -180,3 +180,47 @@ export const createCategory = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+
+// Analytics
+export const getAnalytics = async (req, res) => {
+  try {
+    // Example: aggregate data for dashboard
+    const totalUsers = await User.countDocuments();
+    const totalBusinesses = await Business.countDocuments();
+    const totalOrders = await Order.countDocuments(); // if you track orders
+    res.json({ totalUsers, totalBusinesses, totalOrders });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch analytics", error: err.message });
+  }
+};
+
+// Reports
+export const getReports = async (req, res) => {
+  try {
+    // Example: return all businesses with metrics
+    const businesses = await Business.find().populate("category city");
+    res.json({ businesses });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch reports", error: err.message });
+  }
+};
+
+// System Settings
+export const getSystemSettings = async (req, res) => {
+  try {
+    const settings = await SystemSettings.find();
+    res.json({ settings });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch system settings", error: err.message });
+  }
+};
+
+// Activity Logs
+export const getActivityLogs = async (req, res) => {
+  try {
+    const logs = await ActivityLogs.find().sort({ createdAt: -1 }).limit(100);
+    res.json({ logs });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch activity logs", error: err.message });
+  }
+};
