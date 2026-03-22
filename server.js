@@ -29,6 +29,7 @@ import reviewRoutes from "./routes/reviewRoutes.js";
 import recommendationRoutes from "./routes/recommendationRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import seoRoutes from "./routes/seoRoutes.js";
+import locationRoutes from "./routes/locationRoutes.js";
 import sitemapRoutes from "./routes/sitemapRoutes.js";
 
 
@@ -52,6 +53,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/provider", providerRoutes);
 app.use("/api/seo", seoRoutes);
+app.use("/api/location", locationRoutes);
 app.use("/", sitemapRoutes);
 
 // ================= MongoDB Connection =================
