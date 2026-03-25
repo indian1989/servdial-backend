@@ -1,5 +1,3 @@
-// backend/controllers/businessController.js
-
 import Business from "../models/Business.js";
 import asyncHandler from "express-async-handler";
 import { uploadImage } from "../utils/uploadToCloudinary.js";
@@ -8,41 +6,29 @@ import { buildSearchQuery } from "../utils/buildSearchQuery.js";
 // ================= Role Check =================
 const isAdmin = (user) => ["admin", "superadmin"].includes(user.role);
 
-// ================= CREATE Business =================
+// ================= CREATE =================
 export const createBusiness = asyncHandler(async (req, res) => {
   if (!["provider", "admin", "superadmin"].includes(req.user.role)) {
-    return res.status(403).json({
-      success: false,
-      message: "Not authorized to create business",
-    });
+    return res.status(403).json({ success: false, message: "Not authorized" });
   }
 
-  const ownerId = req.user._id;
-  const status = req.user.role === "provider" ? "pending" : "approved";
   let imageUrl = "";
-
   if (req.file) {
     const result = await uploadImage(req.file.buffer);
     imageUrl = result.secure_url;
   }
 
-  const business = new Business({
+  const business = await Business.create({
     ...req.body,
-    owner: ownerId,
-    status,
+    owner: req.user._id,
+    status: req.user.role === "provider" ? "pending" : "approved",
     image: imageUrl,
   });
 
-  await business.save();
-
-  res.status(201).json({
-    success: true,
-    message: "Business created successfully",
-    business,
-  });
+  res.status(201).json({ success: true, business });
 });
 
-// ================= SEARCH Businesses (with distance + open-now) =================
+// ================= SEARCH =================
 export const searchBusinesses = asyncHandler(async (req, res) => {
   const {
     city,
@@ -53,84 +39,10 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     limit = 12,
     lat,
     lng,
-    distance, // in meters
-    openNow
-  } = req.query;
-
-  const pageNum = Number(page);
-  const limitNum = Number(limit);
-
-  // ---------------- BUILD FILTER QUERY ----------------
-  const query = buildSearchQuery({
-    city,
-    category,
-    keyword,
-    rating,
-    openNow,
-  });
-
-  query.status = "approved";
-
-  // ---------------- GEO DISTANCE ----------------
-  let businesses;
-  let total;
-  if (lat && lng && distance) {
-    businesses = await Business.find({
-      ...query,
-      location: {
-        $near: {
-          $geometry: { type: "Point", coordinates: [Number(lng), Number(lat)] },
-          $maxDistance: Number(distance),
-        },
-      },
-    })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum);
-
-    total = await Business.countDocuments({
-      ...query,
-      location: {
-        $near: {
-          $geometry: { type: "Point", coordinates: [Number(lng), Number(lat)] },
-          $maxDistance: Number(distance),
-        },
-      },
-    });
-  } else {
-    businesses = await Business.find(query)
-      .sort({ isFeatured: -1, featurePriority: -1, averageRating: -1, views: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum);
-
-    total = await Business.countDocuments(query);
-  }
-
-  res.status(200).json({
-    success: true,
-    businesses,
-    total,
-    page: pageNum,
-    pages: Math.ceil(total / limitNum),
-  });
-});
-
-// ================= GET BUSINESSES (used by routes) =================
-export const getBusinesses = asyncHandler(async (req, res) => {
-  // Simply call searchBusinesses logic with query parameters
-  const {
-    city,
-    category,
-    keyword, // alias for 'search' in old routes
-    rating,
-    page = 1,
-    limit = 12,
-    lat,
-    lng,
     distance,
     openNow,
   } = req.query;
 
-  // Reuse the same logic as searchBusinesses
   const pageNum = Number(page);
   const limitNum = Number(limit);
 
@@ -144,40 +56,59 @@ export const getBusinesses = asyncHandler(async (req, res) => {
 
   query.status = "approved";
 
-  let businesses;
-  let total;
-  if (lat && lng && distance) {
-    businesses = await Business.find({
-      ...query,
-      location: {
-        $near: {
-          $geometry: { type: "Point", coordinates: [Number(lng), Number(lat)] },
-          $maxDistance: Number(distance),
-        },
-      },
-    })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum);
+  let businesses = [];
+  let total = 0;
 
-    total = await Business.countDocuments({
-      ...query,
-      location: {
-        $near: {
-          $geometry: { type: "Point", coordinates: [Number(lng), Number(lat)] },
-          $maxDistance: Number(distance),
+  // GEO SEARCH
+  if (lat && lng && distance) {
+    businesses = await Business.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [Number(lng), Number(lat)],
+          },
+          distanceField: "distance",
+          maxDistance: Number(distance),
+          spherical: true,
         },
       },
-    });
+      { $match: query },
+      { $sort: { isFeatured: -1, averageRating: -1 } },
+      { $skip: (pageNum - 1) * limitNum },
+      { $limit: limitNum },
+    ]);
+
+    total = businesses.length;
+
+    businesses = businesses.map((b) => ({
+      ...b,
+      rating: b.averageRating || 0,
+      reviewCount: b.totalReviews || 0,
+      distance: b.distance ? b.distance / 1000 : null,
+    }));
   } else {
-    businesses = await Business.find(query)
-      .sort({ isFeatured: -1, featurePriority: -1, averageRating: -1, views: -1 })
+    const raw = await Business.find(query)
+      .sort({
+        isFeatured: -1,
+        featurePriority: -1,
+        averageRating: -1,
+        views: -1,
+      })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum);
 
     total = await Business.countDocuments(query);
+
+    businesses = raw.map((b) => ({
+      ...b.toObject(),
+      rating: b.averageRating || 0,
+      reviewCount: b.totalReviews || 0,
+      distance: null,
+    }));
   }
 
-  res.status(200).json({
+  res.json({
     success: true,
     businesses,
     total,
@@ -186,20 +117,33 @@ export const getBusinesses = asyncHandler(async (req, res) => {
   });
 });
 
-// ================= GET Single Business =================
-export const getBusinessById = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
-  if (!business)
-    return res.status(404).json({ success: false, message: "Business not found" });
+// ================= GET ALL =================
+export const getBusinesses = asyncHandler(async (req, res) => {
+  const businesses = await Business.find({ status: "approved" })
+    .sort({ createdAt: -1 })
+    .limit(50);
 
-  res.status(200).json({ success: true, business });
+  res.json({ success: true, businesses });
 });
 
-// ================= UPDATE Business =================
+// ================= GET BY ID =================
+export const getBusinessById = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id);
+
+  if (!business) {
+    return res.status(404).json({ success: false, message: "Not found" });
+  }
+
+  res.json({ success: true, business });
+});
+
+// ================= UPDATE =================
 export const updateBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
-  if (!business)
-    return res.status(404).json({ success: false, message: "Business not found" });
+
+  if (!business) {
+    return res.status(404).json({ success: false, message: "Not found" });
+  }
 
   if (!business.owner.equals(req.user._id) && !isAdmin(req.user)) {
     return res.status(403).json({ success: false, message: "Not authorized" });
@@ -208,170 +152,143 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   Object.assign(business, req.body);
   await business.save();
 
-  res.status(200).json({ success: true, message: "Business updated successfully", business });
+  res.json({ success: true, business });
 });
 
-// ================= DELETE Business =================
+// ================= DELETE =================
 export const deleteBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
-  if (!business)
-    return res.status(404).json({ success: false, message: "Business not found" });
 
-  if (!business.owner.equals(req.user._id) && !isAdmin(req.user)) {
-    return res.status(403).json({ success: false, message: "Not authorized" });
+  if (!business) {
+    return res.status(404).json({ success: false, message: "Not found" });
   }
 
   await business.deleteOne();
-  res.status(200).json({ success: true, message: "Business deleted successfully" });
+
+  res.json({ success: true });
 });
 
-// ================= SEARCH SUGGESTIONS =================
+// ================= SUGGEST =================
 export const suggestSearch = asyncHandler(async (req, res) => {
   const { q } = req.query;
-  if (!q) return res.json({ suggestions: [] });
 
-  const businesses = await Business.find({ name: new RegExp(q, "i") })
-    .select("name city")
-    .limit(8);
-
-  res.json({ suggestions: businesses });
-});
-
-// ================= Featured / Top / Trending Businesses =================
-export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
-  const limit = Number(req.query.limit) || 8;
-  const businesses = await Business.find({ status: "approved", isFeatured: true })
-    .sort({ averageRating: -1 })
-    .limit(limit);
-
-  res.status(200).json({ success: true, businesses });
-});
-
-export const getTopRatedBusinesses = asyncHandler(async (req, res) => {
-  const { city } = req.query;
-  let query = { status: "approved" };
-  if (city) query.city = new RegExp(city, "i");
-
-  const businesses = await Business.find(query)
-    .sort({ averageRating: -1 })
-    .limit(8);
-
-  res.json(businesses);
-});
-
-export const getTrendingBusinesses = asyncHandler(async (req, res) => {
-  const businesses = await Business.find({ status: "approved" })
-    .sort({ views: -1, averageRating: -1 })
-    .limit(10);
-
-  res.status(200).json({ success: true, businesses });
-});
-
-// ================= Nearby Businesses =================
-export const getNearbyBusinesses = asyncHandler(async (req, res) => {
-  const { lat, lng, limit = 8, distance = 5000 } = req.query;
-
-  if (!lat || !lng) {
-    return res.status(400).json({
-      success: false,
-      message: "Latitude and longitude required",
-    });
-  }
+  if (!q) return res.json([]);
 
   const businesses = await Business.find({
-    status: "approved",
-    location: {
-      $near: {
-        $geometry: { type: "Point", coordinates: [Number(lng), Number(lat)] },
-        $maxDistance: Number(distance),
-      },
-    },
-  }).limit(Number(limit));
-
-  res.status(200).json({ success: true, businesses });
-});
-
-// ================= Similar Businesses =================
-export const getSimilarBusinesses = asyncHandler(async (req, res) => {
-  const { category } = req.query;
-  if (!category) return res.json([]);
-
-  const businesses = await Business.find({ category, status: "approved" })
-    .sort({ averageRating: -1 })
-    .limit(6);
+    $or: [
+      { name: new RegExp(q, "i") },
+      { category: new RegExp(q, "i") },
+    ],
+  })
+    .limit(8)
+    .select("name category city");
 
   res.json(businesses);
 });
 
-// ================= GET BUSINESS BY SLUG =================
-export const getBusinessBySlug = asyncHandler(async (req, res) => {
-  const { slug, city, category } = req.params;
+// ================= FEATURED =================
+export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
+  const businesses = await Business.find({
+    status: "approved",
+    isFeatured: true,
+  }).limit(8);
 
-  const business = await Business.findOne({ slug, status: "approved" }).populate("owner", "name email");
-
-  if (!business) {
-    return res.status(404).json({ success: false, message: "Business not found" });
-  }
-
-  // Optional SEO redirect
-  if (city && category) {
-    const correctCity = business.city?.toLowerCase();
-    const correctCategory = business.category?.toLowerCase();
-
-    if (city !== correctCity || category !== correctCategory) {
-      return res.redirect(
-        301,
-        `https://servdial.com/${correctCity}/${correctCategory}/${business.slug}`
-      );
-    }
-  }
-
-  business.views = (business.views || 0) + 1;
-  await business.save();
-
-  res.status(200).json({ success: true, business });
+  res.json({ success: true, businesses });
 });
 
-// ================= LATEST BUSINESSES =================
-export const getLatestBusinesses = asyncHandler(async (req, res) => {
-  const { limit = 8 } = req.query;
+// ================= TOP RATED =================
+export const getTopRatedBusinesses = asyncHandler(async (req, res) => {
+  const businesses = await Business.find({ status: "approved" })
+    .sort({ averageRating: -1 })
+    .limit(8);
 
+  res.json(businesses);
+});
+
+// ================= LATEST =================
+export const getLatestBusinesses = asyncHandler(async (req, res) => {
   const businesses = await Business.find({ status: "approved" })
     .sort({ createdAt: -1 })
-    .limit(Number(limit));
+    .limit(8);
 
-  res.status(200).json({ success: true, businesses });
+  res.json({ success: true, businesses });
 });
 
-// ================= Increment Views / Phone / WhatsApp =================
+// ================= NEARBY =================
+export const getNearbyBusinesses = asyncHandler(async (req, res) => {
+  const { lat, lng } = req.query;
+
+  if (!lat || !lng) return res.json([]);
+
+  const businesses = await Business.find({
+    location: {
+      $near: {
+        $geometry: {
+          type: "Point",
+          coordinates: [Number(lng), Number(lat)],
+        },
+        $maxDistance: 5000,
+      },
+    },
+  }).limit(8);
+
+  res.json({ success: true, businesses });
+});
+
+// ================= SIMILAR =================
+export const getSimilarBusinesses = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const current = await Business.findById(id);
+  if (!current) return res.json([]);
+
+  const businesses = await Business.find({
+    category: current.category,
+    _id: { $ne: id },
+  }).limit(6);
+
+  res.json(businesses);
+});
+
+// ================= SLUG =================
+export const getBusinessBySlug = asyncHandler(async (req, res) => {
+  const { slug } = req.params;
+
+  const business = await Business.findOne({ slug });
+
+  if (!business) {
+    return res.status(404).json({ success: false });
+  }
+
+  res.json({ success: true, business });
+});
+
+// ================= ANALYTICS =================
 export const incrementViews = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndUpdate(
-    req.params.id,
-    { $inc: { views: 1 } },
-    { new: true }
-  );
-  res.json(business);
+  await Business.findByIdAndUpdate(req.params.id, {
+    $inc: { views: 1 },
+  });
+
+  res.json({ success: true });
 });
 
 export const phoneClick = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndUpdate(
-    req.params.id,
-    { $inc: { phoneClicks: 1 } },
-    { new: true }
-  );
-  res.json(business);
+  await Business.findByIdAndUpdate(req.params.id, {
+    $inc: { phoneClicks: 1 },
+  });
+
+  res.json({ success: true });
 });
 
 export const whatsappClick = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndUpdate(
-    req.params.id,
-    { $inc: { whatsappClicks: 1 } },
-    { new: true }
-  );
-  res.json(business);
+  await Business.findByIdAndUpdate(req.params.id, {
+    $inc: { whatsappClicks: 1 },
+  });
+
+  res.json({ success: true });
 });
 
-// ================= Paid Feature Placeholder =================
+// ================= PAID =================
 export const paidFeatureNotice = asyncHandler(async (req, res) => {
   res.status(403).json({
     success: false,

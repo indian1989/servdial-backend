@@ -1,62 +1,64 @@
 import Category from "../models/Category.js";
-import slugify from "../utils/slugify.js";
 
-// ==============================
-// GET ALL CATEGORIES
-// ==============================
-export const getCategories = async (req, res) => {
+/* ================= GET ALL ================= */
+export const getAllCategories = async (req, res) => {
   try {
-    const categories = await Category
-      .find({ status: "active" }) // ✅ FIXED
-      .sort({ createdAt: -1 });   // ✅ FIXED (no 'order' field)
+    const categories = await Category.find()
+      .populate("parentCategory", "_id name")
+      .sort({ order: 1, name: 1 })
+      .lean();
+
+    const map = {};
+    const roots = [];
+
+    categories.forEach((cat) => {
+      map[cat._id] = { ...cat, subcategories: [] };
+    });
+
+    categories.forEach((cat) => {
+      const parentId = cat.parentCategory?._id || cat.parentCategory;
+
+      if (parentId && map[parentId]) {
+        map[parentId].subcategories.push(map[cat._id]);
+      } else {
+        roots.push(map[cat._id]);
+      }
+    });
+
+    const sortTree = (nodes) => {
+      nodes.sort(
+        (a, b) =>
+          Number(a.order || 0) - Number(b.order || 0) ||
+          a.name.localeCompare(b.name)
+      );
+      nodes.forEach((n) => sortTree(n.subcategories));
+    };
+
+    sortTree(roots);
 
     res.json({
       success: true,
-      count: categories.length,
-      categories,
+      categories: roots,
+      flatCategories: categories,
+      total: categories.length,
     });
+
   } catch (error) {
-    console.error("GET CATEGORIES ERROR:", error);
+    console.error("GET ALL CATEGORIES ERROR:", error);
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Failed to fetch categories",
     });
   }
 };
 
-// ==============================
-// TRENDING CATEGORIES
-// ==============================
-export const getTrendingCategories = async (req, res) => {
-  try {
-    const categories = await Category.find({
-      isTrending: true,
-      status: "active", // ✅ FIXED
-    }).limit(8);
 
-    res.json({
-      success: true,
-      categories,
-    });
-  } catch (error) {
-    console.error("TRENDING CATEGORY ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-};
-
-// ==============================
-// CATEGORY BY SLUG
-// ==============================
+/* ================= GET BY SLUG ================= */
 export const getCategoryBySlug = async (req, res) => {
   try {
-    const { slug } = req.params;
-
     const category = await Category.findOne({
-      slug,
-      status: "active", // ✅ FIXED
+      slug: req.params.slug,
+      status: "active",
     });
 
     if (!category) {
@@ -70,6 +72,7 @@ export const getCategoryBySlug = async (req, res) => {
       success: true,
       category,
     });
+
   } catch (error) {
     console.error("GET CATEGORY BY SLUG ERROR:", error);
     res.status(500).json({
@@ -79,89 +82,128 @@ export const getCategoryBySlug = async (req, res) => {
   }
 };
 
-// ==============================
-// CREATE CATEGORY
-// ==============================
+
+/* ================= TRENDING ================= */
+export const getTrendingCategories = async (req, res) => {
+  try {
+    const categories = await Category.find({
+      isTrending: true, // ⚠️ make sure schema has this
+      status: "active",
+    }).limit(8);
+
+    res.json({
+      success: true,
+      categories,
+    });
+
+  } catch (error) {
+    console.error("TRENDING CATEGORY ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+
+/* ================= CREATE ================= */
 export const createCategory = async (req, res) => {
   try {
-    const { name, icon, image, description, isTrending } = req.body;
+    const { name, parentCategory, order, description } = req.body;
 
-    const slug = slugify(name);
+    if (!name?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Name is required",
+      });
+    }
 
     const category = await Category.create({
-      name,
-      slug,
-      icon,
-      image,
+      name: name.trim(),
+      parentCategory: parentCategory || null,
+      order: Number(order) || 0,
       description,
-      isTrending,
-      status: "active", // ✅ ensure active
+      status: "active",
     });
 
     res.json({
       success: true,
       category,
     });
+
   } catch (error) {
     console.error("CREATE CATEGORY ERROR:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to create category",
+      message: error.message,
     });
   }
 };
 
-// ==============================
-// UPDATE CATEGORY
-// ==============================
+
+/* ================= UPDATE ================= */
 export const updateCategory = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { id } = req.params;
 
-    const slug = name
-      ? slugify(name, { lower: true })
-      : undefined;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "ID missing",
+      });
+    }
 
     const updateData = {
       ...req.body,
-      ...(slug && { slug }),
+      ...(req.body.order !== undefined && {
+        order: Number(req.body.order),
+      }),
     };
 
     const category = await Category.findByIdAndUpdate(
-      req.params.id,
+      id,
       updateData,
-      { new: true }
+      {
+        new: true,
+        runValidators: true,
+      }
     );
 
-    res.json({
-      success: true,
-      category,
-    });
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    res.json({ success: true, category });
+
   } catch (error) {
     console.error("UPDATE CATEGORY ERROR:", error);
     res.status(500).json({
       success: false,
-      message: "Update failed",
+      message: error.message,
     });
   }
 };
 
-// ==============================
-// DELETE CATEGORY
-// ==============================
+
+/* ================= DELETE ================= */
 export const deleteCategory = async (req, res) => {
   try {
-    await Category.findByIdAndDelete(req.params.id);
+    const { id } = req.params;
 
-    res.json({
-      success: true,
-      message: "Category deleted",
-    });
+    await Category.updateMany(
+      { parentCategory: id },
+      { parentCategory: null }
+    );
+
+    await Category.findByIdAndDelete(id);
+
+    res.json({ success: true });
+
   } catch (error) {
     console.error("DELETE CATEGORY ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: "Delete failed",
-    });
+    res.status(500).json({ success: false });
   }
 };

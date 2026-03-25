@@ -2,7 +2,6 @@ import express from "express";
 
 import {
   createBusiness,
-  getBusinesses,
   getBusinessById,
   updateBusiness,
   deleteBusiness,
@@ -49,8 +48,8 @@ router.get("/latest", getLatestBusinesses);
 // similar businesses
 router.get("/similar/:id", getSimilarBusinesses);
 
-// get all businesses
-router.get("/", getBusinesses);
+// get all businesses (uses search logic)
+router.get("/", searchBusinesses);
 
 
 // ================= SEO BUSINESS ROUTES =================

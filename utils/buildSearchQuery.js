@@ -1,32 +1,33 @@
-export const buildSearchQuery = (queryParams) => {
-  const {
-    q,
-    city,
-    category,
-    rating,
-    price,
-    openNow,
-  } = queryParams;
+export const buildSearchQuery = ({
+  city,
+  category,
+  keyword,
+  rating,
+  openNow,
+}) => {
+  const query = {};
 
-  const query = { status: "approved" };
+  if (city) {
+    query.city = new RegExp(city, "i");
+  }
 
-  if (city) query.city = new RegExp(city, "i");
-  if (category) query.category = new RegExp(category, "i");
+  if (category) {
+    query.category = new RegExp(category, "i");
+  }
 
-  if (q) {
-    query.$text = { $search: q };
+  if (keyword) {
+    query.$or = [
+      { name: new RegExp(keyword, "i") },
+      { category: new RegExp(keyword, "i") },
+    ];
   }
 
   if (rating) {
     query.averageRating = { $gte: Number(rating) };
   }
 
-  if (price) {
-    query.priceCategory = price; // low/medium/high
-  }
-
-  if (openNow === "true") {
-    query.isOpen = true;
+  if (openNow) {
+    query.isOpen = true; // optional future use
   }
 
   return query;

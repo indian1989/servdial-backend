@@ -33,17 +33,31 @@ import locationRoutes from "./routes/locationRoutes.js";
 import sitemapRoutes from "./routes/sitemapRoutes.js";
 
 
+// ================= Health Check =================
 app.get("/", (req, res) => {
   res.json({ message: "🚀 ServDial API Running..." });
 });
 
+
+// ================= API ROUTES =================
+
+// Auth & Users
 app.use("/api/auth", authRoutes);
-app.use("/api/business", businessRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/admin", adminBusinessRoutes);
-app.use("/api/featured", featuredRoutes);
 app.use("/api/user", userRoutes);
-app.use("/api/categories", categoryRoutes);
+
+// Business
+app.use("/api/business", businessRoutes);
+app.use("/api/admin", adminBusinessRoutes);
+
+// Admin Core
+app.use("/api/admin", adminRoutes);
+
+// Categories (IMPORTANT FIX)
+app.use("/api/categories", categoryRoutes);        // ✅ public
+app.use("/api/admin/categories", categoryRoutes);  // ✅ admin
+
+// Others
+app.use("/api/featured", featuredRoutes);
 app.use("/api/cities", cityRoutes);
 app.use("/api/banner", bannerRoutes);
 app.use("/api/homepage", homepageRoutes);
@@ -54,13 +68,16 @@ app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/provider", providerRoutes);
 app.use("/api/seo", seoRoutes);
 app.use("/api/location", locationRoutes);
+
+// Sitemap
 app.use("/", sitemapRoutes);
 
-// ================= MongoDB Connection =================
+
+// ================= MongoDB =================
 const connectDB = async () => {
   try {
     if (!process.env.MONGO_URI) {
-      throw new Error("❌ MONGO_URI not defined in environment variables");
+      throw new Error("❌ MONGO_URI not defined");
     }
 
     const conn = await mongoose.connect(process.env.MONGO_URI, {
@@ -75,34 +92,37 @@ const connectDB = async () => {
   }
 };
 
+
 // ================= Error Handler =================
 app.use((err, req, res, next) => {
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  res.status(statusCode).json({
+  console.error("🔥 ERROR:", err);
+
+  res.status(err.statusCode || 500).json({
     success: false,
     message: err.message || "Server Error",
   });
 });
 
+
 // ================= Start Server =================
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
-  // 1️⃣ Connect to MongoDB Atlas
   await connectDB();
 
-  // 3️⃣ Start Express Server
   const server = app.listen(PORT, () => {
     console.log(
-      `🔥 Server running in ${process.env.NODE_ENV || "development"} mode on port ${PORT}`
+      `🔥 Server running in ${
+        process.env.NODE_ENV || "development"
+      } mode on port ${PORT}`
     );
   });
 
-  // 4️⃣ Graceful Shutdown
+  // Graceful shutdown
   process.on("SIGINT", () => {
-    console.log("⚡️ Received SIGINT. Closing server...");
+    console.log("⚡️ Shutting down...");
     server.close(() => {
-      console.log("✅ Server closed successfully.");
+      console.log("✅ Server closed");
       process.exit(0);
     });
   });

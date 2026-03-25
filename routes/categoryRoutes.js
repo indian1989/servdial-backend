@@ -1,8 +1,8 @@
 import express from "express";
 import {
-  getCategories,
-  getTrendingCategories,
+  getAllCategories,
   getCategoryBySlug,
+  getTrendingCategories,
   createCategory,
   updateCategory,
   deleteCategory,
@@ -10,14 +10,27 @@ import {
 
 const router = express.Router();
 
-// PUBLIC
-router.get("/", getCategories);
-router.get("/trending", getTrendingCategories);
+/* ================= PUBLIC ================= */
+
+// All categories (tree + flat)
+router.get("/", getAllCategories);
+
+// By slug
 router.get("/slug/:slug", getCategoryBySlug);
 
-// ADMIN
+// Trending
+router.get("/trending", getTrendingCategories);
+
+
+/* ================= ADMIN ================= */
+
+// Create
 router.post("/", createCategory);
+
+// Update
 router.put("/:id", updateCategory);
+
+// Delete
 router.delete("/:id", deleteCategory);
 
 export default router;
