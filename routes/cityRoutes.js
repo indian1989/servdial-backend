@@ -1,8 +1,12 @@
 import express from "express";
 import { getCities,
     addCity,
+    bulkUploadCities,
     updateCity,
     deleteCity,
+    getStates,
+    getDistrictsByState,
+    getCitiesByDistrict,
     getFeaturedCities,
     markCityAsFeatured,
     unmarkCityAsFeatured
@@ -13,9 +17,15 @@ const router = express.Router();
 
 /* GET ALL CITIES */
 router.get("/", getCities);
+router.get("/states", getStates);
+router.get("/districts/:stateSlug", getDistrictsByState);
+router.get("/by-district/:districtSlug", getCitiesByDistrict);
 
 /* ADD CITY */
 router.post("/", addCity);
+
+// ✅ BULK UPLOAD
+router.post("/bulk", bulkUploadCities);
 
 /* ================= UPDATE CITY ================= */
 router.put("/:id", updateCity);

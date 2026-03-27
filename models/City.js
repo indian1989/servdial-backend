@@ -3,6 +3,7 @@ import slugify from "../utils/slugify.js";
 
 const citySchema = new mongoose.Schema(
 {
+  // ================= BASIC =================
   name: {
     type: String,
     required: true,
@@ -17,6 +18,7 @@ const citySchema = new mongoose.Schema(
     index: true
   },
 
+  // ✅ KEEP THESE (YOU REMOVED EARLIER - WRONG)
   state: {
     type: String,
     required: true,
@@ -26,8 +28,22 @@ const citySchema = new mongoose.Schema(
 
   district: {
     type: String,
+    required: true,
     trim: true,
-    default: "" // ✅ prevent undefined
+    index: true
+  },
+
+  // ================= NEW STRUCTURE (ADD ONLY) =================
+  stateSlug: {
+    type: String,
+    lowercase: true,
+    index: true
+  },
+
+  districtSlug: {
+    type: String,
+    lowercase: true,
+    index: true
   },
 
   country: {
@@ -37,7 +53,6 @@ const citySchema = new mongoose.Schema(
   },
 
   // ================= GEO =================
-
   latitude: {
     type: Number,
     default: null
@@ -48,7 +63,6 @@ const citySchema = new mongoose.Schema(
     default: null
   },
 
-  // ✅ FUTURE SAFE (does not break current system)
   location: {
     type: {
       type: String,
@@ -60,7 +74,6 @@ const citySchema = new mongoose.Schema(
   },
 
   // ================= DISPLAY =================
-
   featured: {
     type: Boolean,
     default: false
@@ -77,7 +90,6 @@ const citySchema = new mongoose.Schema(
   },
 
   // ================= STATUS =================
-
   status: {
     type: String,
     enum: ["active","inactive"],
@@ -92,18 +104,17 @@ const citySchema = new mongoose.Schema(
 );
 
 
-// ================= UNIQUE CITY PER STATE =================
+// ================= UNIQUE CITY PER STATE + DISTRICT =================
 citySchema.index(
-  { name: 1, state: 1 },
+  { name: 1, state: 1, district: 1 },
   { unique: true }
 );
 
 
-// ================= AUTO SLUG (SAFE VERSION) =================
+// ================= AUTO SLUG =================
 citySchema.pre("save", async function(next){
-
   try {
-    if(!this.isModified("name")) return next();
+    if (!this.isModified("name")) return next();
 
     let baseSlug = slugify(this.name);
     let slug = baseSlug;
@@ -121,16 +132,28 @@ citySchema.pre("save", async function(next){
     this.slug = slug;
 
     next();
-
   } catch (err) {
     next(err);
   }
+});
 
+
+// ================= AUTO STATE + DISTRICT SLUG =================
+citySchema.pre("save", function(next){
+
+  if (this.state) {
+    this.stateSlug = slugify(this.state);
+  }
+
+  if (this.district) {
+    this.districtSlug = slugify(this.district);
+  }
+
+  next();
 });
 
 
 // ================= AUTO GEO SYNC =================
-// keeps both systems working
 citySchema.pre("save", function(next){
 
   if (this.latitude && this.longitude) {
@@ -146,13 +169,17 @@ citySchema.pre("save", function(next){
 
 // ================= INDEXES =================
 
-// Search
-citySchema.index({ name: "text", state: "text", district: "text" });
+// 🔍 Search
+citySchema.index({
+  name: "text",
+  state: "text",
+  district: "text"
+});
 
-// Filter
-citySchema.index({ state: 1, status: 1 });
+// 🔍 Filter
+citySchema.index({ state: 1, district: 1, status: 1 });
 
-// Geo (future use)
+// 🌍 Geo
 citySchema.index({ location: "2dsphere" });
 
 

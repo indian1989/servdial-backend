@@ -11,7 +11,6 @@ export const getCities = async (req, res) => {
     if (state) query.state = state;
     if (status) query.status = status;
 
-    // 🔍 SEARCH SUPPORT
     if (search) {
       query.$text = { $search: search };
     }
@@ -40,15 +39,18 @@ export const addCity = async (req, res) => {
     if (!name || !state || !district) {
       return res.status(400).json({
         success: false,
-        message: "City name, district and state are required",
+        message: "City, district and state are required",
       });
     }
 
-    // ✅ CASE-INSENSITIVE CHECK
+    const cleanName = name.trim();
+    const cleanState = state.trim();
+    const cleanDistrict = district.trim();
+
     const existing = await City.findOne({
-      name: new RegExp(`^${name}$`, "i"),
-      state: new RegExp(`^${state}$`, "i"),
-      district: new RegExp(`^${district}$`, "i"),
+      name: new RegExp(`^${cleanName}$`, "i"),
+      state: new RegExp(`^${cleanState}$`, "i"),
+      district: new RegExp(`^${cleanDistrict}$`, "i"),
     });
 
     if (existing) {
@@ -59,9 +61,12 @@ export const addCity = async (req, res) => {
     }
 
     const city = await City.create({
-      name: name.trim(),
-      state: state.trim(),
-      district: district.trim(),
+      name: cleanName,
+      state: cleanState,
+      district: cleanDistrict,
+      slug: slugify(cleanName),
+      stateSlug: slugify(cleanState),
+      districtSlug: slugify(cleanDistrict),
       latitude,
       longitude,
     });
@@ -79,26 +84,125 @@ export const addCity = async (req, res) => {
 };
 
 
+/* ================= BULK UPLOAD ================= */
+export const bulkUploadCities = async (req, res) => {
+  try {
+    const cities = req.body.cities;
+
+    if (!Array.isArray(cities) || cities.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No cities provided",
+      });
+    }
+
+    const validCities = [];
+    const failed = [];
+    const uniqueSet = new Set();
+
+    cities.forEach((row, index) => {
+      const name = row.name?.trim();
+      const district = row.district?.trim();
+      const state = row.state?.trim();
+
+      if (!name || !district || !state) {
+        failed.push({ row: index + 1, reason: "Missing fields" });
+        return;
+      }
+
+      const key = `${name.toLowerCase()}-${district.toLowerCase()}-${state.toLowerCase()}`;
+
+      if (uniqueSet.has(key)) {
+        failed.push({ row: index + 1, reason: "Duplicate in file" });
+        return;
+      }
+
+      uniqueSet.add(key);
+
+      validCities.push({
+        name,
+        district,
+        state,
+        slug: slugify(name),
+        stateSlug: slugify(state),
+        districtSlug: slugify(district),
+      });
+    });
+
+    // ⚠️ avoid crash if empty
+    let existingSet = new Set();
+
+    if (validCities.length > 0) {
+      const existingCities = await City.find({
+        $or: validCities.map(c => ({
+          name: new RegExp(`^${c.name}$`, "i"),
+          state: new RegExp(`^${c.state}$`, "i"),
+          district: new RegExp(`^${c.district}$`, "i"),
+        }))
+      });
+
+      existingSet = new Set(
+        existingCities.map(
+          c => `${c.name.toLowerCase()}-${c.district.toLowerCase()}-${c.state.toLowerCase()}`
+        )
+      );
+    }
+
+    const operations = [];
+    let skipped = 0;
+
+    validCities.forEach((c) => {
+      const key = `${c.name.toLowerCase()}-${c.district.toLowerCase()}-${c.state.toLowerCase()}`;
+
+      if (existingSet.has(key)) {
+        skipped++;
+        return;
+      }
+
+      operations.push({
+        insertOne: { document: c },
+      });
+    });
+
+    let inserted = 0;
+
+    if (operations.length > 0) {
+      const result = await City.bulkWrite(operations, { ordered: false });
+      inserted = result.insertedCount;
+    }
+
+    res.json({
+      success: true,
+      message: "Bulk upload completed",
+      total: cities.length,
+      inserted,
+      skipped,
+      failedCount: failed.length,
+      failed,
+    });
+
+  } catch (error) {
+    console.error("BULK UPLOAD ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
 /* ================= UPDATE CITY ================= */
 export const updateCity = async (req, res) => {
   try {
     const { id } = req.params;
 
     const city = await City.findById(id);
-
     if (!city) {
-      return res.status(404).json({
-        success: false,
-        message: "City not found",
-      });
+      return res.status(404).json({ success: false, message: "City not found" });
     }
 
-    // ✅ Update fields safely
     const updates = { ...req.body };
 
-    if (updates.name) {
-      updates.slug = slugify(updates.name);
-    }
+    if (updates.name) updates.slug = slugify(updates.name);
+    if (updates.state) updates.stateSlug = slugify(updates.state);
+    if (updates.district) updates.districtSlug = slugify(updates.district);
 
     const updatedCity = await City.findByIdAndUpdate(
       id,
@@ -122,15 +226,10 @@ export const updateCity = async (req, res) => {
 /* ================= DELETE CITY ================= */
 export const deleteCity = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const city = await City.findById(id);
+    const city = await City.findById(req.params.id);
 
     if (!city) {
-      return res.status(404).json({
-        success: false,
-        message: "City not found",
-      });
+      return res.status(404).json({ success: false, message: "City not found" });
     }
 
     await city.deleteOne();
@@ -147,35 +246,74 @@ export const deleteCity = async (req, res) => {
 };
 
 
-/* ================= TOGGLE STATUS ================= */
-export const toggleCityStatus = async (req, res) => {
+/* ================= STATES ================= */
+export const getStates = async (req, res) => {
   try {
-    const city = await City.findById(req.params.id);
+    const states = await City.aggregate([
+      {
+        $group: {
+          _id: "$stateSlug",
+          name: { $first: "$state" }
+        }
+      },
+      { $sort: { name: 1 } }
+    ]);
 
-    if (!city) {
-      return res.status(404).json({
-        success: false,
-        message: "City not found",
-      });
-    }
+    res.json({ success: true, states });
 
-    city.status = city.status === "active" ? "inactive" : "active";
-    await city.save();
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+/* ================= DISTRICTS ================= */
+export const getDistrictsByState = async (req, res) => {
+  try {
+    const { stateSlug } = req.params;
+
+    const districts = await City.aggregate([
+      { $match: { stateSlug } },
+      {
+        $group: {
+          _id: "$districtSlug",
+          name: { $first: "$district" }
+        }
+      },
+      { $sort: { name: 1 } }
+    ]);
+
+    res.json({ success: true, districts });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+/* ================= CITIES BY DISTRICT ================= */
+export const getCitiesByDistrict = async (req, res) => {
+  try {
+    const { districtSlug } = req.params;
+
+    const cities = await City.find({
+      districtSlug,
+      status: "active"
+    }).sort({ name: 1 });
 
     res.json({
       success: true,
-      message: `City ${city.status}`,
-      city,
+      cities,
     });
 
   } catch (error) {
-    console.error("TOGGLE CITY STATUS ERROR:", error);
+    console.error("GET CITIES BY DISTRICT ERROR:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 
-/* ================= GET FEATURED CITIES ================= */
+/* ================= FEATURE ================= */
 export const getFeaturedCities = async (req, res) => {
   try {
     const cities = await City.find({
@@ -185,7 +323,7 @@ export const getFeaturedCities = async (req, res) => {
       .sort({ name: 1 })
       .limit(12);
 
-    res.status(200).json({
+    res.json({
       success: true,
       count: cities.length,
       cities,
@@ -198,16 +336,12 @@ export const getFeaturedCities = async (req, res) => {
 };
 
 
-/* ================= MARK CITY AS FEATURED ================= */
 export const markCityAsFeatured = async (req, res) => {
   try {
     const city = await City.findById(req.params.id);
 
     if (!city) {
-      return res.status(404).json({
-        success: false,
-        message: "City not found",
-      });
+      return res.status(404).json({ success: false, message: "City not found" });
     }
 
     city.featured = true;
@@ -220,22 +354,17 @@ export const markCityAsFeatured = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("MARK FEATURED CITY ERROR:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 
-/* ================= UNMARK CITY ================= */
 export const unmarkCityAsFeatured = async (req, res) => {
   try {
     const city = await City.findById(req.params.id);
 
     if (!city) {
-      return res.status(404).json({
-        success: false,
-        message: "City not found",
-      });
+      return res.status(404).json({ success: false, message: "City not found" });
     }
 
     city.featured = false;
@@ -248,7 +377,6 @@ export const unmarkCityAsFeatured = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("UNMARK FEATURED CITY ERROR:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
