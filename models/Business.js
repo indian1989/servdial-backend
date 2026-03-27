@@ -26,20 +26,28 @@ const businessSchema = new mongoose.Schema(
     logo: String,
     images: [String],
 
-    // ================= CATEGORY =================
-    category: {
-      type: String,
-      required: true,
-      index: true,
-    },
+    // ============= PRIMARY CATEGORY (sub-category actually) ========
+categoryId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Category",
+  required: true,
+  index: true,
+},
 
-    subCategory: {
-      type: String,
-      index: true,
-    },
+// OPTIONAL: store parent automatically
+parentCategoryId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Category",
+  index: true,
+},
 
-    services: [String],
-
+// MULTI CATEGORY
+secondaryCategories: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Category",
+  },
+],
     // ================= LOCATION =================
     address: String,
 

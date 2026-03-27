@@ -79,7 +79,7 @@ router.put("/:id/whatsapp", whatsappClick);
 // ================= PROTECTED ROUTES =================
 
 // create business
-router.post("/", protect, upload.single("image"), createBusiness);
+router.post("/", protect, createBusiness);
 
 // update business
 router.put("/:id", protect, updateBusiness);

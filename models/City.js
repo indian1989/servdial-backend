@@ -1,5 +1,3 @@
-// backend/models/City.js
-
 import mongoose from "mongoose";
 import slugify from "../utils/slugify.js";
 
@@ -28,24 +26,41 @@ const citySchema = new mongoose.Schema(
 
   district: {
     type: String,
-    trim: true
+    trim: true,
+    default: "" // ✅ prevent undefined
   },
 
   country: {
     type: String,
-    default: "India"
+    default: "India",
+    trim: true
   },
 
-  // Geo coordinates
+  // ================= GEO =================
+
   latitude: {
-    type: Number
+    type: Number,
+    default: null
   },
 
   longitude: {
-    type: Number
+    type: Number,
+    default: null
   },
 
-  // Homepage display
+  // ✅ FUTURE SAFE (does not break current system)
+  location: {
+    type: {
+      type: String,
+      enum: ["Point"],
+    },
+    coordinates: {
+      type: [Number], // [lng, lat]
+    }
+  },
+
+  // ================= DISPLAY =================
+
   featured: {
     type: Boolean,
     default: false
@@ -57,14 +72,17 @@ const citySchema = new mongoose.Schema(
   },
 
   image: {
-    type: String
+    type: String,
+    default: ""
   },
 
-  // Enable / disable city
+  // ================= STATUS =================
+
   status: {
     type: String,
     enum: ["active","inactive"],
-    default: "active"
+    default: "active",
+    index: true
   }
 
 },
@@ -74,29 +92,68 @@ const citySchema = new mongoose.Schema(
 );
 
 
-// ================= AUTO SLUG =================
+// ================= UNIQUE CITY PER STATE =================
+citySchema.index(
+  { name: 1, state: 1 },
+  { unique: true }
+);
 
-citySchema.pre("save", function(next){
 
-  if(this.isModified("name")){
-    this.slug = slugify(this.name)
+// ================= AUTO SLUG (SAFE VERSION) =================
+citySchema.pre("save", async function(next){
+
+  try {
+    if(!this.isModified("name")) return next();
+
+    let baseSlug = slugify(this.name);
+    let slug = baseSlug;
+    let count = 1;
+
+    while (
+      await mongoose.models.City.findOne({
+        slug,
+        _id: { $ne: this._id }
+      })
+    ) {
+      slug = `${baseSlug}-${count++}`;
+    }
+
+    this.slug = slug;
+
+    next();
+
+  } catch (err) {
+    next(err);
   }
 
-  next()
+});
 
+
+// ================= AUTO GEO SYNC =================
+// keeps both systems working
+citySchema.pre("save", function(next){
+
+  if (this.latitude && this.longitude) {
+    this.location = {
+      type: "Point",
+      coordinates: [this.longitude, this.latitude]
+    };
+  }
+
+  next();
 });
 
 
 // ================= INDEXES =================
 
-// Search cities
-citySchema.index({ name: "text", state: "text" });
+// Search
+citySchema.index({ name: "text", state: "text", district: "text" });
 
-// Fast filter
-citySchema.index({ state: 1 });
+// Filter
+citySchema.index({ state: 1, status: 1 });
 
-// Geo index (optional future map search)
-citySchema.index({ latitude: 1, longitude: 1 });
+// Geo (future use)
+citySchema.index({ location: "2dsphere" });
 
 
 export default mongoose.model("City", citySchema);

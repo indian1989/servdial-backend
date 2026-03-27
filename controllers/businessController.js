@@ -1,4 +1,5 @@
 import Business from "../models/Business.js";
+import Category from "../models/Category.js";
 import asyncHandler from "express-async-handler";
 import { uploadImage } from "../utils/uploadToCloudinary.js";
 import { buildSearchQuery } from "../utils/buildSearchQuery.js";
@@ -6,26 +7,80 @@ import { buildSearchQuery } from "../utils/buildSearchQuery.js";
 // ================= Role Check =================
 const isAdmin = (user) => ["admin", "superadmin"].includes(user.role);
 
+// ================= NORMALIZE CATEGORY =================
+const normalizeCategories = (body) => {
+  return {
+    categoryId: body.categoryId || body.category || null, // ✅ FIXED
+    secondaryCategories: Array.isArray(body.secondaryCategories)
+      ? body.secondaryCategories
+      : [],
+  };
+};
+
+// ================= AUTO SET PARENT CATEGORY =================
+const getParentCategory = async (categoryId) => {
+  if (!categoryId) return null;
+
+  const cat = await Category.findById(categoryId).select("parentCategory");
+  return cat?.parentCategory || null;
+};
+
 // ================= CREATE =================
 export const createBusiness = asyncHandler(async (req, res) => {
   if (!["provider", "admin", "superadmin"].includes(req.user.role)) {
-    return res.status(403).json({ success: false, message: "Not authorized" });
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized",
+    });
   }
 
-  let imageUrl = "";
-  if (req.file) {
-    const result = await uploadImage(req.file.buffer);
-    imageUrl = result.secure_url;
+  const { categoryId, secondaryCategories } = normalizeCategories(req.body);
+
+  // ✅ BASIC VALIDATION
+  if (!req.body.name || !categoryId || !req.body.city || !req.body.phone) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required fields",
+    });
   }
 
-  const business = await Business.create({
-    ...req.body,
-    owner: req.user._id,
-    status: req.user.role === "provider" ? "pending" : "approved",
-    image: imageUrl,
-  });
+  // ✅ AUTO PARENT CATEGORY
+  const parentCategoryId = await getParentCategory(categoryId);
 
-  res.status(201).json({ success: true, business });
+  try {
+    const business = await Business.create({
+      ...req.body,
+
+      categoryId,
+      parentCategoryId,
+      secondaryCategories,
+
+      owner: req.user._id,
+
+      // ✅ PROVIDER = pending
+      status: req.user.role === "provider" ? "pending" : "approved",
+
+      // ✅ FIXED FIELDS
+      logo: req.body.logo || "",
+      images: req.body.images || [],
+    });
+
+    res.status(201).json({
+      success: true,
+      business,
+    });
+
+  } catch (err) {
+    // ✅ HANDLE DUPLICATE PHONE
+    if (err.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone already exists",
+      });
+    }
+
+    throw err;
+  }
 });
 
 // ================= SEARCH =================
@@ -48,7 +103,6 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
 
   const query = buildSearchQuery({
     city,
-    category,
     keyword,
     rating,
     openNow,
@@ -56,10 +110,19 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
 
   query.status = "approved";
 
+  // ✅ CATEGORY FIX (PRIMARY + SECONDARY + PARENT)
+  if (category) {
+    query.$or = [
+      { categoryId: category },
+      { secondaryCategories: category },
+      { parentCategoryId: category }, // 🔥 IMPORTANT
+    ];
+  }
+
   let businesses = [];
   let total = 0;
 
-  // GEO SEARCH
+  // ================= GEO SEARCH =================
   if (lat && lng && distance) {
     businesses = await Business.aggregate([
       {
@@ -121,20 +184,31 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
 export const getBusinesses = asyncHandler(async (req, res) => {
   const businesses = await Business.find({ status: "approved" })
     .sort({ createdAt: -1 })
-    .limit(50);
+    .limit(50)
+    .populate("categoryId parentCategoryId");
 
-  res.json({ success: true, businesses });
+  res.json({
+    success: true,
+    businesses,
+  });
 });
 
 // ================= GET BY ID =================
 export const getBusinessById = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
+  const business = await Business.findById(req.params.id)
+    .populate("categoryId parentCategoryId");
 
   if (!business) {
-    return res.status(404).json({ success: false, message: "Not found" });
+    return res.status(404).json({
+      success: false,
+      message: "Not found",
+    });
   }
 
-  res.json({ success: true, business });
+  res.json({
+    success: true,
+    business,
+  });
 });
 
 // ================= UPDATE =================
@@ -142,17 +216,40 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
   if (!business) {
-    return res.status(404).json({ success: false, message: "Not found" });
+    return res.status(404).json({
+      success: false,
+      message: "Not found",
+    });
   }
 
   if (!business.owner.equals(req.user._id) && !isAdmin(req.user)) {
-    return res.status(403).json({ success: false, message: "Not authorized" });
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized",
+    });
   }
 
-  Object.assign(business, req.body);
+  const { categoryId, secondaryCategories } = normalizeCategories(req.body);
+
+  let parentCategoryId = business.parentCategoryId;
+
+  if (categoryId) {
+    parentCategoryId = await getParentCategory(categoryId);
+  }
+
+  Object.assign(business, {
+    ...req.body,
+    categoryId,
+    parentCategoryId,
+    secondaryCategories,
+  });
+
   await business.save();
 
-  res.json({ success: true, business });
+  res.json({
+    success: true,
+    business,
+  });
 });
 
 // ================= DELETE =================
@@ -160,7 +257,10 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
   if (!business) {
-    return res.status(404).json({ success: false, message: "Not found" });
+    return res.status(404).json({
+      success: false,
+      message: "Not found",
+    });
   }
 
   await business.deleteOne();
@@ -177,11 +277,10 @@ export const suggestSearch = asyncHandler(async (req, res) => {
   const businesses = await Business.find({
     $or: [
       { name: new RegExp(q, "i") },
-      { category: new RegExp(q, "i") },
     ],
   })
     .limit(8)
-    .select("name category city");
+    .select("name categoryId city");
 
   res.json(businesses);
 });
@@ -202,7 +301,7 @@ export const getTopRatedBusinesses = asyncHandler(async (req, res) => {
     .sort({ averageRating: -1 })
     .limit(8);
 
-  res.json(businesses);
+  res.json({ success: true, businesses });
 });
 
 // ================= LATEST =================
@@ -243,11 +342,15 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
   if (!current) return res.json([]);
 
   const businesses = await Business.find({
-    category: current.category,
+    $or: [
+      { categoryId: current.categoryId },
+      { secondaryCategories: current.categoryId },
+      { parentCategoryId: current.parentCategoryId },
+    ],
     _id: { $ne: id },
   }).limit(6);
 
-  res.json(businesses);
+  res.json({ success: true, businesses });
 });
 
 // ================= SLUG =================

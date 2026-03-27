@@ -20,15 +20,30 @@ const categorySchema = new mongoose.Schema(
     description: {
       type: String,
       default: "",
+      trim: true, // ✅ improvement
     },
 
-    icon: String,
-    image: String,
+    icon: {
+      type: String,
+      default: "",
+    },
+
+    image: {
+      type: String,
+      default: "",
+    },
 
     parentCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       default: null,
+      index: true,
+    },
+
+    // ✅ NEW (NO BREAKING CHANGE)
+    level: {
+      type: Number,
+      default: 0,
       index: true,
     },
 
@@ -50,6 +65,13 @@ const categorySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // ✅ NEW (future-proof, no impact now)
+    meta: {
+      title: String,
+      description: String,
+    },
+
   },
   {
     timestamps: true,
@@ -71,7 +93,6 @@ categorySchema.pre("save", async function (next) {
   try {
     let baseSlug = slugify(this.name);
     let slug = baseSlug;
-
     let count = 1;
 
     while (true) {
@@ -94,6 +115,24 @@ categorySchema.pre("save", async function (next) {
 });
 
 
+// ✅ AUTO LEVEL CALCULATION (NEW — SAFE)
+categorySchema.pre("save", async function (next) {
+  try {
+    if (!this.parentCategory) {
+      this.level = 0;
+      return next();
+    }
+
+    const parent = await mongoose.models.Category.findById(this.parentCategory);
+    this.level = parent ? (parent.level || 0) + 1 : 0;
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+
 // ✅ PREVENT CIRCULAR PARENT (VERY IMPORTANT)
 categorySchema.pre("save", async function (next) {
   if (!this.parentCategory) return next();
@@ -102,7 +141,6 @@ categorySchema.pre("save", async function (next) {
     return next(new Error("Category cannot be its own parent"));
   }
 
-  // check ancestor loop
   let parent = await mongoose.models.Category.findById(this.parentCategory);
 
   while (parent) {
