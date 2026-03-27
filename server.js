@@ -53,8 +53,9 @@ app.use("/api/admin", adminBusinessRoutes);
 app.use("/api/admin", adminRoutes);
 
 // Categories (IMPORTANT FIX)
-app.use("/api/categories", categoryRoutes);        // ✅ public
-app.use("/api/admin/categories", categoryRoutes);  // ✅ admin
+app.use("/api/categories", categoryRoutes);
+app.use("/api/admin/categories", categoryRoutes);
+app.use("/api/admin/cities", cityRoutes);
 
 // Others
 app.use("/api/featured", featuredRoutes);

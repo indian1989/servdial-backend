@@ -1,6 +1,8 @@
 import express from "express";
 import { getCities,
     addCity,
+    updateCity,
+    deleteCity,
     getFeaturedCities,
     markCityAsFeatured,
     unmarkCityAsFeatured
@@ -14,6 +16,12 @@ router.get("/", getCities);
 
 /* ADD CITY */
 router.post("/", addCity);
+
+/* ================= UPDATE CITY ================= */
+router.put("/:id", updateCity);
+
+/* ================= DELETE CITY ================= */
+router.delete("/:id", deleteCity);
 
 /* GET FEATURED CITIES */
 router.get("/featured", getFeaturedCities);

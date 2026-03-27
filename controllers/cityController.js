@@ -37,10 +37,10 @@ export const addCity = async (req, res) => {
   try {
     const { name, state, district, latitude, longitude } = req.body;
 
-    if (!name || !state) {
+    if (!name || !state || !district) {
       return res.status(400).json({
         success: false,
-        message: "City name and state are required",
+        message: "City name, district and state are required",
       });
     }
 
@@ -48,9 +48,7 @@ export const addCity = async (req, res) => {
     const existing = await City.findOne({
       name: new RegExp(`^${name}$`, "i"),
       state: new RegExp(`^${state}$`, "i"),
-      district: district
-        ? new RegExp(`^${district}$`, "i")
-        : { $exists: true },
+      district: new RegExp(`^${district}$`, "i"),
     });
 
     if (existing) {
@@ -63,7 +61,7 @@ export const addCity = async (req, res) => {
     const city = await City.create({
       name: name.trim(),
       state: state.trim(),
-      district: district || "",
+      district: district.trim(),
       latitude,
       longitude,
     });
