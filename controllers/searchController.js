@@ -1,9 +1,56 @@
 import Business from "../models/Business.js";
 import { rankBusinesses } from "../utils/rankBusinesses.js";
 import asyncHandler from "express-async-handler";
+import SearchTrend from "../models/SearchTrend.js";
+import { buildSearchQuery } from "../utils/buildSearchQuery.js";
+import RecentSearch from "../models/RecentSearch.js";
+import { correctQuery } from "../utils/spellCorrection.js";
+import { parseSearchIntent } from "../utils/parseSearchIntent.js";
+import { getSemanticCategory } from "../utils/semanticMapper.js";
 
+
+/* ================= CACHE KEY ================= */
+const buildCacheKey = (params) => {
+  return `search:${JSON.stringify(params)}`;
+};
+
+/* ================= TREND ================= */
+const trackSearchTrend = async ({ keyword, city, category }) => {
+  if (!keyword) return;
+
+  await SearchTrend.findOneAndUpdate(
+    { query: keyword, city: city || null, category: category || null },
+    { $inc: { count: 1 }, lastSearchedAt: new Date() },
+    { upsert: true }
+  );
+};
+
+/* ================= RECENT ================= */
+const trackRecentSearch = async ({ userId, keyword, city, category }) => {
+  if (!keyword) return;
+
+  await RecentSearch.findOneAndUpdate(
+    { user: userId || null, query: keyword },
+    {
+      city: city || null,
+      category: category || null,
+      lastSearchedAt: new Date(),
+    },
+    { upsert: true }
+  );
+};
+
+/* ================= NORMALIZE ================= */
+const normalizeBusiness = (biz) => ({
+  ...biz,
+  rating: biz.averageRating ?? biz.rating ?? 0,
+  reviewCount: biz.totalReviews ?? biz.reviewCount ?? 0,
+  featured: biz.isFeatured ?? biz.featured ?? false,
+});
+
+/* ================= MAIN SEARCH ================= */
 export const searchBusinesses = asyncHandler(async (req, res) => {
-  const {
+  let {
     city,
     category,
     keyword,
@@ -19,21 +66,47 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
   const pageNum = Number(page);
   const limitNum = Number(limit);
 
-  const query = buildSearchQuery({
+  const correctedKeyword = correctQuery(keyword);
+  const intent = parseSearchIntent(correctedKeyword);
+  const semanticCategory = getSemanticCategory(correctedKeyword);
+
+  if (!category && semanticCategory) {
+    category = semanticCategory;
+  }
+
+  const cacheKey = buildCacheKey({
     city,
     category,
-    keyword,
+    keyword: correctedKeyword,
     rating,
-    openNow,
+    page,
+    lat,
+    lng,
+    distance,
   });
 
-  query.status = "approved";
+  /* ================= BUILD QUERY ================= */
+  const searchQuery = buildSearchQuery({
+    city,
+    category,
+    keyword: correctedKeyword,
+    rating: intent.minRating || rating,
+    openNow: intent.openNow || openNow,
+  });
+
+  trackSearchTrend({ keyword: correctedKeyword, city, category });
+
+  trackRecentSearch({
+    userId: req.user?._id || null,
+    keyword: correctedKeyword,
+    city,
+    category,
+  });
 
   let businesses = [];
   let total = 0;
 
-  // ================= GEO SEARCH =================
-  if (lat && lng && distance) {
+  if ((lat && lng && distance) || intent.nearMe) {
     const pipeline = [
       {
         $geoNear: {
@@ -42,55 +115,62 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
             coordinates: [Number(lng), Number(lat)],
           },
           distanceField: "distance",
-          maxDistance: Number(distance),
+          maxDistance: Number(distance || 5000),
           spherical: true,
+          query: searchQuery,
         },
       },
-      { $match: query },
     ];
 
-    // TOTAL COUNT (correct way)
-    const countPipeline = [...pipeline, { $count: "total" }];
-    const countResult = await Business.aggregate(countPipeline);
+    const countResult = await Business.aggregate([
+      ...pipeline,
+      { $count: "total" },
+    ]);
+
     total = countResult[0]?.total || 0;
 
-    // PAGINATED DATA
-    businesses = await Business.aggregate([
+    const results = await Business.aggregate([
       ...pipeline,
-      {
-        $sort: {
-          isFeatured: -1,
-          featurePriority: -1,
-          averageRating: -1,
-          views: -1,
-        },
-      },
       { $skip: (pageNum - 1) * limitNum },
       { $limit: limitNum },
     ]);
-  }
 
-  // ================= NORMAL SEARCH =================
-  else {
-    businesses = await Business.find(query)
-      .sort({
-        isFeatured: -1,
-        featurePriority: -1,
-        averageRating: -1,
-        views: -1,
-      })
+    const userLocation =
+      lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
+
+    businesses = await rankBusinesses(
+      results.map(normalizeBusiness),
+      userLocation,
+      correctedKeyword,
+      intent,
+      req.user?._id || null,
+      city
+    );
+  } else {
+    const raw = await Business.find(searchQuery)
+      .lean()
       .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean();
+      .limit(limitNum);
 
-    total = await Business.countDocuments(query);
+    total = await Business.countDocuments(searchQuery);
+
+    businesses = await rankBusinesses(
+      raw.map(normalizeBusiness),
+      null,
+      correctedKeyword,
+      intent,
+      req.user?._id || null,
+      city
+    );
   }
 
-  res.status(200).json({
+  const response = {
     success: true,
     businesses,
     total,
     page: pageNum,
     pages: Math.ceil(total / limitNum),
-  });
+  };
+
+  res.json(response);
 });

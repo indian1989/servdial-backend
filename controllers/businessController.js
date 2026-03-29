@@ -1,8 +1,11 @@
+import mongoose from "mongoose";
 import Business from "../models/Business.js";
+import BusinessView from "../models/BusinessView.js";
 import Category from "../models/Category.js";
 import asyncHandler from "express-async-handler";
-import { uploadImage } from "../utils/uploadToCloudinary.js";
 import { buildSearchQuery } from "../utils/buildSearchQuery.js";
+import UserPreference from "../models/UserPreference.js";
+import BusinessClick from "../models/BusinessClick.js";
 
 // ================= Role Check =================
 const isAdmin = (user) => ["admin", "superadmin"].includes(user.role);
@@ -10,7 +13,7 @@ const isAdmin = (user) => ["admin", "superadmin"].includes(user.role);
 // ================= NORMALIZE CATEGORY =================
 const normalizeCategories = (body) => {
   return {
-    categoryId: body.categoryId || body.category || null, // ✅ FIXED
+    categoryId: body.categoryId || body.category || null,
     secondaryCategories: Array.isArray(body.secondaryCategories)
       ? body.secondaryCategories
       : [],
@@ -36,7 +39,6 @@ export const createBusiness = asyncHandler(async (req, res) => {
 
   const { categoryId, secondaryCategories } = normalizeCategories(req.body);
 
-  // ✅ BASIC VALIDATION
   if (!req.body.name || !categoryId || !req.body.city || !req.body.phone) {
     return res.status(400).json({
       success: false,
@@ -44,23 +46,16 @@ export const createBusiness = asyncHandler(async (req, res) => {
     });
   }
 
-  // ✅ AUTO PARENT CATEGORY
   const parentCategoryId = await getParentCategory(categoryId);
 
   try {
     const business = await Business.create({
       ...req.body,
-
       categoryId,
       parentCategoryId,
       secondaryCategories,
-
       owner: req.user._id,
-
-      // ✅ PROVIDER = pending
       status: req.user.role === "provider" ? "pending" : "approved",
-
-      // ✅ FIXED FIELDS
       logo: req.body.logo || "",
       images: req.body.images || [],
     });
@@ -71,14 +66,12 @@ export const createBusiness = asyncHandler(async (req, res) => {
     });
 
   } catch (err) {
-    // ✅ HANDLE DUPLICATE PHONE
     if (err.code === 11000) {
       return res.status(400).json({
         success: false,
         message: "Phone already exists",
       });
     }
-
     throw err;
   }
 });
@@ -110,21 +103,19 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
 
   query.status = "approved";
 
-  // ✅ CATEGORY FIX (PRIMARY + SECONDARY + PARENT)
   if (category) {
     query.$or = [
       { categoryId: category },
       { secondaryCategories: category },
-      { parentCategoryId: category }, // 🔥 IMPORTANT
+      { parentCategoryId: category },
     ];
   }
 
   let businesses = [];
   let total = 0;
 
-  // ================= GEO SEARCH =================
   if (lat && lng && distance) {
-    businesses = await Business.aggregate([
+    const pipeline = [
       {
         $geoNear: {
           near: {
@@ -137,19 +128,27 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
         },
       },
       { $match: query },
-      { $sort: { isFeatured: -1, averageRating: -1 } },
+    ];
+
+    const countResult = await Business.aggregate([
+      ...pipeline,
+      { $count: "total" },
+    ]);
+    total = countResult[0]?.total || 0;
+
+    businesses = await Business.aggregate([
+      ...pipeline,
+      {
+        $sort: {
+          isFeatured: -1,
+          featurePriority: -1,
+          averageRating: -1,
+          views: -1,
+        },
+      },
       { $skip: (pageNum - 1) * limitNum },
       { $limit: limitNum },
     ]);
-
-    total = businesses.length;
-
-    businesses = businesses.map((b) => ({
-      ...b,
-      rating: b.averageRating || 0,
-      reviewCount: b.totalReviews || 0,
-      distance: b.distance ? b.distance / 1000 : null,
-    }));
   } else {
     const raw = await Business.find(query)
       .sort({
@@ -167,7 +166,6 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
       ...b.toObject(),
       rating: b.averageRating || 0,
       reviewCount: b.totalReviews || 0,
-      distance: null,
     }));
   }
 
@@ -180,35 +178,255 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
   });
 });
 
-// ================= GET ALL =================
-export const getBusinesses = asyncHandler(async (req, res) => {
-  const businesses = await Business.find({ status: "approved" })
-    .sort({ createdAt: -1 })
-    .limit(50)
-    .populate("categoryId parentCategoryId");
-
-  res.json({
-    success: true,
-    businesses,
-  });
-});
-
-// ================= GET BY ID =================
+// ================= GET BUSINESS BY ID =================
 export const getBusinessById = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id)
-    .populate("categoryId parentCategoryId");
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid business ID",
+    });
+  }
+
+  const business = await Business.findById(id)
+    .populate("categoryId", "name")
+    .populate("secondaryCategories", "name")
+    .lean();
 
   if (!business) {
     return res.status(404).json({
       success: false,
-      message: "Not found",
+      message: "Business not found",
     });
   }
 
-  res.json({
-    success: true,
-    business,
+  res.json({ success: true, business });
+});
+
+// ================= GET BUSINESS BY SLUG =================
+export const getBusinessBySlug = asyncHandler(async (req, res) => {
+  const { slug } = req.params;
+
+  const business = await Business.findOne({ slug })
+    .populate("categoryId", "name")
+    .populate("secondaryCategories", "name")
+    .lean();
+
+  if (!business) {
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
+  }
+
+  res.json({ success: true, business });
+});
+
+// ================= FEATURED =================
+export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
+  const { city, category, limit = 10 } = req.query;
+
+  const query = {
+    isFeatured: true,
+    status: "approved",
+  };
+
+  if (city) query.city = new RegExp(city, "i");
+
+  if (category) {
+    query.$or = [
+      { categoryId: category },
+      { secondaryCategories: category },
+      { parentCategoryId: category },
+    ];
+  }
+
+  const businesses = await Business.find(query)
+    .sort({ featurePriority: -1, averageRating: -1, views: -1 })
+    .limit(Number(limit))
+    .lean();
+
+  res.json({ success: true, businesses });
+});
+
+// ================= LATEST =================
+export const getLatestBusinesses = asyncHandler(async (req, res) => {
+  const { city, category, limit = 10 } = req.query;
+
+  const query = { status: "approved" };
+
+  if (city) query.city = new RegExp(city, "i");
+
+  if (category) {
+    query.$or = [
+      { categoryId: category },
+      { secondaryCategories: category },
+      { parentCategoryId: category },
+    ];
+  }
+
+  const businesses = await Business.find(query)
+    .sort({ createdAt: -1 })
+    .limit(Number(limit))
+    .lean();
+
+  res.json({ success: true, businesses });
+});
+
+// ================= NEARBY =================
+export const getNearbyBusinesses = asyncHandler(async (req, res) => {
+  const { lat, lng, distance = 5000, limit = 10, category, city } = req.query;
+
+  if (!lat || !lng) {
+    return res.status(400).json({
+      success: false,
+      message: "Latitude and longitude are required",
+    });
+  }
+
+  const query = { status: "approved" };
+
+  if (city) query.city = new RegExp(city, "i");
+
+  if (category) {
+    query.$or = [
+      { categoryId: category },
+      { secondaryCategories: category },
+      { parentCategoryId: category },
+    ];
+  }
+
+  const businesses = await Business.aggregate([
+    {
+      $geoNear: {
+        near: {
+          type: "Point",
+          coordinates: [Number(lng), Number(lat)],
+        },
+        distanceField: "distance",
+        maxDistance: Number(distance),
+        spherical: true,
+        query,
+      },
+    },
+    { $sort: { distance: 1, averageRating: -1, isFeatured: -1 } },
+    { $limit: Number(limit) },
+  ]);
+
+  res.json({ success: true, businesses });
+});
+
+// ================= SIMILAR =================
+export const getSimilarBusinesses = asyncHandler(async (req, res) => {
+  const { id, limit = 10 } = req.query;
+
+  const baseBusiness = await Business.findById(id);
+
+  if (!baseBusiness) {
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
+  }
+
+  const businesses = await Business.find({
+    status: "approved",
+    _id: { $ne: id },
+    $or: [
+      { categoryId: baseBusiness.categoryId },
+      { secondaryCategories: baseBusiness.categoryId },
+      { parentCategoryId: baseBusiness.parentCategoryId },
+    ],
+  })
+    .sort({ averageRating: -1, isFeatured: -1, views: -1 })
+    .limit(Number(limit))
+    .lean();
+
+  res.json({ success: true, businesses });
+});
+
+// ================= TOP RATED =================
+export const getTopRatedBusinesses = asyncHandler(async (req, res) => {
+  const { city, category, limit = 10 } = req.query;
+
+  const query = { status: "approved" };
+
+  if (city) query.city = new RegExp(city, "i");
+
+  if (category) {
+    query.$or = [
+      { categoryId: category },
+      { secondaryCategories: category },
+      { parentCategoryId: category },
+    ];
+  }
+
+  const businesses = await Business.find(query)
+    .sort({ averageRating: -1, totalReviews: -1 })
+    .limit(Number(limit))
+    .lean();
+
+  res.json({ success: true, businesses });
+});
+
+// ================= VIEW TRACKING =================
+export const incrementViews = asyncHandler(async (req, res) => {
+  await BusinessView.create({
+    business: req.params.id,
+    user: req.user?._id || null,
+    ipAddress: req.ip,
+    userAgent: req.headers["user-agent"],
   });
+
+  await Business.findByIdAndUpdate(req.params.id, {
+    $inc: { views: 1 },
+  });
+
+  res.json({ success: true });
+});
+
+// ================= PHONE CLICK =================
+export const phoneClick = asyncHandler(async (req, res) => {
+  await Business.findByIdAndUpdate(req.params.id, {
+    $inc: { phoneClicks: 1 },
+  });
+
+  res.json({ success: true });
+});
+
+// ================= WHATSAPP CLICK =================
+export const whatsappClick = asyncHandler(async (req, res) => {
+  await Business.findByIdAndUpdate(req.params.id, {
+    $inc: { whatsappClicks: 1 },
+  });
+
+  res.json({ success: true });
+});
+
+// ================= SUGGEST SEARCH =================
+export const suggestSearch = asyncHandler(async (req, res) => {
+  const { q, city } = req.query;
+
+  if (!q) return res.json([]);
+
+  const query = { status: "approved" };
+
+  if (city) query.city = new RegExp(city, "i");
+
+  const businesses = await Business.find({
+    ...query,
+    $or: [
+      { name: new RegExp(q, "i") },
+      { tags: new RegExp(q, "i") },
+      { keywords: new RegExp(q, "i") },
+    ],
+  })
+    .limit(8)
+    .select("name categoryId city")
+    .lean();
+
+  res.json(businesses);
 });
 
 // ================= UPDATE =================
@@ -216,17 +434,11 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
   if (!business) {
-    return res.status(404).json({
-      success: false,
-      message: "Not found",
-    });
+    return res.status(404).json({ success: false, message: "Not found" });
   }
 
-  if (!business.owner.equals(req.user._id) && !isAdmin(req.user)) {
-    return res.status(403).json({
-      success: false,
-      message: "Not authorized",
-    });
+  if (!isAdmin(req.user) && !business.owner.equals(req.user._id)) {
+    return res.status(403).json({ success: false, message: "Not authorized" });
   }
 
   const { categoryId, secondaryCategories } = normalizeCategories(req.body);
@@ -246,10 +458,7 @@ export const updateBusiness = asyncHandler(async (req, res) => {
 
   await business.save();
 
-  res.json({
-    success: true,
-    business,
-  });
+  res.json({ success: true, business });
 });
 
 // ================= DELETE =================
@@ -259,134 +468,55 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
   if (!business) {
     return res.status(404).json({
       success: false,
-      message: "Not found",
+      message: "Business not found",
+    });
+  }
+
+  if (!isAdmin(req.user) && !business.owner.equals(req.user._id)) {
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized",
     });
   }
 
   await business.deleteOne();
 
-  res.json({ success: true });
+  res.json({
+    success: true,
+    message: "Business deleted successfully",
+  });
 });
 
-// ================= SUGGEST =================
-export const suggestSearch = asyncHandler(async (req, res) => {
-  const { q } = req.query;
 
-  if (!q) return res.json([]);
 
-  const businesses = await Business.find({
-    $or: [
-      { name: new RegExp(q, "i") },
-    ],
-  })
-    .limit(8)
-    .select("name categoryId city");
-
-  res.json(businesses);
-});
-
-// ================= FEATURED =================
-export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
-  const businesses = await Business.find({
-    status: "approved",
-    isFeatured: true,
-  }).limit(8);
-
-  res.json({ success: true, businesses });
-});
-
-// ================= TOP RATED =================
-export const getTopRatedBusinesses = asyncHandler(async (req, res) => {
-  const businesses = await Business.find({ status: "approved" })
-    .sort({ averageRating: -1 })
-    .limit(8);
-
-  res.json({ success: true, businesses });
-});
-
-// ================= LATEST =================
-export const getLatestBusinesses = asyncHandler(async (req, res) => {
-  const businesses = await Business.find({ status: "approved" })
-    .sort({ createdAt: -1 })
-    .limit(8);
-
-  res.json({ success: true, businesses });
-});
-
-// ================= NEARBY =================
-export const getNearbyBusinesses = asyncHandler(async (req, res) => {
-  const { lat, lng } = req.query;
-
-  if (!lat || !lng) return res.json([]);
-
-  const businesses = await Business.find({
-    location: {
-      $near: {
-        $geometry: {
-          type: "Point",
-          coordinates: [Number(lng), Number(lat)],
-        },
-        $maxDistance: 5000,
-      },
-    },
-  }).limit(8);
-
-  res.json({ success: true, businesses });
-});
-
-// ================= SIMILAR =================
-export const getSimilarBusinesses = asyncHandler(async (req, res) => {
+// ================= TRACK CLICK =================
+export const trackBusinessClick = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { keyword, city } = req.body;
 
-  const current = await Business.findById(id);
-  if (!current) return res.json([]);
+  const business = await Business.findById(id).select("categoryId");
 
-  const businesses = await Business.find({
-    $or: [
-      { categoryId: current.categoryId },
-      { secondaryCategories: current.categoryId },
-      { parentCategoryId: current.parentCategoryId },
-    ],
-    _id: { $ne: id },
-  }).limit(6);
+  // Save click
+  await BusinessClick.create({
+    business: id,
+    user: req.user?._id || null,
+    keyword: keyword || null,
+    city: city || null,
+  });
 
-  res.json({ success: true, businesses });
-});
-
-// ================= SLUG =================
-export const getBusinessBySlug = asyncHandler(async (req, res) => {
-  const { slug } = req.params;
-
-  const business = await Business.findOne({ slug });
-
-  if (!business) {
-    return res.status(404).json({ success: false });
+  // 🔥 PERSONALIZATION LEARNING
+  if (req.user && business?.categoryId) {
+    await UserPreference.findOneAndUpdate(
+      {
+        user: req.user._id,
+        category: business.categoryId,
+      },
+      {
+        $inc: { score: 5 },
+      },
+      { upsert: true }
+    );
   }
-
-  res.json({ success: true, business });
-});
-
-// ================= ANALYTICS =================
-export const incrementViews = asyncHandler(async (req, res) => {
-  await Business.findByIdAndUpdate(req.params.id, {
-    $inc: { views: 1 },
-  });
-
-  res.json({ success: true });
-});
-
-export const phoneClick = asyncHandler(async (req, res) => {
-  await Business.findByIdAndUpdate(req.params.id, {
-    $inc: { phoneClicks: 1 },
-  });
-
-  res.json({ success: true });
-});
-
-export const whatsappClick = asyncHandler(async (req, res) => {
-  await Business.findByIdAndUpdate(req.params.id, {
-    $inc: { whatsappClicks: 1 },
-  });
 
   res.json({ success: true });
 });

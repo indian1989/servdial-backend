@@ -16,7 +16,8 @@ export const getCities = async (req, res) => {
     }
 
     const cities = await City.find(query)
-      .sort({ state: 1, district: 1, name: 1 });
+      .sort({ state: 1, district: 1, name: 1 })
+      .lean();
 
     res.status(200).json({
       success: true,
@@ -100,21 +101,23 @@ export const bulkUploadCities = async (req, res) => {
     const failed = [];
     const uniqueSet = new Set();
 
-    cities.forEach((row, index) => {
+    for (let i = 0; i < cities.length; i++) {
+      const row = cities[i];
+
       const name = row.name?.trim();
       const district = row.district?.trim();
       const state = row.state?.trim();
 
       if (!name || !district || !state) {
-        failed.push({ row: index + 1, reason: "Missing fields" });
-        return;
+        failed.push({ row: i + 1, reason: "Missing fields" });
+        continue;
       }
 
       const key = `${name.toLowerCase()}-${district.toLowerCase()}-${state.toLowerCase()}`;
 
       if (uniqueSet.has(key)) {
-        failed.push({ row: index + 1, reason: "Duplicate in file" });
-        return;
+        failed.push({ row: i + 1, reason: "Duplicate in file" });
+        continue;
       }
 
       uniqueSet.add(key);
@@ -127,19 +130,18 @@ export const bulkUploadCities = async (req, res) => {
         stateSlug: slugify(state),
         districtSlug: slugify(district),
       });
-    });
+    }
 
-    // ⚠️ avoid crash if empty
     let existingSet = new Set();
 
     if (validCities.length > 0) {
       const existingCities = await City.find({
         $or: validCities.map(c => ({
-          name: new RegExp(`^${c.name}$`, "i"),
-          state: new RegExp(`^${c.state}$`, "i"),
-          district: new RegExp(`^${c.district}$`, "i"),
+          name: c.name,
+          state: c.state,
+          district: c.district,
         }))
-      });
+      }).lean();
 
       existingSet = new Set(
         existingCities.map(
@@ -151,24 +153,24 @@ export const bulkUploadCities = async (req, res) => {
     const operations = [];
     let skipped = 0;
 
-    validCities.forEach((c) => {
+    for (const c of validCities) {
       const key = `${c.name.toLowerCase()}-${c.district.toLowerCase()}-${c.state.toLowerCase()}`;
 
       if (existingSet.has(key)) {
         skipped++;
-        return;
+        continue;
       }
 
       operations.push({
         insertOne: { document: c },
       });
-    });
+    }
 
     let inserted = 0;
 
     if (operations.length > 0) {
       const result = await City.bulkWrite(operations, { ordered: false });
-      inserted = result.insertedCount;
+      inserted = result.insertedCount || operations.length;
     }
 
     res.json({
@@ -299,7 +301,7 @@ export const getCitiesByDistrict = async (req, res) => {
     const cities = await City.find({
       districtSlug,
       status: "active"
-    }).sort({ name: 1 });
+    }).sort({ name: 1 }).lean();
 
     res.json({
       success: true,
@@ -321,7 +323,8 @@ export const getFeaturedCities = async (req, res) => {
       status: "active",
     })
       .sort({ name: 1 })
-      .limit(12);
+      .limit(12)
+      .lean();
 
     res.json({
       success: true,
@@ -334,7 +337,6 @@ export const getFeaturedCities = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 export const markCityAsFeatured = async (req, res) => {
   try {
@@ -357,7 +359,6 @@ export const markCityAsFeatured = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 export const unmarkCityAsFeatured = async (req, res) => {
   try {

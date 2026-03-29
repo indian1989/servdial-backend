@@ -8,36 +8,41 @@ export const getAllCategories = async (req, res) => {
       .sort({ order: 1, name: 1 })
       .lean();
 
-    const map = {};
+    const map = new Map();
     const roots = [];
 
-    // create map
-    categories.forEach((cat) => {
-      map[cat._id] = { ...cat, subcategories: [] };
-    });
+    // build map
+    for (const cat of categories) {
+      map.set(cat._id.toString(), { ...cat, subcategories: [] });
+    }
 
     // build tree
-    categories.forEach((cat) => {
+    for (const cat of categories) {
+      const node = map.get(cat._id.toString());
+
       const parentId =
-        typeof cat.parentCategory === "object"
-          ? cat.parentCategory?._id
-          : cat.parentCategory;
+        cat.parentCategory?._id?.toString?.() ||
+        cat.parentCategory?.toString?.();
 
-      if (parentId && map[parentId]) {
-        map[parentId].subcategories.push(map[cat._id]);
+      if (parentId && map.has(parentId)) {
+        map.get(parentId).subcategories.push(node);
       } else {
-        roots.push(map[cat._id]);
+        roots.push(node);
       }
-    });
+    }
 
-    // sort tree
+    // sort tree recursively
     const sortTree = (nodes) => {
-      nodes.sort(
-        (a, b) =>
-          Number(a.order || 0) - Number(b.order || 0) ||
-          a.name.localeCompare(b.name)
+      nodes.sort((a, b) =>
+        Number(a.order || 0) - Number(b.order || 0) ||
+        a.name.localeCompare(b.name)
       );
-      nodes.forEach((n) => sortTree(n.subcategories));
+
+      for (const n of nodes) {
+        if (n.subcategories?.length) {
+          sortTree(n.subcategories);
+        }
+      }
     };
 
     sortTree(roots);
@@ -45,7 +50,7 @@ export const getAllCategories = async (req, res) => {
     return res.json({
       success: true,
       categories: roots,
-      flatCategories: categories, // 🔥 used in dropdown
+      flatCategories: categories,
       total: categories.length,
     });
 
@@ -54,7 +59,7 @@ export const getAllCategories = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch categories",
-      categories: [], // ✅ prevents frontend crash
+      categories: [],
       flatCategories: [],
     });
   }

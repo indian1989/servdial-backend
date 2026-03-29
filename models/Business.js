@@ -1,5 +1,3 @@
-// backend/models/Business.js
-
 import mongoose from "mongoose";
 import slugify from "../utils/slugify.js";
 
@@ -14,8 +12,6 @@ const businessSchema = new mongoose.Schema(
 
     slug: {
       type: String,
-      unique: true,
-      index: true,
     },
 
     description: {
@@ -26,35 +22,34 @@ const businessSchema = new mongoose.Schema(
     logo: String,
     images: [String],
 
-    // ============= PRIMARY CATEGORY (sub-category actually) ========
-categoryId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Category",
-  required: true,
-  index: true,
-},
+    // ============= PRIMARY CATEGORY ================
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+      
+    },
 
-// OPTIONAL: store parent automatically
-parentCategoryId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Category",
-  index: true,
-},
+    parentCategoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      
+    },
 
-// MULTI CATEGORY
-secondaryCategories: [
-  {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Category",
-  },
-],
+    secondaryCategories: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
+      },
+    ],
+
     // ================= LOCATION =================
     address: String,
 
     city: {
       type: String,
       required: true,
-      index: true,
+      
     },
 
     district: {
@@ -76,13 +71,7 @@ secondaryCategories: [
         default: "Point",
       },
       coordinates: {
-        type: [Number], // [lng, lat]
-        validate: {
-          validator: function (val) {
-            return val.length === 2;
-          },
-          message: "Coordinates must be [lng, lat]",
-        },
+        type: [Number],
         default: [0, 0],
       },
     },
@@ -139,34 +128,19 @@ secondaryCategories: [
     keywords: [String],
 
     // ================= FEATURED =================
-    isFeatured: {
-      type: Boolean,
-      default: false,
-    },
-
-    featurePriority: {
-      type: Number,
-      default: 0,
-    },
-
+    isFeatured: { type: Boolean, default: false },
+    featurePriority: { type: Number, default: 0 },
     featuredUntil: Date,
 
-    isVerified: {
-      type: Boolean,
-      default: false,
-    },
-
-    isClaimed: {
-      type: Boolean,
-      default: false,
-    },
+    isVerified: { type: Boolean, default: false },
+    isClaimed: { type: Boolean, default: false },
 
     // ================= STATUS =================
     status: {
       type: String,
       enum: ["pending", "approved", "rejected", "suspended"],
       default: "pending",
-      index: true,
+      // ❌ removed index: true
     },
 
     // ================= OWNER =================
@@ -192,42 +166,36 @@ businessSchema.pre("save", async function (next) {
 
     this.slug = slug;
   }
-
   next();
 });
 
-// ================= INDEXES (CLEAN + OPTIMIZED) =================
+// ================= INDEXES =================
 
-// 🔍 TEXT SEARCH (single text index only)
+// 🔍 TEXT SEARCH
 businessSchema.index({
   name: "text",
   description: "text",
-  category: "text",
   city: "text",
   tags: "text",
-  services: "text"
+  keywords: "text",
 });
 
-// 📍 GEO INDEX (for nearby search)
+// 📍 GEO INDEX
 businessSchema.index({ location: "2dsphere" });
 
-// ⚡ MAIN SEARCH INDEX (MOST IMPORTANT)
+// ⚡ MAIN SEARCH INDEX (CORE PERFORMANCE)
 businessSchema.index({
   city: 1,
-  category: 1,
+  categoryId: 1,
+  parentCategoryId: 1,
   status: 1,
   isFeatured: -1,
   featurePriority: -1,
   averageRating: -1,
-  views: -1
+  views: -1,
 });
 
-// ⚡ FILTER INDEXES
-businessSchema.index({ city: 1 });
-businessSchema.index({ category: 1 });
-businessSchema.index({ status: 1 });
-
-// ⚡ SORTING INDEXES
+// ⚡ SORTING
 businessSchema.index({ averageRating: -1 });
 businessSchema.index({ createdAt: -1 });
 businessSchema.index({ views: -1 });
