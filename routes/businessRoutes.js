@@ -11,6 +11,7 @@ import {
   getFeaturedBusinesses,
   getTopRatedBusinesses,
   getNearbyBusinesses,
+  getRecommendedBusinesses,
   trackBusinessClick,
   getSimilarBusinesses,
   getLatestBusinesses,
@@ -42,6 +43,10 @@ router.get("/top-rated", getTopRatedBusinesses);
 
 // nearby businesses
 router.get("/nearby", getNearbyBusinesses);
+
+// recommended businesses (HOMEPAGE)
+router.get("/recommended", getRecommendedBusinesses);
+
 
 // latest businesses
 router.get("/latest", getLatestBusinesses);

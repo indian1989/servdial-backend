@@ -5,38 +5,29 @@ const router = express.Router();
 
 // ================= RECOMMEND BUSINESSES =================
 router.get("/", async (req, res) => {
-
   try {
-
     const { city } = req.query;
 
-    if (!city) {
-      return res.json([]);
-    }
+    if (!city) return res.json([]);
 
     const businesses = await Business.find({
-  status:"approved",
-})
-.populate("city")
-.populate("category")
-.sort({ rating:-1 })
-.limit(8);
+      status: "approved",
+      city: city, // ✅ filter in DB (FAST)
+    })
+      .populate("categoryId") // optional
+      .sort({ averageRating: -1 }) // ✅ FIXED
+      .limit(8)
+      .lean();
 
-const filtered = businesses.filter(
-  b => b.city?.name?.toLowerCase() === city.toLowerCase()
-);
-
-res.json(filtered);
-
+    res.json(businesses);
   } catch (error) {
+    console.error("Recommendation error:", error);
 
-    console.error(error);
     res.status(500).json({
-      message: "Server error"
+      message: "Server error",
+      error: error.message,
     });
-
   }
-
 });
 
 export default router;

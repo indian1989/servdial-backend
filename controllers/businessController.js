@@ -6,6 +6,7 @@ import asyncHandler from "express-async-handler";
 import { buildSearchQuery } from "../utils/buildSearchQuery.js";
 import UserPreference from "../models/UserPreference.js";
 import BusinessClick from "../models/BusinessClick.js";
+import { unifiedRanking } from "../services/ranking/unifiedRankingEngine.js";
 
 // ================= Role Check =================
 const isAdmin = (user) => ["admin", "superadmin"].includes(user.role);
@@ -519,6 +520,32 @@ export const trackBusinessClick = asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// ================= RECOMMENDED (UNIFIED ENGINE) =================
+export const getRecommendedBusinesses = asyncHandler(async (req, res) => {
+  try {
+    const { city, category, limit } = req.query;
+
+    const businesses = await unifiedRanking({
+      city,
+      category,
+      limit,
+    });
+
+    res.json({
+      success: true,
+      count: businesses.length,
+      businesses,
+    });
+  } catch (error) {
+    console.error("Unified Recommendation Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load recommendations",
+    });
+  }
 });
 
 // ================= PAID =================
