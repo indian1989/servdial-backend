@@ -3,7 +3,13 @@ import Category from "../models/Category.js";
 /* ================= GET ALL ================= */
 export const getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.find()
+    // ✅ SAFE FETCH (avoid broken parentCategory)
+    const categories = await Category.find({
+      $or: [
+        { parentCategory: null },
+        { parentCategory: { $type: "objectId" } },
+      ],
+    })
       .populate("parentCategory", "_id name")
       .sort({ order: 1, name: 1 })
       .lean();
@@ -11,18 +17,30 @@ export const getAllCategories = async (req, res) => {
     const map = new Map();
     const roots = [];
 
-    // build map
+    // ================= BUILD MAP =================
     for (const cat of categories) {
-      map.set(cat._id.toString(), { ...cat, subcategories: [] });
+      map.set(String(cat._id), {
+        ...cat,
+        subcategories: [],
+      });
     }
 
-    // build tree
+    // ================= BUILD TREE (SAFE) =================
     for (const cat of categories) {
-      const node = map.get(cat._id.toString());
+      const node = map.get(String(cat._id));
 
-      const parentId =
-        cat.parentCategory?._id?.toString?.() ||
-        cat.parentCategory?.toString?.();
+      let parentId = null;
+
+      if (cat.parentCategory) {
+        if (typeof cat.parentCategory === "object") {
+          parentId = String(cat.parentCategory._id);
+        } else if (
+          typeof cat.parentCategory === "string" &&
+          cat.parentCategory.length === 24
+        ) {
+          parentId = cat.parentCategory;
+        }
+      }
 
       if (parentId && map.has(parentId)) {
         map.get(parentId).subcategories.push(node);
@@ -31,11 +49,12 @@ export const getAllCategories = async (req, res) => {
       }
     }
 
-    // sort tree recursively
+    // ================= SORT TREE =================
     const sortTree = (nodes) => {
-      nodes.sort((a, b) =>
-        Number(a.order || 0) - Number(b.order || 0) ||
-        a.name.localeCompare(b.name)
+      nodes.sort(
+        (a, b) =>
+          Number(a.order || 0) - Number(b.order || 0) ||
+          a.name.localeCompare(b.name)
       );
 
       for (const n of nodes) {
@@ -55,10 +74,14 @@ export const getAllCategories = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("GET ALL CATEGORIES ERROR:", error);
+    console.error("GET ALL CATEGORIES ERROR FULL:", {
+      message: error.message,
+      stack: error.stack,
+    });
+
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch categories",
+      message: error.message, // 👈 TEMP DEBUG (remove later)
       categories: [],
       flatCategories: [],
     });
@@ -90,7 +113,7 @@ export const getCategoryBySlug = async (req, res) => {
     console.error("GET CATEGORY BY SLUG ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: "Server error",
+      message: error.message,
     });
   }
 };
@@ -116,7 +139,7 @@ export const getTrendingCategories = async (req, res) => {
     console.error("TRENDING CATEGORY ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: "Server error",
+      message: error.message,
     });
   }
 };
@@ -136,7 +159,10 @@ export const createCategory = async (req, res) => {
 
     const category = await Category.create({
       name: name.trim(),
-      parentCategory: parentCategory || null,
+      parentCategory:
+        parentCategory && parentCategory.length === 24
+          ? parentCategory
+          : null, // ✅ SAFE
       order: Number(order) || 0,
       description: description || "",
       status: "active",
@@ -173,6 +199,12 @@ export const updateCategory = async (req, res) => {
       ...req.body,
       ...(req.body.order !== undefined && {
         order: Number(req.body.order),
+      }),
+      ...(req.body.parentCategory && {
+        parentCategory:
+          req.body.parentCategory.length === 24
+            ? req.body.parentCategory
+            : null,
       }),
     };
 
@@ -216,7 +248,7 @@ export const deleteCategory = async (req, res) => {
       });
     }
 
-    // move children to root (safe)
+    // ✅ SAFE CHILD RESET
     await Category.updateMany(
       { parentCategory: id },
       { parentCategory: null }
@@ -235,6 +267,9 @@ export const deleteCategory = async (req, res) => {
 
   } catch (error) {
     console.error("DELETE CATEGORY ERROR:", error);
-    return res.status(500).json({ success: false });
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
