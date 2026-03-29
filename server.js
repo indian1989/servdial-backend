@@ -32,7 +32,7 @@ import seoRoutes from "./routes/seoRoutes.js";
 import locationRoutes from "./routes/locationRoutes.js";
 import sitemapRoutes from "./routes/sitemapRoutes.js";
 
-
+import healthRoutes from "./routes/health.js";
 // ================= Health Check =================
 app.get("/", (req, res) => {
   res.json({ message: "🚀 ServDial API Running..." });
@@ -70,6 +70,7 @@ app.use("/api/provider", providerRoutes);
 app.use("/api/seo", seoRoutes);
 app.use("/api/location", locationRoutes);
 
+app.use("/health", healthRoutes);
 // Sitemap
 app.use("/", sitemapRoutes);
 
