@@ -1,5 +1,4 @@
 import asyncHandler from "express-async-handler";
-
 import { correctQuery } from "../utils/spellCorrection.js";
 import { parseSearchIntent } from "../utils/parseSearchIntent.js";
 import { getSemanticCategory } from "../utils/semanticMapper.js";
@@ -7,10 +6,9 @@ import { getSemanticCategory } from "../utils/semanticMapper.js";
 import SearchTrend from "../models/SearchTrend.js";
 import RecentSearch from "../models/RecentSearch.js";
 
-// ✅ UNIFIED ENGINE
 import { unifiedRanking } from "../services/ranking/unifiedRankingEngine.js";
 
-/* ================= TRACK TREND ================= */
+/* ================= TRACK ================= */
 const trackSearchTrend = async ({ keyword, city, category }) => {
   if (!keyword) return;
 
@@ -21,7 +19,6 @@ const trackSearchTrend = async ({ keyword, city, category }) => {
   );
 };
 
-/* ================= TRACK RECENT ================= */
 const trackRecentSearch = async ({ userId, keyword, city, category }) => {
   if (!keyword) return;
 
@@ -42,18 +39,23 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     city,
     category,
     keyword,
+    q, // ✅ IMPORTANT FIX
+    rating,
     page = 1,
     limit = 12,
     lat,
     lng,
     distance,
+    openNow,
   } = req.query;
 
   const pageNum = Number(page);
   const limitNum = Number(limit);
 
-  // ================= QUERY PROCESS =================
-  const correctedKeyword = correctQuery(keyword || "");
+  // ✅ FIX 1: unify query
+  const rawQuery = keyword || q || "";
+  const correctedKeyword = correctQuery(rawQuery);
+
   const intent = parseSearchIntent(correctedKeyword);
   const semanticCategory = getSemanticCategory(correctedKeyword);
 
@@ -71,89 +73,82 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     category,
   });
 
-  // =====================================================
-  // 🚀 STEP 1: FETCH BROAD DATA (NO STRICT FILTERS)
-  // =====================================================
+  // ================= FETCH =================
   let businesses = await unifiedRanking({
     city,
     category,
-    limit: 300, // BIG pool
+    limit: 300,
   });
 
-  // =====================================================
-  // 🚀 STEP 2: KEYWORD BOOST (NOT FILTER)
-  // =====================================================
+  // ================= KEYWORD BOOST =================
   if (correctedKeyword) {
-    const q = correctedKeyword.toLowerCase();
+    const qLower = correctedKeyword.toLowerCase();
 
-    businesses = businesses.sort((a, b) => {
-      const aScore =
-        (a.name?.toLowerCase().includes(q) ? 10 : 0) +
-        ((a.tags || []).join(" ").toLowerCase().includes(q) ? 5 : 0);
+    businesses = businesses.map((b) => {
+      let boost = 0;
+      const name = b.name?.toLowerCase() || "";
 
-      const bScore =
-        (b.name?.toLowerCase().includes(q) ? 10 : 0) +
-        ((b.tags || []).join(" ").toLowerCase().includes(q) ? 5 : 0);
+      if (name === qLower) boost += 1000;
+      else if (name.startsWith(qLower)) boost += 500;
+      else if (name.includes(qLower)) boost += 200;
 
-      return bScore - aScore;
+      if ((b.tags || []).join(" ").toLowerCase().includes(qLower)) {
+        boost += 100;
+      }
+
+      return {
+        ...b,
+        finalScore: (b.qualityScore || 0) + boost,
+      };
     });
+
+    businesses.sort((a, b) => b.finalScore - a.finalScore);
   }
 
-  // =====================================================
-  // 🚀 STEP 3: SOFT FILTERS (NOT HARD REMOVE)
-  // =====================================================
-
-  // DISTANCE (soft)
+  // ================= GEO FILTER (FIXED) =================
   if (lat && lng && distance) {
     const maxDist = Number(distance);
 
     const toRad = (v) => (v * Math.PI) / 180;
 
-    businesses = businesses.map((biz) => {
-      if (!biz.location?.coordinates) return biz;
+    businesses = businesses.filter((biz) => {
+      // ✅ FIX: DO NOT REMOVE IF NO LOCATION
+      if (
+        !biz.location ||
+        !Array.isArray(biz.location.coordinates) ||
+        biz.location.coordinates.length !== 2
+      ) {
+        return true; // KEEP IT
+      }
 
-      const [bizLng, bizLat] = biz.location.coordinates;
+      const [lng2, lat2] = biz.location.coordinates;
+
+      if (lat2 === 0 && lng2 === 0) return true; // invalid coords → keep
 
       const R = 6371;
-      const dLat = toRad(lat - bizLat);
-      const dLng = toRad(lng - bizLng);
+      const dLat = toRad(lat - lat2);
+      const dLng = toRad(lng - lng2);
 
       const a =
         Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(bizLat)) *
+        Math.cos(toRad(lat2)) *
           Math.cos(toRad(lat)) *
           Math.sin(dLng / 2) ** 2;
 
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-      const dist = R * c;
-
-      return {
-        ...biz,
-        finalScore: biz.finalScore - dist * 2, // penalty instead of remove
-      };
+      return R * c <= maxDist;
     });
   }
 
-  // OPEN NOW (soft)
-  if (intent.openNow) {
-    businesses = businesses.map((biz) => {
-      // you can later implement real hours logic
-      return {
-        ...biz,
-        finalScore: biz.finalScore - 5, // small penalty
-      };
-    });
+  // ================= RATING FILTER =================
+  if (rating) {
+    businesses = businesses.filter(
+      (b) => (b.averageRating || 0) >= Number(rating)
+    );
   }
 
-  // =====================================================
-  // 🚀 STEP 4: FINAL SORT
-  // =====================================================
-  businesses.sort((a, b) => b.finalScore - a.finalScore);
-
-  // =====================================================
-  // 🚀 STEP 5: PAGINATION
-  // =====================================================
+  // ================= PAGINATION =================
   const total = businesses.length;
 
   const paginated = businesses.slice(
@@ -161,9 +156,6 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     pageNum * limitNum
   );
 
-  // =====================================================
-  // 🚀 RESPONSE
-  // =====================================================
   res.json({
     success: true,
     businesses: paginated,

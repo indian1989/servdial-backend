@@ -4,30 +4,38 @@ import mongoose from "mongoose";
 import { computeFinalScore } from "../search/fusionScore.js";
 
 export async function unifiedRanking(context = {}) {
-  const { city, category, limit = 50 } = context;
+  const { city, category, limit = 100 } = context;
 
-  const safeLimit = Math.min(Number(limit) || 50, 100);
-
-  // ================= MATCH =================
   const match = { status: "approved" };
 
+  // ✅ CITY FILTER
   if (city) match.city = city;
 
-  if (category && mongoose.Types.ObjectId.isValid(category)) {
-    const catId = new mongoose.Types.ObjectId(category);
-    match.$or = [
-      { categoryId: catId },
-      { secondaryCategories: catId },
-      { parentCategoryId: catId },
-    ];
+  // ================= CATEGORY FIX (CRITICAL) =================
+  if (category) {
+    if (mongoose.Types.ObjectId.isValid(category)) {
+      const catId = new mongoose.Types.ObjectId(category);
+
+      match.$or = [
+        { categoryId: catId },
+        { secondaryCategories: catId },
+        { parentCategoryId: catId },
+      ];
+    } else {
+      // ✅ SUPPORT STRING CATEGORY (YOUR DATA)
+      match.$or = [
+        { category: { $regex: new RegExp(category, "i") } },
+        { tags: { $regex: new RegExp(category, "i") } },
+      ];
+    }
   }
 
-  // ================= FETCH LARGE POOL =================
+  // ================= FETCH =================
   const businesses = await Business.find(match)
     .select(
-      "_id name slug city averageRating totalReviews views isFeatured featurePriority createdAt tags location"
+      "_id name slug city averageRating totalReviews views isFeatured featurePriority createdAt tags location category"
     )
-    .limit(city ? 300 : 400)
+    .limit(city ? 400 : 500)
     .lean();
 
   if (!businesses.length) return [];
@@ -59,11 +67,11 @@ export async function unifiedRanking(context = {}) {
   });
 
   // ================= SCORING =================
-  const enriched = businesses.map((b) => {
+  return businesses.map((b) => {
     const id = b._id.toString();
     const clicks = clickMap[id] || 0;
 
-    const baseScore = computeFinalScore({
+    const score = computeFinalScore({
       vectorScore: 0.2,
       keywordScore: 0.2,
       trendingScore: clicks > 10 ? 1 : 0,
@@ -72,29 +80,9 @@ export async function unifiedRanking(context = {}) {
       distanceScore: 0,
     });
 
-    // BOOSTS
-    let boost =
-      (b.isFeatured ? 5 : 0) +
-      (b.featurePriority || 0) * 2 +
-      Math.log10((b.views || 0) + 1) * 2 +
-      Math.log10((b.totalReviews || 0) + 1);
-
-    const daysOld =
-      (Date.now() - new Date(b.createdAt).getTime()) /
-      (1000 * 60 * 60 * 24);
-
-    if (daysOld < 30) boost += 2;
-
     return {
       ...b,
-      finalScore: baseScore + boost,
+      qualityScore: score,
     };
   });
-
-  // ================= ✅ CRITICAL FIX =================
-  // SORT BEFORE SLICE
-  enriched.sort((a, b) => b.finalScore - a.finalScore);
-
-  // ================= RETURN =================
-  return enriched.slice(0, safeLimit);
 }
