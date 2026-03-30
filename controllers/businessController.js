@@ -251,6 +251,30 @@ export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
   res.json({ success: true, businesses });
 });
 
+// ================= RECOMMENDED (UNIFIED ENGINE) =================
+export const getRecommendedBusinesses = asyncHandler(async (req, res) => {
+  try {
+    const { city, category, limit } = req.query;
+
+    const businesses = await unifiedRanking({
+      city,
+      category,
+      limit,
+    });
+
+    // ✅ RETURN DIRECT ARRAY (IMPORTANT)
+    res.json(businesses);
+
+  } catch (error) {
+    console.error("Unified Recommendation Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to load recommendations",
+    });
+  }
+});
+
 // ================= LATEST =================
 export const getLatestBusinesses = asyncHandler(async (req, res) => {
   const { city, category, limit = 10 } = req.query;
@@ -520,32 +544,6 @@ export const trackBusinessClick = asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true });
-});
-
-// ================= RECOMMENDED (UNIFIED ENGINE) =================
-export const getRecommendedBusinesses = asyncHandler(async (req, res) => {
-  try {
-    const { city, category, limit } = req.query;
-
-    const businesses = await unifiedRanking({
-      city,
-      category,
-      limit,
-    });
-
-    res.json({
-      success: true,
-      count: businesses.length,
-      businesses,
-    });
-  } catch (error) {
-    console.error("Unified Recommendation Error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to load recommendations",
-    });
-  }
 });
 
 // ================= PAID =================

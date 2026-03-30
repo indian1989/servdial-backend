@@ -80,30 +80,47 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     limit: 300,
   });
 
-  // ================= KEYWORD BOOST =================
-  if (correctedKeyword) {
-    const qLower = correctedKeyword.toLowerCase();
+  // ================= KEYWORD FILTER + BOOST (FINAL FIX) =================
+if (correctedKeyword) {
+  const qLower = correctedKeyword.toLowerCase();
 
-    businesses = businesses.map((b) => {
-      let boost = 0;
-      const name = b.name?.toLowerCase() || "";
+  // ✅ STEP 1: HARD FILTER (keep relevant results only)
+  let keywordMatched = businesses.filter((b) => {
+    const name = b.name?.toLowerCase() || "";
+    const tags = (b.tags || []).join(" ").toLowerCase();
+    const category = (b.category || "").toLowerCase();
 
-      if (name === qLower) boost += 1000;
-      else if (name.startsWith(qLower)) boost += 500;
-      else if (name.includes(qLower)) boost += 200;
+    return (
+      name.includes(qLower) ||
+      tags.includes(qLower) ||
+      category.includes(qLower)
+    );
+  });
 
-      if ((b.tags || []).join(" ").toLowerCase().includes(qLower)) {
-        boost += 100;
-      }
-
-      return {
-        ...b,
-        finalScore: (b.qualityScore || 0) + boost,
-      };
-    });
-
-    businesses.sort((a, b) => b.finalScore - a.finalScore);
+  // ✅ STEP 2: FALLBACK (if nothing matched)
+  if (keywordMatched.length === 0) {
+    keywordMatched = businesses;
   }
+
+  // ✅ STEP 3: STRONG RANKING
+  keywordMatched = keywordMatched.map((b) => {
+    let boost = 0;
+    const name = b.name?.toLowerCase() || "";
+
+    if (name === qLower) boost += 2000; // 🚀 EXACT MATCH
+    else if (name.startsWith(qLower)) boost += 1000;
+    else if (name.includes(qLower)) boost += 500;
+
+    return {
+      ...b,
+      finalScore: (b.qualityScore || 0) + boost,
+    };
+  });
+
+  keywordMatched.sort((a, b) => b.finalScore - a.finalScore);
+
+  businesses = keywordMatched;
+}
 
   // ================= GEO FILTER (FIXED) =================
   if (lat && lng && distance) {

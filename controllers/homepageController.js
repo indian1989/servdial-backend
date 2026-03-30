@@ -3,14 +3,29 @@ import Category from "../models/Category.js";
 import Business from "../models/Business.js";
 import City from "../models/City.js";
 
+// ================= NORMALIZE CITY =================
+const normalizeCity = (city) => {
+  if (!city) return null;
+
+  return city
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+};
+
 // ================= HOMEPAGE DATA =================
 export const getHomepageData = asyncHandler(async (req, res) => {
   const { city, lat, lng } = req.query;
 
-  const cityFilter = city
-    ? { city: new RegExp(`^${city}$`, "i") }
+  // ================= NORMALIZED CITY =================
+  const normalizedCity = normalizeCity(city);
+
+  const cityFilter = normalizedCity
+    ? { city: new RegExp(`^${normalizedCity}$`, "i") }
     : {};
 
+  // ================= FETCH DATA =================
   const [
     categories,
     featuredBusinesses,
@@ -22,7 +37,8 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   ] = await Promise.all([
 
     // ================= CATEGORIES =================
-    Category.find({ status: "active" }) // ✅ FIXED (not isActive)
+    Category.find({ status: "active" })
+      .sort({ name: 1 })
       .limit(12)
       .lean(),
 
@@ -34,7 +50,9 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     })
       .sort({ featurePriority: -1, averageRating: -1 })
       .limit(8)
-      .select("name slug city image averageRating")
+      .select(
+        "name slug city images averageRating totalReviews phone whatsapp isFeatured isVerified"
+      )
       .lean(),
 
     // ================= TOP RATED =================
@@ -42,9 +60,11 @@ export const getHomepageData = asyncHandler(async (req, res) => {
       status: "approved",
       ...cityFilter,
     })
-      .sort({ averageRating: -1 })
+      .sort({ averageRating: -1, totalReviews: -1 })
       .limit(8)
-      .select("name slug city image averageRating")
+      .select(
+        "name slug city images averageRating totalReviews phone whatsapp isVerified"
+      )
       .lean(),
 
     // ================= LATEST =================
@@ -54,7 +74,9 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .limit(8)
-      .select("name slug city image averageRating")
+      .select(
+        "name slug city images averageRating totalReviews phone whatsapp isNew isVerified"
+      )
       .lean(),
 
     // ================= NEARBY =================
@@ -67,12 +89,18 @@ export const getHomepageData = asyncHandler(async (req, res) => {
                 coordinates: [Number(lng), Number(lat)],
               },
               distanceField: "distance",
-              maxDistance: 5000,
+              maxDistance: 5000, // 5km
               spherical: true,
             },
           },
-          { $match: { status: "approved" } },
-          { $limit: 8 },
+          {
+            $match: {
+              status: "approved",
+            },
+          },
+          {
+            $limit: 8,
+          },
         ])
       : [],
 
@@ -83,11 +111,13 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     })
       .sort({ views: -1, averageRating: -1 })
       .limit(8)
-      .select("name slug city image averageRating")
+      .select(
+        "name slug city images averageRating totalReviews phone whatsapp isVerified"
+      )
       .lean(),
 
     // ================= POPULAR CITIES =================
-    City.find({ isPopular: true })
+    City.find({ isPopular: true, status: "active" })
       .sort({ name: 1 })
       .limit(8)
       .lean(),
@@ -96,9 +126,10 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   // ================= FORMAT NEARBY =================
   const formattedNearby = nearbyBusinesses.map((b) => ({
     ...b,
-    distance: b.distance ? b.distance / 1000 : null,
+    distance: b.distance ? Number((b.distance / 1000).toFixed(1)) : null,
   }));
 
+  // ================= RESPONSE =================
   res.json({
     success: true,
     categories,

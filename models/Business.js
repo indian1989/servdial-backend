@@ -1,6 +1,23 @@
 import mongoose from "mongoose";
 import slugify from "../utils/slugify.js";
 
+// ================= HELPER =================
+const normalizeText = (val) => {
+  if (!val) return val;
+  return val.toString().trim().replace(/\s+/g, " ");
+};
+
+const normalizeCity = (val) => {
+  if (!val) return val;
+  return val.toString().trim().toLowerCase().replace(/\s+/g, " ");
+};
+
+const normalizePhone = (val) => {
+  if (!val) return val;
+  return val.toString().replace(/\D/g, ""); // keep only numbers
+};
+
+// ================= SCHEMA =================
 const businessSchema = new mongoose.Schema(
   {
     // ================= BASIC INFO =================
@@ -12,6 +29,7 @@ const businessSchema = new mongoose.Schema(
 
     slug: {
       type: String,
+      lowercase: true,
     },
 
     description: {
@@ -22,18 +40,16 @@ const businessSchema = new mongoose.Schema(
     logo: String,
     images: [String],
 
-    // ============= PRIMARY CATEGORY ================
+    // ============= CATEGORY =================
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       required: true,
-      
     },
 
     parentCategoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
-      
     },
 
     secondaryCategories: [
@@ -49,7 +65,7 @@ const businessSchema = new mongoose.Schema(
     city: {
       type: String,
       required: true,
-      
+      index: true, // ⚡ important for filtering
     },
 
     district: {
@@ -71,7 +87,7 @@ const businessSchema = new mongoose.Schema(
         default: "Point",
       },
       coordinates: {
-        type: [Number],
+        type: [Number], // [lng, lat]
         default: [0, 0],
       },
     },
@@ -140,7 +156,6 @@ const businessSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "approved", "rejected", "suspended"],
       default: "pending",
-      // ❌ removed index: true
     },
 
     // ================= OWNER =================
@@ -153,20 +168,40 @@ const businessSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ================= AUTO SLUG =================
+// ================= PRE SAVE HOOK =================
 businessSchema.pre("save", async function (next) {
-  if (!this.slug && this.name) {
-    let baseSlug = slugify(this.name);
-    let slug = baseSlug;
-    let counter = 1;
+  try {
+    // ✅ Normalize text fields
+    this.name = normalizeText(this.name);
+    this.description = normalizeText(this.description);
+    this.address = normalizeText(this.address);
 
-    while (await mongoose.models.Business.findOne({ slug })) {
-      slug = `${baseSlug}-${counter++}`;
+    // ✅ Normalize location fields (CRITICAL FIX)
+    if (this.city) this.city = normalizeCity(this.city);
+    if (this.district) this.district = normalizeText(this.district);
+    if (this.state) this.state = normalizeText(this.state);
+
+    // ✅ Normalize phone numbers
+    if (this.phone) this.phone = normalizePhone(this.phone);
+    if (this.whatsapp) this.whatsapp = normalizePhone(this.whatsapp);
+
+    // ✅ Auto slug
+    if (!this.slug && this.name) {
+      let baseSlug = slugify(this.name);
+      let slug = baseSlug;
+      let counter = 1;
+
+      while (await mongoose.models.Business.findOne({ slug })) {
+        slug = `${baseSlug}-${counter++}`;
+      }
+
+      this.slug = slug;
     }
 
-    this.slug = slug;
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
 
 // ================= INDEXES =================
@@ -183,12 +218,12 @@ businessSchema.index({
 // 📍 GEO INDEX
 businessSchema.index({ location: "2dsphere" });
 
-// ⚡ MAIN SEARCH INDEX (CORE PERFORMANCE)
+// ⚡ CORE SEARCH INDEX (VERY IMPORTANT FOR SCALE)
 businessSchema.index({
   city: 1,
+  status: 1,
   categoryId: 1,
   parentCategoryId: 1,
-  status: 1,
   isFeatured: -1,
   featurePriority: -1,
   averageRating: -1,
@@ -200,7 +235,8 @@ businessSchema.index({ averageRating: -1 });
 businessSchema.index({ createdAt: -1 });
 businessSchema.index({ views: -1 });
 
-// ⚡ UNIQUE SLUG
+// ⚡ UNIQUE
 businessSchema.index({ slug: 1 }, { unique: true });
 
+// ================= EXPORT =================
 export default mongoose.model("Business", businessSchema);

@@ -8,10 +8,10 @@ export async function unifiedRanking(context = {}) {
 
   const match = { status: "approved" };
 
-  // ✅ CITY FILTER
+  // ================= CITY FILTER =================
   if (city) match.city = city;
 
-  // ================= CATEGORY FIX (CRITICAL) =================
+  // ================= CATEGORY FILTER =================
   if (category) {
     if (mongoose.Types.ObjectId.isValid(category)) {
       const catId = new mongoose.Types.ObjectId(category);
@@ -22,9 +22,7 @@ export async function unifiedRanking(context = {}) {
         { parentCategoryId: catId },
       ];
     } else {
-      // ✅ SUPPORT STRING CATEGORY (YOUR DATA)
       match.$or = [
-        { category: { $regex: new RegExp(category, "i") } },
         { tags: { $regex: new RegExp(category, "i") } },
       ];
     }
@@ -32,9 +30,27 @@ export async function unifiedRanking(context = {}) {
 
   // ================= FETCH =================
   const businesses = await Business.find(match)
-    .select(
-      "_id name slug city averageRating totalReviews views isFeatured featurePriority createdAt tags location category"
-    )
+    .select(`
+      _id
+      name
+      slug
+      city
+      averageRating
+      totalReviews
+      views
+      isFeatured
+      featurePriority
+      createdAt
+      tags
+      location
+      categoryId
+      parentCategoryId
+      secondaryCategories
+      phone
+      images
+      logo
+      isVerified
+    `)
     .limit(city ? 400 : 500)
     .lean();
 
@@ -67,7 +83,7 @@ export async function unifiedRanking(context = {}) {
   });
 
   // ================= SCORING =================
-  return businesses.map((b) => {
+  const scored = businesses.map((b) => {
     const id = b._id.toString();
     const clicks = clickMap[id] || 0;
 
@@ -85,4 +101,9 @@ export async function unifiedRanking(context = {}) {
       qualityScore: score,
     };
   });
+
+  // ================= SORT =================
+  scored.sort((a, b) => b.qualityScore - a.qualityScore);
+
+  return scored.slice(0, Number(limit) || 12);
 }
