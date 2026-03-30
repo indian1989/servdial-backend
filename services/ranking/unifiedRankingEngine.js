@@ -4,16 +4,15 @@ import mongoose from "mongoose";
 import { computeFinalScore } from "../search/fusionScore.js";
 
 export async function unifiedRanking(context = {}) {
-  const { city, category, limit = 12 } = context;
+  const { city, category, keyword, limit = 12 } = context;
 
   const safeLimit = Math.min(Number(limit) || 12, 50);
 
   // ================= MATCH =================
   const match = { status: "approved" };
 
-  // ✅ INDEX-FRIENDLY CITY FILTER
   if (city) {
-    match.city = city; // exact match (fast)
+    match.city = city;
   }
 
   if (category && mongoose.Types.ObjectId.isValid(category)) {
@@ -25,25 +24,21 @@ export async function unifiedRanking(context = {}) {
     ];
   }
 
-  // ================= DYNAMIC POOL SIZE =================
+  // ================= FETCH BASE =================
   const poolSize = city ? 200 : 300;
 
-  // ================= FETCH BASE =================
   const businesses = await Business.find(match)
     .select(
-      "_id name slug city averageRating totalReviews views isFeatured featurePriority createdAt"
+      "_id name slug city averageRating totalReviews views isFeatured featurePriority createdAt tags"
     )
     .limit(poolSize)
     .lean();
 
-  // ✅ EDGE CASE: NO DATA
-  if (!businesses.length) {
-    return [];
-  }
+  if (!businesses.length) return [];
 
   const businessIds = businesses.map((b) => b._id);
 
-  // ================= BULK CLICK AGG =================
+  // ================= CLICK AGG =================
   const last7Days = new Date();
   last7Days.setDate(last7Days.getDate() - 7);
 
@@ -67,6 +62,8 @@ export async function unifiedRanking(context = {}) {
     clickMap[c._id.toString()] = c.clickScore;
   });
 
+  const q = (keyword || "").toLowerCase().trim();
+
   // ================= SCORING =================
   const scored = businesses.map((b) => {
     const id = b._id.toString();
@@ -80,7 +77,26 @@ export async function unifiedRanking(context = {}) {
       (Date.now() - new Date(b.createdAt).getTime()) /
       (1000 * 60 * 60 * 24);
 
-    // normalized signals
+    // =====================================================
+    // 🚨 NEW: QUERY AFFINITY SCORE (CRITICAL FIX)
+    // =====================================================
+
+    const name = (b.name || "").toLowerCase();
+    const tags = (b.tags || []).join(" ").toLowerCase();
+
+    let queryScore = 0;
+
+    if (q) {
+      if (name === q) {
+        queryScore = 100; // EXACT MATCH
+      } else if (name.includes(q)) {
+        queryScore = 60; // PARTIAL NAME MATCH
+      } else if (tags.includes(q)) {
+        queryScore = 30; // TAG MATCH
+      }
+    }
+
+    // ================= BASE SIGNALS =================
     const ratingScore = rating;
     const clickScore = Math.log10(clicks + 1);
     const trendingScore = clicks > 10 ? 1 : 0;
@@ -98,7 +114,7 @@ export async function unifiedRanking(context = {}) {
       distanceScore,
     });
 
-    // boosts
+    // ================= BOOSTS =================
     let boost =
       (b.isFeatured ? 5 : 0) +
       (b.featurePriority || 0) * 2 +
@@ -107,9 +123,15 @@ export async function unifiedRanking(context = {}) {
 
     if (daysOld < 30) boost += 2;
 
+    // =====================================================
+    // 🚨 FINAL FIX: QUERY SCORE DOMINANCE
+    // =====================================================
+    const finalScore = baseScore + boost + queryScore * 5;
+
     return {
       ...b,
-      finalScore: baseScore + boost,
+      finalScore,
+      queryScore,
     };
   });
 

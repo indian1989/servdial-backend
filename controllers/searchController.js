@@ -1,13 +1,15 @@
-import Business from "../models/Business.js";
-import { rankBusinesses } from "../utils/rankBusinesses.js";
 import asyncHandler from "express-async-handler";
-import SearchTrend from "../models/SearchTrend.js";
+
 import { buildSearchQuery } from "../utils/buildSearchQuery.js";
-import RecentSearch from "../models/RecentSearch.js";
 import { correctQuery } from "../utils/spellCorrection.js";
 import { parseSearchIntent } from "../utils/parseSearchIntent.js";
 import { getSemanticCategory } from "../utils/semanticMapper.js";
 
+import SearchTrend from "../models/SearchTrend.js";
+import RecentSearch from "../models/RecentSearch.js";
+
+// ✅ UNIFIED RANKING ENGINE (NEW)
+import { unifiedRanking } from "../services/ranking/unifiedRankingEngine.js";
 
 /* ================= CACHE KEY ================= */
 const buildCacheKey = (params) => {
@@ -40,14 +42,6 @@ const trackRecentSearch = async ({ userId, keyword, city, category }) => {
   );
 };
 
-/* ================= NORMALIZE ================= */
-const normalizeBusiness = (biz) => ({
-  ...biz,
-  rating: biz.averageRating ?? biz.rating ?? 0,
-  reviewCount: biz.totalReviews ?? biz.reviewCount ?? 0,
-  featured: biz.isFeatured ?? biz.featured ?? false,
-});
-
 /* ================= MAIN SEARCH ================= */
 export const searchBusinesses = asyncHandler(async (req, res) => {
   let {
@@ -66,7 +60,9 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
   const pageNum = Number(page);
   const limitNum = Number(limit);
 
-  const correctedKeyword = correctQuery(keyword);
+  // ================= QUERY PROCESSING =================
+  const correctedKeyword = correctQuery(keyword || "");
+
   const intent = parseSearchIntent(correctedKeyword);
   const semanticCategory = getSemanticCategory(correctedKeyword);
 
@@ -74,27 +70,12 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     category = semanticCategory;
   }
 
-  const cacheKey = buildCacheKey({
+  // ================= TRACKING =================
+  trackSearchTrend({
+    keyword: correctedKeyword,
     city,
     category,
-    keyword: correctedKeyword,
-    rating,
-    page,
-    lat,
-    lng,
-    distance,
   });
-
-  /* ================= BUILD QUERY ================= */
-  const searchQuery = buildSearchQuery({
-    city,
-    category,
-    keyword: correctedKeyword,
-    rating: intent.minRating || rating,
-    openNow: intent.openNow || openNow,
-  });
-
-  trackSearchTrend({ keyword: correctedKeyword, city, category });
 
   trackRecentSearch({
     userId: req.user?._id || null,
@@ -103,74 +84,117 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     category,
   });
 
-  let businesses = [];
-  let total = 0;
+  // =====================================================
+  // 🚀 UNIFIED RANKING PIPELINE (PRIMARY SOURCE)
+  // =====================================================
 
-  if ((lat && lng && distance) || intent.nearMe) {
-    const pipeline = [
-      {
-        $geoNear: {
-          near: {
-            type: "Point",
-            coordinates: [Number(lng), Number(lat)],
-          },
-          distanceField: "distance",
-          maxDistance: Number(distance || 5000),
-          spherical: true,
-          query: searchQuery,
-        },
-      },
-    ];
+  let businesses = await unifiedRanking({
+    city,
+    category,
+    keyword: correctedKeyword,
+    limit: 300, // bigger pool to avoid missing matches
+  });
 
-    const countResult = await Business.aggregate([
-      ...pipeline,
-      { $count: "total" },
-    ]);
+  // =====================================================
+  // 🔥 SAFETY FALLBACK (CRITICAL FIX FOR "NO RESULTS")
+  // =====================================================
 
-    total = countResult[0]?.total || 0;
-
-    const results = await Business.aggregate([
-      ...pipeline,
-      { $skip: (pageNum - 1) * limitNum },
-      { $limit: limitNum },
-    ]);
-
-    const userLocation =
-      lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
-
-    businesses = await rankBusinesses(
-      results.map(normalizeBusiness),
-      userLocation,
-      correctedKeyword,
-      intent,
-      req.user?._id || null,
-      city
-    );
-  } else {
-    const raw = await Business.find(searchQuery)
-      .lean()
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum);
-
-    total = await Business.countDocuments(searchQuery);
-
-    businesses = await rankBusinesses(
-      raw.map(normalizeBusiness),
-      null,
-      correctedKeyword,
-      intent,
-      req.user?._id || null,
-      city
-    );
+  if (!businesses || businesses.length === 0) {
+    businesses = await unifiedRanking({
+      city,
+      category: null,
+      keyword: correctedKeyword,
+      limit: 300,
+    });
   }
 
-  const response = {
+  if (!businesses || businesses.length === 0) {
+    // FINAL EMERGENCY FALLBACK (no filters)
+    businesses = await unifiedRanking({
+      city: null,
+      category: null,
+      keyword: correctedKeyword,
+      limit: 300,
+    });
+  }
+
+  // =====================================================
+  // 🚀 GEO FILTER (SAFE MODE - NEVER BLOCK ALL RESULTS)
+  // =====================================================
+
+  if (lat && lng && distance) {
+    const maxDist = Number(distance);
+
+    const toRad = (v) => (v * Math.PI) / 180;
+
+    const geoFiltered = businesses.filter((biz) => {
+      if (!biz.location?.coordinates) return false;
+
+      const [bizLng, bizLat] = biz.location.coordinates;
+
+      const R = 6371;
+      const dLat = toRad(lat - bizLat);
+      const dLng = toRad(lng - bizLng);
+
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(bizLat)) *
+          Math.cos(toRad(lat)) *
+          Math.sin(dLng / 2) ** 2;
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      const dist = R * c;
+
+      return dist <= maxDist;
+    });
+
+    // 🔥 IMPORTANT: only apply if it doesn't kill results
+    if (geoFiltered.length > 0) {
+      businesses = geoFiltered;
+    }
+  }
+
+  // =====================================================
+  // 🚀 KEYWORD BOOST (NOT FILTER - ONLY RANK BOOST)
+  // =====================================================
+
+  if (correctedKeyword) {
+    const q = correctedKeyword.toLowerCase();
+
+    businesses = businesses.sort((a, b) => {
+      const score = (biz) => {
+        return (
+          (biz.name?.toLowerCase().includes(q) ? 5 : 0) +
+          ((biz.tags || []).join(" ").toLowerCase().includes(q) ? 3 : 0) +
+          (biz.description?.toLowerCase().includes(q) ? 2 : 0)
+        );
+      };
+
+      return score(b) - score(a);
+    });
+  }
+
+  // =====================================================
+  // 🚀 PAGINATION
+  // =====================================================
+
+  const total = businesses.length;
+
+  const paginated = businesses.slice(
+    (pageNum - 1) * limitNum,
+    pageNum * limitNum
+  );
+
+  // =====================================================
+  // 🚀 RESPONSE
+  // =====================================================
+
+  return res.json({
     success: true,
-    businesses,
+    businesses: paginated,
     total,
     page: pageNum,
     pages: Math.ceil(total / limitNum),
-  };
-
-  res.json(response);
+  });
 });
