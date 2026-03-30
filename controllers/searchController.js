@@ -1,15 +1,16 @@
 import asyncHandler from "express-async-handler";
 
-import { unifiedRanking } from "../services/ranking/unifiedRankingEngine.js";
-import {
-  classifyQuery,
-  assignBucket,
-} from "../services/search/queryIntelligenceEngine.js";
+import { correctQuery } from "../utils/spellCorrection.js";
+import { parseSearchIntent } from "../utils/parseSearchIntent.js";
+import { getSemanticCategory } from "../utils/semanticMapper.js";
 
 import SearchTrend from "../models/SearchTrend.js";
 import RecentSearch from "../models/RecentSearch.js";
 
-/* ================= TRACKING ================= */
+// ✅ UNIFIED ENGINE
+import { unifiedRanking } from "../services/ranking/unifiedRankingEngine.js";
+
+/* ================= TRACK TREND ================= */
 const trackSearchTrend = async ({ keyword, city, category }) => {
   if (!keyword) return;
 
@@ -20,6 +21,7 @@ const trackSearchTrend = async ({ keyword, city, category }) => {
   );
 };
 
+/* ================= TRACK RECENT ================= */
 const trackRecentSearch = async ({ userId, keyword, city, category }) => {
   if (!keyword) return;
 
@@ -36,70 +38,135 @@ const trackRecentSearch = async ({ userId, keyword, city, category }) => {
 
 /* ================= MAIN SEARCH ================= */
 export const searchBusinesses = asyncHandler(async (req, res) => {
-  let { city, category, keyword, page = 1, limit = 12 } = req.query;
+  let {
+    city,
+    category,
+    keyword,
+    page = 1,
+    limit = 12,
+    lat,
+    lng,
+    distance,
+  } = req.query;
 
   const pageNum = Number(page);
   const limitNum = Number(limit);
 
-  const query = (keyword || "").trim().toLowerCase();
+  // ================= QUERY PROCESS =================
+  const correctedKeyword = correctQuery(keyword || "");
+  const intent = parseSearchIntent(correctedKeyword);
+  const semanticCategory = getSemanticCategory(correctedKeyword);
+
+  if (!category && semanticCategory) {
+    category = semanticCategory;
+  }
 
   // ================= TRACK =================
-  trackSearchTrend({ keyword: query, city, category });
+  trackSearchTrend({ keyword: correctedKeyword, city, category });
+
   trackRecentSearch({
     userId: req.user?._id || null,
-    keyword: query,
+    keyword: correctedKeyword,
     city,
     category,
   });
 
-  // ================= STEP 1: FETCH BASE =================
-  const baseBusinesses = await unifiedRanking({
+  // =====================================================
+  // 🚀 STEP 1: FETCH BROAD DATA (NO STRICT FILTERS)
+  // =====================================================
+  let businesses = await unifiedRanking({
     city,
     category,
-    limit: 300,
+    limit: 300, // BIG pool
   });
 
-  // ================= STEP 2: QUERY INTELLIGENCE =================
-  const queryData = classifyQuery(query);
+  // =====================================================
+  // 🚀 STEP 2: KEYWORD BOOST (NOT FILTER)
+  // =====================================================
+  if (correctedKeyword) {
+    const q = correctedKeyword.toLowerCase();
 
-  // ================= STEP 3: BUCKETING =================
-  const buckets = {
-    1: [],
-    2: [],
-    3: [],
-    4: [],
-  };
+    businesses = businesses.sort((a, b) => {
+      const aScore =
+        (a.name?.toLowerCase().includes(q) ? 10 : 0) +
+        ((a.tags || []).join(" ").toLowerCase().includes(q) ? 5 : 0);
 
-  baseBusinesses.forEach((biz) => {
-    const bucket = assignBucket(biz, queryData);
-    buckets[bucket].push(biz);
-  });
+      const bScore =
+        (b.name?.toLowerCase().includes(q) ? 10 : 0) +
+        ((b.tags || []).join(" ").toLowerCase().includes(q) ? 5 : 0);
 
-  // ================= STEP 4: SORT INSIDE BUCKET =================
-  Object.keys(buckets).forEach((key) => {
-    buckets[key].sort((a, b) => b.qualityScore - a.qualityScore);
-  });
+      return bScore - aScore;
+    });
+  }
 
-  // ================= STEP 5: MERGE BUCKETS =================
-  let finalResults = [
-    ...buckets[1],
-    ...buckets[2],
-    ...buckets[3],
-    ...buckets[4],
-  ];
+  // =====================================================
+  // 🚀 STEP 3: SOFT FILTERS (NOT HARD REMOVE)
+  // =====================================================
 
-  // ================= STEP 6: PAGINATION =================
-  const total = finalResults.length;
+  // DISTANCE (soft)
+  if (lat && lng && distance) {
+    const maxDist = Number(distance);
 
-  finalResults = finalResults.slice(
+    const toRad = (v) => (v * Math.PI) / 180;
+
+    businesses = businesses.map((biz) => {
+      if (!biz.location?.coordinates) return biz;
+
+      const [bizLng, bizLat] = biz.location.coordinates;
+
+      const R = 6371;
+      const dLat = toRad(lat - bizLat);
+      const dLng = toRad(lng - bizLng);
+
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(bizLat)) *
+          Math.cos(toRad(lat)) *
+          Math.sin(dLng / 2) ** 2;
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      const dist = R * c;
+
+      return {
+        ...biz,
+        finalScore: biz.finalScore - dist * 2, // penalty instead of remove
+      };
+    });
+  }
+
+  // OPEN NOW (soft)
+  if (intent.openNow) {
+    businesses = businesses.map((biz) => {
+      // you can later implement real hours logic
+      return {
+        ...biz,
+        finalScore: biz.finalScore - 5, // small penalty
+      };
+    });
+  }
+
+  // =====================================================
+  // 🚀 STEP 4: FINAL SORT
+  // =====================================================
+  businesses.sort((a, b) => b.finalScore - a.finalScore);
+
+  // =====================================================
+  // 🚀 STEP 5: PAGINATION
+  // =====================================================
+  const total = businesses.length;
+
+  const paginated = businesses.slice(
     (pageNum - 1) * limitNum,
     pageNum * limitNum
   );
 
-  // ================= RESPONSE =================
+  // =====================================================
+  // 🚀 RESPONSE
+  // =====================================================
   res.json({
     success: true,
-    businesses: finalResults,
+    businesses: paginated,
     total,
     page: pageNum,
     pages: Math.ceil(total / limitNum),

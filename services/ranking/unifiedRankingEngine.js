@@ -22,7 +22,7 @@ export async function unifiedRanking(context = {}) {
     ];
   }
 
-  // ================= FETCH =================
+  // ================= FETCH LARGE POOL =================
   const businesses = await Business.find(match)
     .select(
       "_id name slug city averageRating totalReviews views isFeatured featurePriority createdAt tags location"
@@ -58,12 +58,12 @@ export async function unifiedRanking(context = {}) {
     clickMap[c._id.toString()] = c.clickScore;
   });
 
-  // ================= QUALITY SCORING ONLY =================
+  // ================= SCORING =================
   const enriched = businesses.map((b) => {
     const id = b._id.toString();
     const clicks = clickMap[id] || 0;
 
-    const score = computeFinalScore({
+    const baseScore = computeFinalScore({
       vectorScore: 0.2,
       keywordScore: 0.2,
       trendingScore: clicks > 10 ? 1 : 0,
@@ -72,11 +72,29 @@ export async function unifiedRanking(context = {}) {
       distanceScore: 0,
     });
 
+    // BOOSTS
+    let boost =
+      (b.isFeatured ? 5 : 0) +
+      (b.featurePriority || 0) * 2 +
+      Math.log10((b.views || 0) + 1) * 2 +
+      Math.log10((b.totalReviews || 0) + 1);
+
+    const daysOld =
+      (Date.now() - new Date(b.createdAt).getTime()) /
+      (1000 * 60 * 60 * 24);
+
+    if (daysOld < 30) boost += 2;
+
     return {
       ...b,
-      qualityScore: score,
+      finalScore: baseScore + boost,
     };
   });
 
+  // ================= ✅ CRITICAL FIX =================
+  // SORT BEFORE SLICE
+  enriched.sort((a, b) => b.finalScore - a.finalScore);
+
+  // ================= RETURN =================
   return enriched.slice(0, safeLimit);
 }
