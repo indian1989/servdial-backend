@@ -4,12 +4,14 @@ import mongoose from "mongoose";
 import { computeFinalScore } from "../search/fusionScore.js";
 
 export async function unifiedRanking(context = {}) {
-  const { city, category, limit = 100 } = context;
+  const { city, category, limit = 12 } = context;
 
   const match = { status: "approved" };
 
-  // ================= CITY FILTER =================
-  if (city) match.city = city;
+  // ================= CITY FILTER (FIXED) =================
+  if (city) {
+    match.city = new RegExp(city, "i");
+  }
 
   // ================= CATEGORY FILTER =================
   if (category) {
@@ -28,30 +30,17 @@ export async function unifiedRanking(context = {}) {
     }
   }
 
-  // ================= FETCH =================
+  // ================= FETCH LIMIT FIX =================
+  const fetchLimit = Math.max(limit * 5, city ? 200 : 300);
+
   const businesses = await Business.find(match)
     .select(`
-      _id
-      name
-      slug
-      city
-      averageRating
-      totalReviews
-      views
-      isFeatured
-      featurePriority
-      createdAt
-      tags
-      location
-      categoryId
-      parentCategoryId
-      secondaryCategories
-      phone
-      images
-      logo
-      isVerified
+      _id name slug city averageRating totalReviews views
+      isFeatured featurePriority createdAt tags location
+      categoryId parentCategoryId secondaryCategories
+      phone images logo isVerified
     `)
-    .limit(city ? 400 : 500)
+    .limit(fetchLimit)
     .lean();
 
   if (!businesses.length) return [];
@@ -87,13 +76,19 @@ export async function unifiedRanking(context = {}) {
     const id = b._id.toString();
     const clicks = clickMap[id] || 0;
 
+    const featureScore =
+      (b.isFeatured ? 1 : 0) + (b.featurePriority || 0) * 0.2;
+
+    const distanceScore = b.location?.coordinates ? 0.1 : 0;
+
     const score = computeFinalScore({
       vectorScore: 0.2,
       keywordScore: 0.2,
       trendingScore: clicks > 10 ? 1 : 0,
       clickScore: Math.log10(clicks + 1),
       ratingScore: b.averageRating || 0,
-      distanceScore: 0,
+      featureScore,
+      distanceScore,
     });
 
     return {

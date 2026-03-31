@@ -5,7 +5,7 @@ import morgan from "morgan";
 
 // Import routes (abhi placeholder, future me add karenge)
 import authRoutes from "./routes/authRoutes.js";
-import businessRoutes from "./routes/businessRoutes.js";
+import publicBusinessRoutes from "./routes/publicBusinessRoutes.js";
 
 const app = express();
 
@@ -17,7 +17,7 @@ app.use(morgan("dev")); // Logging for development
 
 // Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/business", businessRoutes);
+app.use("/api/business", publicBusinessRoutes);
 
 // Root endpoint
 app.get("/", (req, res) => {

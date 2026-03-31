@@ -14,7 +14,7 @@ app.use(express.json());
 
 // ================= Routes =================
 import authRoutes from "./routes/authRoutes.js";
-import businessRoutes from "./routes/businessRoutes.js";
+import publicBusinessRoutes from "./routes/publicBusinessRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import featuredRoutes from "./routes/featuredRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -46,7 +46,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 
 // Business
-app.use("/api/business", businessRoutes);
+app.use("/api/business", publicBusinessRoutes);
 app.use("/api/admin", adminBusinessRoutes);
 
 // Admin Core
