@@ -32,6 +32,8 @@ const businessSchema = new mongoose.Schema(
       lowercase: true,
     },
 
+    services: [String],
+
     description: {
       type: String,
       trim: true,
