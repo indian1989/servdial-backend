@@ -159,13 +159,19 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
   const base = await Business.findById(req.params.id);
 
   if (!base) {
-    return res.status(404).json({ success: false, message: "Business not found" });
+    return res.status(404).json({ success: false });
   }
 
   const businesses = await Business.find({
-    categoryId: base.categoryId,
+    status: "approved",
     _id: { $ne: base._id },
-  }).limit(10);
+    $or: [
+      { categoryId: base.categoryId },
+      { parentCategoryId: base.parentCategoryId }
+    ]
+  })
+    .sort({ isFeatured: -1, averageRating: -1, views: -1 })
+    .limit(10);
 
   res.json({ success: true, businesses });
 });
@@ -217,6 +223,27 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
   await business.deleteOne();
 
   res.json({ success: true });
+});
+
+// ================= CATEGORY COUNT =================
+export const getCategoryCount = asyncHandler(async (req, res) => {
+  const { category, city } = req.query;
+
+  if (!category || !city) {
+    return res.json({ success: true, count: 0 });
+  }
+
+  const count = await Business.countDocuments({
+    status: "approved",
+    city,
+    $or: [
+      { category: category },
+      { categoryId: category },
+      { parentCategoryId: category }
+    ]
+  });
+
+  res.json({ success: true, count });
 });
 
 // ================= SUGGEST =================

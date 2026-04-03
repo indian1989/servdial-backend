@@ -1,3 +1,4 @@
+// backend/utils/buildSearchQuery.js
 // ================= SEMANTIC MAP =================
 const semanticMap = {
   plumber: ["pipe", "leak", "tap", "drain", "water leak"],

@@ -1,3 +1,4 @@
+// backend/models/businessClickSchema.js
 import mongoose from "mongoose";
 
 const businessClickSchema = new mongoose.Schema(

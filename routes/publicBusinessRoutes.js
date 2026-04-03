@@ -8,6 +8,7 @@ import {
   getNearbyBusinesses,
   getRecommendedBusinesses,
   getLatestBusinesses,
+  getCategoryCount,
   getBusinessBySlug,
   getSimilarBusinesses,
   trackBusinessClick,
@@ -28,7 +29,7 @@ router.get("/top-rated", getTopRatedBusinesses);
 router.get("/nearby", getNearbyBusinesses);
 router.get("/recommended", getRecommendedBusinesses);
 router.get("/latest", getLatestBusinesses);
-
+router.get("/count", getCategoryCount);
 
 // ================= BUSINESS SEO PAGE =================
 
@@ -37,7 +38,16 @@ router.get("/similar/:id", getSimilarBusinesses);
 
 // MAIN PUBLIC DETAIL ROUTE
 router.get("/:slug", getBusinessBySlug);
+// ================= ANALYTICS UNIFIED =================
+router.post("/analytics/:id", (req, res, next) => {
+  const { type } = req.body;
 
+  if (type === "view") return incrementViews(req, res, next);
+  if (type === "call") return phoneClick(req, res, next);
+  if (type === "whatsapp") return whatsappClick(req, res, next);
+
+  return res.status(400).json({ success: false, message: "Invalid event type" });
+});
 // ================= ANALYTICS =================
 router.post("/:id/click", trackBusinessClick);
 router.post("/:id/view", incrementViews);

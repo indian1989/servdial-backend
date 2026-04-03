@@ -1,3 +1,4 @@
+// backend/controllers/categoryController.js
 import Category from "../models/Category.js";
 
 /* ================= GET ALL ================= */

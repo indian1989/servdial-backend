@@ -1,3 +1,4 @@
+// backend/controllers/cityController.js
 import City from "../models/City.js";
 import slugify from "../utils/slugify.js";
 

@@ -1,3 +1,4 @@
+// backend/controllers/searchController.js
 import asyncHandler from "express-async-handler";
 import { correctQuery } from "../utils/spellCorrection.js";
 import { parseSearchIntent } from "../utils/parseSearchIntent.js";
