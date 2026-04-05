@@ -66,20 +66,21 @@ const businessSchema = new mongoose.Schema(
     address: String,
 
     city: {
-      type: String,
-      required: true,
-      index: true, // ⚡ important for filtering
-    },
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "City",
+  required: true,
+  index: true,
+},
 
-    district: {
-      type: String,
-      required: true,
-    },
+// 🔥 KEEP FOR SEO + fallback (NOT primary)
+cityName: {
+  type: String,
+  lowercase: true,
+  index: true,
+},
 
-    state: {
-      type: String,
-      required: true,
-    },
+district: String,
+state: String,
 
     pincode: String,
 
@@ -183,6 +184,16 @@ businessSchema.pre("save", async function (next) {
     if (this.city) this.city = normalizeCity(this.city);
     if (this.district) this.district = normalizeText(this.district);
     if (this.state) this.state = normalizeText(this.state);
+
+    // ✅ AUTO FILL cityName for SEO
+if (this.isModified("city")) {
+  const cityDoc = await mongoose.models.City.findById(this.city);
+  if (cityDoc) {
+    this.cityName = cityDoc.name.toLowerCase();
+    this.district = cityDoc.district;
+    this.state = cityDoc.state;
+  }
+}
 
     // ✅ Normalize phone numbers
     if (this.phone) this.phone = normalizePhone(this.phone);

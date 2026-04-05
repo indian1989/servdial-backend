@@ -53,9 +53,9 @@ export async function unifiedRanking(context = {}) {
   const match = { status: "approved" };
 
   // ================= CITY FILTER =================
-  if (city) {
-    match.city = new RegExp(city, "i");
-  }
+  if (city && mongoose.Types.ObjectId.isValid(city)) {
+  match.city = new mongoose.Types.ObjectId(city);
+}
 
   // ================= CATEGORY FILTER =================
   if (category) {
@@ -116,7 +116,7 @@ export async function unifiedRanking(context = {}) {
   });
 
   // ================= INTENT =================
-  const intent = detectIntent(context);
+  const parsedIntent = context.q ? require("../../utils/parseSearchIntent.js").parseSearchIntent(context.q) : {};
 
   // ================= SCORING =================
   const scored = businesses.map((b) => {
@@ -145,15 +145,45 @@ export async function unifiedRanking(context = {}) {
     }
 
     // ================= FINAL FUSION SCORE =================
-    const score = computeFinalScore({
-      vectorScore: 0.2,
-      keywordScore: 0.2,
-      trendingScore: clicks > 10 ? 1 : 0,
-      clickScore: Math.log10(clicks + 1),
-      ratingScore: b.averageRating || 0,
-      featureScore,
-      distanceScore,
-    });
+    let ratingScore = b.averageRating || 0;
+
+// 🔥 INTENT BOOSTS
+if (parsedIntent?.minRating) {
+  if (ratingScore >= parsedIntent.minRating) {
+    ratingScore *= 1.5;
+  } else {
+    ratingScore *= 0.7;
+  }
+}
+
+if (parsedIntent?.sortBy === "rating") {
+  ratingScore *= 1.3;
+}
+
+if (parsedIntent?.openNow) {
+  const now = new Date();
+  const day = now.toLocaleString("en-US", { weekday: "long" }).toLowerCase();
+  const time = now.toTimeString().slice(0, 5);
+
+  const open = b.businessHours?.[day]?.open;
+  const close = b.businessHours?.[day]?.close;
+
+  if (open && close && open <= time && close >= time) {
+    ratingScore *= 1.2;
+  } else {
+    ratingScore *= 0.5;
+  }
+}
+
+const score = computeFinalScore({
+  vectorScore: 0.2,
+  keywordScore: 0.2,
+  trendingScore: clicks > 10 ? 1 : 0,
+  clickScore: Math.log10(clicks + 1),
+  ratingScore,
+  featureScore,
+  distanceScore,
+});
 
     return {
       ...b,

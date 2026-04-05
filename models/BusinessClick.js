@@ -1,4 +1,4 @@
-// backend/models/businessClickSchema.js
+// backend/models/BusinessClick.js
 import mongoose from "mongoose";
 
 const businessClickSchema = new mongoose.Schema(
@@ -22,9 +22,10 @@ const businessClickSchema = new mongoose.Schema(
     },
 
     city: {
-      type: String,
-      index: true,
-    },
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "City",
+  index: true,
+},
 
     clickedAt: {
       type: Date,

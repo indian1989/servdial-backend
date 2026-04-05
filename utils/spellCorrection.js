@@ -40,17 +40,22 @@ export const correctQuery = (input = "") => {
 
   let query = input.toLowerCase().trim();
 
-  // 1. Hinglish direct mapping
+  // ✅ Hinglish full match
   if (HINGLISH_MAP[query]) {
     return HINGLISH_MAP[query];
   }
 
-  // 2. Find closest match
-  const match = stringSimilarity.findBestMatch(query, DICTIONARY);
+  const words = query.split(" ");
 
-  if (match.bestMatch.rating > 0.5) {
-    return match.bestMatch.target;
-  }
+  const correctedWords = words.map((word) => {
+    const match = stringSimilarity.findBestMatch(word, DICTIONARY);
 
-  return query;
+    if (match.bestMatch.rating > 0.75) {
+      return match.bestMatch.target;
+    }
+
+    return word;
+  });
+
+  return correctedWords.join(" ");
 };

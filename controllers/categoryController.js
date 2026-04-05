@@ -1,93 +1,71 @@
 // backend/controllers/categoryController.js
-import Category from "../models/Category.js";
 
 /* ================= GET ALL ================= */
-export const getAllCategories = async (req, res) => {
-  try {
-    // ✅ SAFE FETCH (avoid broken parentCategory)
-    const categories = await Category.find({
-      $or: [
-        { parentCategory: null },
-        { parentCategory: { $type: "objectId" } },
-      ],
-    })
-      .populate("parentCategory", "_id name")
-      .sort({ order: 1, name: 1 })
-      .lean();
+import asyncHandler from "express-async-handler";
+import Category from "../models/Category.js";
 
-    const map = new Map();
-    const roots = [];
+/* ================= GET ALL (TREE + FLAT) ================= */
 
-    // ================= BUILD MAP =================
-    for (const cat of categories) {
-      map.set(String(cat._id), {
-        ...cat,
-        subcategories: [],
-      });
-    }
+export const getAllCategories = asyncHandler(async (req, res) => {
+  const categories = await Category.find({})
+    .sort({ order: 1, createdAt: 1 })
+    .lean();
 
-    // ================= BUILD TREE (SAFE) =================
-    for (const cat of categories) {
-      const node = map.get(String(cat._id));
+  // ================= BUILD MAP =================
+  const map = new Map();
+  const roots = [];
 
-      let parentId = null;
-
-      if (cat.parentCategory) {
-        if (typeof cat.parentCategory === "object") {
-          parentId = String(cat.parentCategory._id);
-        } else if (
-          typeof cat.parentCategory === "string" &&
-          cat.parentCategory.length === 24
-        ) {
-          parentId = cat.parentCategory;
-        }
-      }
-
-      if (parentId && map.has(parentId)) {
-        map.get(parentId).subcategories.push(node);
-      } else {
-        roots.push(node);
-      }
-    }
-
-    // ================= SORT TREE =================
-    const sortTree = (nodes) => {
-      nodes.sort(
-        (a, b) =>
-          Number(a.order || 0) - Number(b.order || 0) ||
-          a.name.localeCompare(b.name)
-      );
-
-      for (const n of nodes) {
-        if (n.subcategories?.length) {
-          sortTree(n.subcategories);
-        }
-      }
-    };
-
-    sortTree(roots);
-
-    return res.json({
-      success: true,
-      categories: roots,
-      flatCategories: categories,
-      total: categories.length,
-    });
-
-  } catch (error) {
-    console.error("GET ALL CATEGORIES ERROR FULL:", {
-      message: error.message,
-      stack: error.stack,
-    });
-
-    return res.status(500).json({
-      success: false,
-      message: error.message, // 👈 TEMP DEBUG (remove later)
-      categories: [],
-      flatCategories: [],
+  for (const cat of categories) {
+    map.set(String(cat._id), {
+      ...cat,
+      parentCategory: cat.parentCategory || null,
+      subcategories: [], // ✅ ALWAYS SAFE
     });
   }
-};
+
+  // ================= BUILD TREE =================
+  for (const cat of categories) {
+    const node = map.get(String(cat._id));
+
+    let parentId = null;
+
+    if (cat.parentCategory) {
+      parentId =
+        typeof cat.parentCategory === "object"
+          ? String(cat.parentCategory._id)
+          : String(cat.parentCategory);
+    }
+
+    if (parentId && map.has(parentId)) {
+      map.get(parentId).subcategories.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  // ================= SORT TREE =================
+  const sortTree = (nodes) => {
+    nodes.sort(
+      (a, b) =>
+        Number(a.order || 0) - Number(b.order || 0) ||
+        a.name.localeCompare(b.name)
+    );
+
+    for (const n of nodes) {
+      if (n.subcategories?.length) {
+        sortTree(n.subcategories);
+      }
+    }
+  };
+
+  sortTree(roots);
+
+  return res.json({
+    success: true,
+    categories: roots,       // ✅ TREE
+    flatCategories: categories, // ✅ RAW
+  });
+});
 
 
 /* ================= GET BY SLUG ================= */
@@ -201,12 +179,12 @@ export const updateCategory = async (req, res) => {
       ...(req.body.order !== undefined && {
         order: Number(req.body.order),
       }),
-      ...(req.body.parentCategory && {
-        parentCategory:
-          req.body.parentCategory.length === 24
-            ? req.body.parentCategory
-            : null,
-      }),
+      ...(req.body.parentCategory !== undefined && {
+  parentCategory:
+    req.body.parentCategory && req.body.parentCategory.length === 24
+      ? req.body.parentCategory
+      : null,
+}),
     };
 
     const category = await Category.findByIdAndUpdate(

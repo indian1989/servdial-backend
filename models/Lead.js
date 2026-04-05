@@ -33,10 +33,15 @@ const leadSchema = new mongoose.Schema(
   },
 
   city: {
-    type: String,
-    default: "",
-    index: true
-  },
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "City",
+  index: true
+},
+
+// optional snapshot
+cityName: {
+  type: String,
+},
 
   // Lead source tracking
   source: {

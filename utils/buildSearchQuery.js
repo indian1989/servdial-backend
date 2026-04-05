@@ -51,10 +51,14 @@ export const buildSearchQuery = ({
 
   /* ================= CITY ================= */
   if (city) {
-    query.city = {
-      $regex: `^${city.trim()}`,
-      $options: "i",
-    };
+    if (/^[0-9a-fA-F]{24}$/.test(city)) {
+  query.city = city;
+} else {
+  query.cityName = {
+    $regex: `^${city.trim().toLowerCase()}`,
+    $options: "i",
+  };
+}
   }
 
   /* ================= CATEGORY ================= */

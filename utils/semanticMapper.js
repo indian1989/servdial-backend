@@ -45,8 +45,17 @@ export const getSemanticCategory = (keyword = "") => {
   const query = keyword.toLowerCase();
 
   for (const [category, keywords] of Object.entries(SEMANTIC_MAP)) {
+    // ✅ direct match
+    if (query.includes(category)) return category;
+
     for (const k of keywords) {
       if (query.includes(k)) {
+        return category;
+      }
+
+      // ✅ partial word match (NEW)
+      const words = k.split(" ");
+      if (words.some(w => query.includes(w))) {
         return category;
       }
     }

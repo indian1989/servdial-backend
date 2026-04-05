@@ -1,3 +1,4 @@
+// backend/controllers/businessController.js
 import mongoose from "mongoose";
 import Business from "../models/Business.js";
 import BusinessView from "../models/BusinessView.js";
@@ -178,7 +179,15 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
 
 // ================= TRACK CLICK =================
 export const trackBusinessClick = asyncHandler(async (req, res) => {
-  await BusinessClick.create({ business: req.params.id });
+  const { keyword, city } = req.body;
+
+  await BusinessClick.create({
+    business: req.params.id,
+    user: req.user?._id || null,
+    keyword: keyword || null,
+    city: city || null,
+  });
+
   res.json({ success: true });
 });
 
@@ -250,9 +259,16 @@ export const getCategoryCount = asyncHandler(async (req, res) => {
 export const suggestSearch = asyncHandler(async (req, res) => {
   const data = await Business.find({
     name: new RegExp(req.query.q, "i"),
-  }).limit(5);
+    status: "approved",
+  })
+    .select("_id name slug")
+    .limit(5)
+    .lean();
 
-  res.json(data);
+  res.json({
+    success: true,
+    suggestions: data,
+  });
 });
 
 // ================= PAID =================
