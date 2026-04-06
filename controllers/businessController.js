@@ -27,30 +27,105 @@ const getParentCategory = async (categoryId) => {
   return cat?.parentCategory || null;
 };
 
-// ================= CREATE =================
+// ================= SANITIZE INPUT =================
+const sanitizeBusinessInput = (body, user) => {
+  const isPrivileged = ["admin", "superadmin"].includes(user?.role);
+
+  const base = {
+    name: body.name,
+    description: body.description,
+    address: body.address,
+    phone: body.phone,
+    whatsapp: body.whatsapp,
+    website: body.website,
+    pincode: body.pincode ? String(body.pincode).trim() : undefined,
+    city: body.city || null,
+    state: body.state || null,
+    district: body.district || null,
+    images: body.images,
+    services: body.services,
+    tags: body.tags,
+  };
+
+  const { categoryId, secondaryCategories } = normalizeCategories(body);
+
+base.categoryId = categoryId;
+base.secondaryCategories = secondaryCategories;
+
+  // normalize city if object comes from frontend
+
+  if (isPrivileged) {
+    base.parentCategoryId = body.parentCategoryId || null;
+    base.status = body.status || "approved";
+    base.isFeatured = body.isFeatured || false;
+    base.featurePriority = body.featurePriority || 0;
+  } else {
+    base.status = "pending";
+  }
+
+  if (base.city && typeof base.city === "object") {
+  base.city = base.city._id || base.city.value || null;
+}
+
+if (typeof base.city === "string" && base.city.trim() === "") {
+  base.city = null;
+}
+base.images = Array.isArray(body.images) ? body.images : [];
+base.services = Array.isArray(body.services) ? body.services : [];
+base.tags = Array.isArray(body.tags) ? body.tags : [];
+
+  return base;
+};
+
+// ================= CREATE BUSINESS =================
 export const createBusiness = asyncHandler(async (req, res) => {
   if (!["provider", "admin", "superadmin"].includes(req.user.role)) {
-    return res.status(403).json({ success: false, message: "Not authorized" });
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized",
+    });
   }
 
-  const { categoryId, secondaryCategories } = normalizeCategories(req.body);
+  const sanitized = sanitizeBusinessInput(req.body, req.user);
 
-  if (!req.body.name || !categoryId || !req.body.city || !req.body.phone) {
-    return res.status(400).json({ success: false, message: "Missing fields" });
+  // DEBUG (safe for dev)
+  console.log("CREATE BUSINESS BODY:", req.body);
+  console.log("SANITIZED:", sanitized);
+
+  // safe empty check
+  const isEmpty = (v) =>
+    v === undefined ||
+    v === null ||
+    v === "" ||
+    (typeof v === "object" && !Object.keys(v).length);
+
+  const missingFields = [];
+
+  if (isEmpty(sanitized.name)) missingFields.push("name");
+  if (isEmpty(sanitized.categoryId)) missingFields.push("categoryId");
+  if (isEmpty(sanitized.city)) missingFields.push("city");
+  if (isEmpty(sanitized.phone)) missingFields.push("phone");
+
+  if (missingFields.length) {
+    return res.status(400).json({
+      success: false,
+      message: "Required fields missing",
+      missingFields,
+    });
   }
 
-  const parentCategoryId = await getParentCategory(categoryId);
+  const parentCategoryId = await getParentCategory(sanitized.categoryId);
 
   const business = await Business.create({
-    ...req.body,
-    categoryId,
+    ...sanitized,
     parentCategoryId,
-    secondaryCategories,
     owner: req.user._id,
-    status: req.user.role === "provider" ? "pending" : "approved",
   });
 
-  res.status(201).json({ success: true, business });
+  res.status(201).json({
+    success: true,
+    business,
+  });
 });
 
 // ================= SEARCH =================
@@ -142,10 +217,20 @@ export const getRecommendedBusinesses = asyncHandler(async (req, res) => {
 export const getNearbyBusinesses = asyncHandler(async (req, res) => {
   const { lat, lng } = req.query;
 
+  if (!lat || !lng) {
+    return res.status(400).json({
+      success: false,
+      message: "lat/lng required",
+    });
+  }
+
   const businesses = await Business.aggregate([
     {
       $geoNear: {
-        near: { type: "Point", coordinates: [Number(lng), Number(lat)] },
+        near: {
+          type: "Point",
+          coordinates: [Number(lng), Number(lat)],
+        },
         distanceField: "distance",
         spherical: true,
       },
@@ -211,23 +296,60 @@ export const whatsappClick = asyncHandler(async (req, res) => {
 export const updateBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
-  if (!business) return res.status(404).json({ success: false });
+  if (!business) {
+    return res.status(404).json({ success: false });
+  }
 
-  if (!isAdmin(req.user) && !business.owner.equals(req.user._id)) {
+  const isOwner = business.owner.equals(req.user._id);
+  const isPrivileged = isAdmin(req.user);
+
+  if (!isPrivileged && !isOwner) {
     return res.status(403).json({ success: false });
   }
 
-  Object.assign(business, req.body);
+  const sanitized = sanitizeBusinessInput(req.body, req.user);
+
+// remove empty/undefined fields
+Object.keys(sanitized).forEach((key) => {
+  if (sanitized[key] === undefined || sanitized[key] === "") {
+    delete sanitized[key];
+  }
+});
+
+  // providers cannot override system fields
+  if (!isPrivileged) {
+    delete sanitized.categoryId;
+    delete sanitized.city;
+    delete sanitized.state;
+    delete sanitized.district;
+    delete sanitized.status;
+    delete sanitized.isFeatured;
+    delete sanitized._id;
+delete sanitized.owner;
+delete sanitized.createdAt;
+delete sanitized.updatedAt;
+  }
+
+  Object.assign(business, sanitized);
+
   await business.save();
 
   res.json({ success: true, business });
 });
-
 // ================= DELETE =================
 export const deleteBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
-  if (!business) return res.status(404).json({ success: false });
+  if (!business) {
+    return res.status(404).json({ success: false });
+  }
+
+  const isOwner = business.owner.equals(req.user._id);
+  const isPrivileged = isAdmin(req.user);
+
+  if (!isPrivileged && !isOwner) {
+    return res.status(403).json({ success: false });
+  }
 
   await business.deleteOne();
 
@@ -246,7 +368,6 @@ export const getCategoryCount = asyncHandler(async (req, res) => {
     status: "approved",
     city,
     $or: [
-      { category: category },
       { categoryId: category },
       { parentCategoryId: category }
     ]

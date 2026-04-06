@@ -4,59 +4,44 @@ import City from "../models/City.js";
 import User from "../models/User.js";
 
 /* ================================
-   CREATE BUSINESS
+   GET ADMIN BUSINESSES
 ================================ */
-export const createBusiness = async (req, res) => {
+export const getAdminBusinesses = async (req, res) => {
   try {
-    const { name, category, address, city, district, state, phone, description, images, ownerName } = req.body;
-    const role = req.user.role;
+    const { status, city, category, search, page = 1, limit = 20 } = req.query;
 
-    if (!name || !category || !city || !district || !state || !phone) {
-      return res.status(400).json({ success: false, message: "Required fields missing" });
+    const query = {};
+
+    // filters
+    if (status) query.status = status;
+    if (city) query.city = city;
+    if (category) query.categoryId = category;
+
+    if (search) {
+      query.name = { $regex: search, $options: "i" };
     }
 
-    // CATEGORY FIX
-    let categoryName = category;
-    const categoryDoc = await Category.findById(category);
-    if (categoryDoc) categoryName = categoryDoc.name;
+    const businesses = await Business.find(query)
+      .populate("owner", "name email role")
+      .populate("categoryId", "name")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
 
-    // PROVIDER VALIDATION
-    if (role === "provider") {
-      if (!ownerName) return res.status(400).json({ success: false, message: "Owner name required for provider" });
-      if (!images || images.length === 0) return res.status(400).json({ success: false, message: "At least one image required" });
-    }
+    const total = await Business.countDocuments(query);
 
-    const business = await Business.create({
-      name,
-      category: categoryName,
-      address,
-      city,
-      district,
-      state,
-      phone,
-      description,
-      images: images || [],
-      owner: req.user._id,
-      status: role === "provider" ? "pending" : "approved",
+    res.json({
+      success: true,
+      businesses,
+      total,
+      page: Number(page),
     });
 
-    res.status(201).json({ success: true, message: "Business created successfully", business });
-
   } catch (error) {
-    console.error("Create business error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/* ================================
-   GET ALL BUSINESSES
-================================ */
-export const getAllBusinesses = async (req, res) => {
-  try {
-    const businesses = await Business.find().populate("owner", "name email").sort({ createdAt: -1 });
-    res.json({ success: true, message: "Businesses fetched successfully", businesses });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 

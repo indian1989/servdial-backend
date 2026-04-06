@@ -181,7 +181,7 @@ businessSchema.pre("save", async function (next) {
     this.address = normalizeText(this.address);
 
     // ✅ Normalize location fields (CRITICAL FIX)
-    if (this.city) this.city = normalizeCity(this.city);
+    
     if (this.district) this.district = normalizeText(this.district);
     if (this.state) this.state = normalizeText(this.state);
 

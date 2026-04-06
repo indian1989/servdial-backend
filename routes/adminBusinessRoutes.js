@@ -11,7 +11,7 @@ import {
   getDashboardStats,
   getBusinessStats
 } from "../controllers/adminController.js";
-
+import { createBusiness } from "../controllers/businessController.js";
 
 const router = express.Router();
 
@@ -200,5 +200,11 @@ router.post("/admin/category", createCategory);
 
 router.get("/admin/dashboard", getDashboardStats);
 router.get("/admin/business-stats", getBusinessStats);
-
+// ================= CREATE BUSINESS (ADMIN) =================
+router.post(
+  "/admin/business",
+  protect,
+  authorizeRoles("admin", "superadmin"),
+  createBusiness
+);
 export default router;

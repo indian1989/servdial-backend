@@ -1,3 +1,4 @@
+// backend/models/City.js
 import mongoose from "mongoose";
 import slugify from "../utils/slugify.js";
 

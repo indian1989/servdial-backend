@@ -11,7 +11,7 @@ import SystemSettings from "../models/SystemSettings.js";
 import ActivityLogs from "../models/ActivityLogs.js";
 import Business from "../models/Business.js";
 
-import { createBusiness, toggleFeatured } from "../controllers/adminController.js";
+import { toggleFeatured } from "../controllers/adminController.js";
 
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
@@ -38,14 +38,6 @@ router.get(
       },
     });
   })
-);
-
-// ================= BUSINESSES =================
-router.post(
-  "/business",
-  protect,
-  authorizeRoles("admin", "superadmin", "provider"),
-  createBusiness
 );
 
 router.put(
