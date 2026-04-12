@@ -5,6 +5,7 @@ import BusinessClick from "../models/BusinessClick.js";
 import UserPreference from "../models/UserPreference.js";
 import SearchTrend from "../models/SearchTrend.js";
 import RecentSearch from "../models/RecentSearch.js";
+import City from "../models/City.js";
 import { setCache, getCache } from "../utils/memoryCache.js";
 
 /* ================= HELPER ================= */
@@ -35,6 +36,18 @@ export const getAutocompleteSuggestions = asyncHandler(async (req, res) => {
   }
 
   const queryText = q.trim().toLowerCase();
+  // ================= RESOLVE CITY =================
+let cityId = null;
+
+if (city) {
+  const cityDoc = await City.findOne({
+    slug: city.toLowerCase().trim(),
+  }).select("_id");
+
+  if (cityDoc) {
+    cityId = cityDoc._id;
+  }
+}
   const tokens = queryText.split(" ").filter(Boolean);
 
   /* ================= CACHE ================= */
@@ -46,27 +59,62 @@ export const getAutocompleteSuggestions = asyncHandler(async (req, res) => {
   }
 
   /* ================= TREND + RECENT ================= */
-  const regex = new RegExp(queryText, "i");
 
-  const [trending, recent] = await Promise.all([
-    SearchTrend.find({
-      query: regex,
-      ...(city && { city }),
-    })
-      .sort({ count: -1 })
-      .limit(5)
-      .select("query")
-      .lean(),
+// ✅ SAFE REGEX
+const escapeRegex = (str) =>
+  str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    RecentSearch.find({
-      query: regex,
-      ...(userId && { user: userId }),
-    })
-      .sort({ lastSearchedAt: -1 })
-      .limit(5)
-      .select("query")
-      .lean(),
-  ]);
+const safeQuery = escapeRegex(queryText);
+const regex = new RegExp(safeQuery, "i");
+
+// ✅ TRACK TREND
+await SearchTrend.findOneAndUpdate(
+  {
+    query: queryText,
+    cityId: cityId || null,
+  },
+  {
+    $inc: { count: 1 },
+    lastSearchedAt: new Date(),
+  },
+  { upsert: true }
+);
+
+// ✅ TRACK RECENT (SEPARATE — NOT inside Promise.all)
+if (userId) {
+  await RecentSearch.findOneAndUpdate(
+    {
+      user: userId,
+      query: queryText,
+    },
+    {
+      cityId: cityId || null,
+      lastSearchedAt: new Date(),
+    },
+    { upsert: true }
+  );
+}
+
+// ✅ FETCH TRENDING + RECENT
+const [trending, recent] = await Promise.all([
+  SearchTrend.find({
+    query: regex,
+    ...(cityId && { cityId }),
+  })
+    .sort({ count: -1 })
+    .limit(5)
+    .select("query")
+    .lean(),
+
+  RecentSearch.find({
+    query: regex,
+    ...(userId && { user: userId }),
+  })
+    .sort({ lastSearchedAt: -1 })
+    .limit(5)
+    .select("query")
+    .lean(),
+]);
 
   const querySuggestions = [
     ...new Set([
@@ -77,15 +125,14 @@ export const getAutocompleteSuggestions = asyncHandler(async (req, res) => {
 
   /* ================= BUSINESS SEARCH ================= */
   const mongoQuery = buildAutocompleteQuery(queryText);
-
-  if (city) {
-    mongoQuery.city = new RegExp(city, "i");
-  }
+  if (cityId) {
+  mongoQuery.cityId = cityId;
+}
 
   const results = await Business.find(mongoQuery)
     .select(
-      "name category categoryId city averageRating reviewCount isFeatured views tags"
-    )
+  "name category categoryId cityName citySlug averageRating reviewCount isFeatured views tags"
+)
     .limit(12)
     .lean();
 
@@ -95,9 +142,9 @@ export const getAutocompleteSuggestions = asyncHandler(async (req, res) => {
   const clickData = await BusinessClick.aggregate([
     {
       $match: {
-        business: { $in: businessIds },
-        ...(city && { city }),
-      },
+  business: { $in: businessIds },
+  ...(cityId && { cityId }),
+},
     },
     {
       $group: {
@@ -168,7 +215,7 @@ export const getAutocompleteSuggestions = asyncHandler(async (req, res) => {
       id: biz._id,
       name: biz.name,
       category: biz.category,
-      city: biz.city,
+      city: biz.cityName,
       score,
     };
   });

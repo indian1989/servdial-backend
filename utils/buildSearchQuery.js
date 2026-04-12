@@ -1,4 +1,5 @@
 // backend/utils/buildSearchQuery.js
+import mongoose from "mongoose";
 // ================= SEMANTIC MAP =================
 const semanticMap = {
   plumber: ["pipe", "leak", "tap", "drain", "water leak"],
@@ -22,7 +23,7 @@ const expandKeyword = (keyword) => {
       lower.includes(main) ||
       synonyms.some((s) => lower.includes(s))
     ) {
-      expanded.push(main, ...synonyms);
+      expanded.push(main, ...synonyms.slice(0, 3));
     }
   });
 
@@ -37,6 +38,11 @@ const splitWords = (text) => {
     .filter((w) => w.length > 2);
 };
 
+// ================= ESCAPE REGEX (ADD HERE) =================
+const escapeRegex = (text) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+
 // ================= BUILD QUERY =================
 export const buildSearchQuery = ({
   city,
@@ -50,78 +56,58 @@ export const buildSearchQuery = ({
   };
 
   /* ================= CITY ================= */
-  if (city) {
-    if (/^[0-9a-fA-F]{24}$/.test(city)) {
-  query.city = city;
-} else {
-  query.cityName = {
-    $regex: `^${city.trim().toLowerCase()}`,
-    $options: "i",
-  };
-}
+
+if (city) {
+  if (mongoose.Types.ObjectId.isValid(city)) {
+    query.cityId = new mongoose.Types.ObjectId(city);
+  } else {
+    // fallback (SEO/search)
+    query.citySlug = city.trim().toLowerCase();
   }
+}
 
   /* ================= CATEGORY ================= */
   if (category) {
-    const isObjectId = /^[0-9a-fA-F]{24}$/.test(category);
+  const isObjectId = /^[0-9a-fA-F]{24}$/.test(category);
 
-    if (isObjectId) {
-      query.$and = query.$and || [];
+if (isObjectId) {
+  const catId = new mongoose.Types.ObjectId(category);
 
-      query.$and.push({
-        $or: [
-          { categoryId: category },
-          { secondaryCategories: category },
-          { parentCategoryId: category },
-        ],
-      });
-    } else {
-      query.categorySlug = {
-        $regex: `^${category.trim()}`,
-        $options: "i",
-      };
-    }
+  query.$and = query.$and || [];
+
+  query.$and.push({
+    $or: [
+      { categoryId: catId },
+      { parentCategoryId: catId },
+    ],
+  });
+}
   }
 
   /* ================= KEYWORD (UPGRADED SEMANTIC) ================= */
   if (keyword) {
-    const safeKeyword = keyword.trim();
-    const expanded = expandKeyword(safeKeyword);
-    const split = splitWords(safeKeyword);
+    const safeKeyword = keyword.trim().toLowerCase();
+const safeRegex = escapeRegex(safeKeyword);
+const expanded = expandKeyword(safeKeyword);
+const split = splitWords(safeKeyword);
 
-    query.$and = query.$and || [];
+query.$and = query.$and || [];
 
-    // 🔥 1. FULL PHRASE MATCH (highest priority)
-    const phraseMatch = {
-      $or: [
-        { name: { $regex: safeKeyword, $options: "i" } },
-        { description: { $regex: safeKeyword, $options: "i" } },
-      ],
-    };
+query.$and.push({
+  $or: [
+    // ✅ primary (light regex)
+    { name: { $regex: safeRegex, $options: "i" } },
 
-    // 🔥 2. EXPANDED SEMANTIC MATCH
-    const semanticMatch = {
-      $or: expanded.flatMap((word) => [
-        { name: { $regex: word, $options: "i" } },
-        { description: { $regex: word, $options: "i" } },
-        { tags: { $regex: word, $options: "i" } },
-        { keywords: { $regex: word, $options: "i" } },
-      ]),
-    };
+    // ✅ fast semantic (INDEX FRIENDLY)
+    { tags: { $in: expanded } },
+    { keywords: { $in: expanded } },
 
-    // 🔥 3. SPLIT WORD MATCH (important for long queries)
-    const splitMatch = {
-      $and: split.map((word) => ({
-        $or: [
-          { name: { $regex: word, $options: "i" } },
-          { tags: { $regex: word, $options: "i" } },
-        ],
-      })),
-    };
-
-    query.$and.push({
-      $or: [phraseMatch, semanticMatch, splitMatch],
-    });
+    // ✅ fallback split (limited)
+    ...split.slice(0, 3).map((word) => ({
+  name: { $regex: escapeRegex(word), $options: "i" },
+})),
+  ],
+});
   }
 
   /* ================= RATING ================= */

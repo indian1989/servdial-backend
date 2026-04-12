@@ -3,14 +3,28 @@ export const buildAutocompleteQuery = (searchText) => {
     return {};
   }
 
-  const text = searchText.trim();
+  // ================= SAFE REGEX =================
+  const escapeRegex = (str) =>
+    str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  const text = searchText.trim().toLowerCase();
+  const safeText = escapeRegex(text);
+
+  const regex = new RegExp(safeText, "i");
 
   return {
+    status: "approved",
+    isDeleted: false,
+
     $or: [
-      { name: new RegExp(text, "i") },
-      { category: new RegExp(text, "i") },
-      { city: new RegExp(text, "i") },
-      { tags: new RegExp(text, "i") },
+      { name: regex },
+      { tags: regex },
+
+      // ✅ BETTER: slug-based matching
+      { categorySlug: regex },
+
+      // ❌ REMOVED city (IMPORTANT)
+      // cityId handled outside
     ],
   };
 };

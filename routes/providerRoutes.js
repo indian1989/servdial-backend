@@ -4,10 +4,6 @@ import { protect } from "../middleware/authMiddleware.js"; // assuming you have 
 import {
   getProviderDashboardStats,
   getProviderBusinesses,
-  addBusiness,
-  editBusiness,
-  updateBusinessHours,
-  updateBusinessMedia,
   getProviderLeads,
   getProviderReviews,
   getProviderAnalytics,
@@ -20,6 +16,14 @@ import {
   trackBusinessView,
 } from "../controllers/providerController.js";
 
+import {
+  createBusiness,
+  updateBusiness,
+  claimBusiness,
+  updateBusinessHours,
+  updateBusinessMedia,
+} from "../controllers/businessController.js";
+
 const router = express.Router();
 
 // ================= PROVIDER DASHBOARD =================
@@ -27,8 +31,9 @@ router.get("/dashboard", protect, getProviderDashboardStats);
 
 // ================= BUSINESSES =================
 router.get("/businesses", protect, getProviderBusinesses);
-router.post("/businesses", protect, addBusiness);
-router.put("/businesses/:id", protect, editBusiness);
+router.post("/businesses", protect, createBusiness);
+router.put("/businesses/:id", protect, updateBusiness);
+router.post("/businesses/claim", protect, claimBusiness);
 router.put("/businesses/:id/hours", protect, updateBusinessHours);
 router.put("/businesses/:id/media", protect, updateBusinessMedia);
 

@@ -51,7 +51,7 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
   } = req.query;
 
   const pageNum = Number(page);
-  const limitNum = Number(limit);
+  const limitNum = Math.min(Number(limit) || 12, 50);
 
   // ✅ FIX 1: unify query
   const rawQuery = keyword || q || "";
@@ -65,14 +65,24 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
   }
 
   // ================= TRACK =================
-  trackSearchTrend({ keyword: correctedKeyword, city, category });
+  await trackSearchTrend({ keyword: correctedKeyword, city, category });
 
-  trackRecentSearch({
-    userId: req.user?._id || null,
-    keyword: correctedKeyword,
-    city,
-    category,
-  });
+await trackRecentSearch({
+  userId: req.user?._id || null,
+  keyword: correctedKeyword,
+  city,
+  category,
+});
+
+  let geoFilter = null;
+
+if (lat && lng) {
+  geoFilter = {
+    lat: Number(lat),
+    lng: Number(lng),
+    distance: Number(distance || 10),
+  };
+}
 
   // ================= FETCH =================
   let businesses = await unifiedRanking({
@@ -80,12 +90,18 @@ export const searchBusinesses = asyncHandler(async (req, res) => {
     category,
     q: correctedKeyword,
     limit: 300,
-    lat,
-lng
+   geo: geoFilter
   });
 
+  businesses = businesses.filter(
+  (b) => b.status === "approved" && !b.isDeleted
+);
+
   // ================= GEO FILTER FIRST (CRITICAL) =================
-if (lat && lng) {
+const latNum = Number(lat);
+const lngNum = Number(lng);
+
+if (!isNaN(latNum) && !isNaN(lngNum) && latNum !== 0 && lngNum !== 0) {
   const maxDist = Number(distance || 10);
 
   const toRad = (v) => (v * Math.PI) / 180;
@@ -103,13 +119,13 @@ if (lat && lng) {
     if (!lat2 || !lng2 || lat2 === 0 || lng2 === 0) return false;
 
     const R = 6371;
-    const dLat = toRad(lat - lat2);
-    const dLng = toRad(lng - lng2);
+    const dLat = toRad(latNum - lat2);
+const dLng = toRad(lngNum - lng2);
 
     const a =
       Math.sin(dLat / 2) ** 2 +
       Math.cos(toRad(lat2)) *
-        Math.cos(toRad(lat)) *
+        Math.cos(toRad(latNum)) *
         Math.sin(dLng / 2) ** 2;
 
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
@@ -119,7 +135,7 @@ if (lat && lng) {
 }
 
  // ================= KEYWORD RANKING (FINAL CLEAN) =================
-if (correctedKeyword) {
+if (correctedKeyword && correctedKeyword.length >= 2) {
   const q = correctedKeyword.toLowerCase();
 
   const exact = [];
@@ -130,7 +146,7 @@ if (correctedKeyword) {
   for (const b of businesses) {
     const name = b.name?.toLowerCase() || "";
     const tags = (b.tags || []).join(" ").toLowerCase();
-    const cat = (b.category || "").toLowerCase();
+    const cat = (b.categorySlug || "").toLowerCase();
 
     if (name === q) exact.push(b);
     else if (name.startsWith(q)) starts.push(b);
@@ -141,6 +157,14 @@ if (correctedKeyword) {
 
   businesses = [...exact, ...starts, ...contains, ...others];
 }
+
+// 🔥 BOOST FEATURED
+businesses.sort((a, b) => {
+  if (a.isFeatured !== b.isFeatured) {
+    return b.isFeatured - a.isFeatured;
+  }
+  return (b.averageRating || 0) - (a.averageRating || 0);
+});
 
   // ================= RATING FILTER =================
   if (rating) {
@@ -158,10 +182,14 @@ if (correctedKeyword) {
   );
 
   res.json({
-    success: true,
-    businesses: paginated,
+  success: true,
+  meta: {
     total,
     page: pageNum,
     pages: Math.ceil(total / limitNum),
-  });
+    limit: limitNum,
+    hasMore: pageNum * limitNum < total,
+  },
+  data: paginated,
+});
 });

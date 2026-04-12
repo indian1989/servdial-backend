@@ -8,7 +8,7 @@ const userPreferenceSchema = new mongoose.Schema(
       index: true,
     },
 
-    category: {
+    categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       index: true,
@@ -22,6 +22,6 @@ const userPreferenceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-userPreferenceSchema.index({ user: 1, category: 1 });
+userPreferenceSchema.index({ user: 1, categoryId: 1 });
 
 export default mongoose.model("UserPreference", userPreferenceSchema);

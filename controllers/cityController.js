@@ -10,21 +10,43 @@ export const getCities = async (req, res) => {
     let query = {};
 
     if (state) query.state = state;
-    if (status) query.status = status;
+    if (status) {
+  query.status = status;
+} else {
+  query.status = "active"; // default
+}
 
     if (search) {
-      query.$text = { $search: search };
-    }
+  const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    const cities = await City.find(query)
-      .sort({ state: 1, district: 1, name: 1 })
-      .lean();
+  query.$or = [
+    { name: new RegExp("^" + safe, "i") },
+    { district: new RegExp("^" + safe, "i") },
+    { state: new RegExp("^" + safe, "i") },
+  ];
+}
 
-    res.status(200).json({
-      success: true,
-      count: cities.length,
-      cities,
-    });
+    const page = Number(req.query.page) || 1;
+const limit = Number(req.query.limit) || 50;
+const skip = (page - 1) * limit;
+
+const [cities, total] = await Promise.all([
+  City.find(query)
+    .sort({ state: 1, district: 1, name: 1 })
+    .skip(skip)
+    .limit(limit)
+    .lean(),
+
+  City.countDocuments(query),
+]);
+
+res.json({
+  success: true,
+  total,
+  page,
+  pages: Math.ceil(total / limit),
+  cities,
+});
 
   } catch (error) {
     console.error("GET CITIES ERROR:", error);
@@ -49,35 +71,33 @@ export const addCity = async (req, res) => {
     const cleanState = state.trim();
     const cleanDistrict = district.trim();
 
-    const existing = await City.findOne({
-      name: new RegExp(`^${cleanName}$`, "i"),
-      state: new RegExp(`^${cleanState}$`, "i"),
-      district: new RegExp(`^${cleanDistrict}$`, "i"),
-    });
+    try {
+  const city = await City.create({
+    name: cleanName,
+    state: cleanState,
+    district: cleanDistrict,
+    slug: slugify(cleanName),
+    stateSlug: slugify(cleanState),
+    districtSlug: slugify(cleanDistrict),
+    latitude,
+    longitude,
+  });
 
-    if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: "City already exists in this state/district",
-      });
-    }
+  return res.status(201).json({
+    success: true,
+    message: "City added successfully",
+    city,
+  });
 
-    const city = await City.create({
-      name: cleanName,
-      state: cleanState,
-      district: cleanDistrict,
-      slug: slugify(cleanName),
-      stateSlug: slugify(cleanState),
-      districtSlug: slugify(cleanDistrict),
-      latitude,
-      longitude,
+} catch (err) {
+  if (err.code === 11000) {
+    return res.status(400).json({
+      success: false,
+      message: "City already exists",
     });
-
-    res.status(201).json({
-      success: true,
-      message: "City added successfully",
-      city,
-    });
+  }
+  throw err;
+}
 
   } catch (error) {
     console.error("ADD CITY ERROR:", error);
@@ -135,21 +155,22 @@ export const bulkUploadCities = async (req, res) => {
 
     let existingSet = new Set();
 
-    if (validCities.length > 0) {
-      const existingCities = await City.find({
-        $or: validCities.map(c => ({
-          name: c.name,
-          state: c.state,
-          district: c.district,
-        }))
-      }).lean();
+if (validCities.length > 0) {
+  const existingCities = await City.find({
+  $or: validCities.map(c => ({
+    name: c.name,
+    district: c.district,
+    state: c.state,
+  }))
+}).lean();
 
-      existingSet = new Set(
-        existingCities.map(
-          c => `${c.name.toLowerCase()}-${c.district.toLowerCase()}-${c.state.toLowerCase()}`
-        )
-      );
-    }
+  existingSet = new Set(
+    existingCities.map(
+      c =>
+        `${c.name.toLowerCase()}-${c.district.toLowerCase()}-${c.state.toLowerCase()}`
+    )
+  );
+}
 
     const operations = [];
     let skipped = 0;
@@ -320,10 +341,10 @@ export const getCitiesByDistrict = async (req, res) => {
 export const getFeaturedCities = async (req, res) => {
   try {
     const cities = await City.find({
-      featured: true,
       status: "active",
+      featuredScore: { $gt: 0 },
     })
-      .sort({ name: 1 })
+      .sort({ featuredScore: -1, population: -1, name: 1 })
       .limit(12)
       .lean();
 
@@ -347,8 +368,8 @@ export const markCityAsFeatured = async (req, res) => {
       return res.status(404).json({ success: false, message: "City not found" });
     }
 
-    city.featured = true;
-    await city.save();
+    city.featuredScore = 10; // default boost
+await city.save();
 
     res.json({
       success: true,
@@ -369,8 +390,8 @@ export const unmarkCityAsFeatured = async (req, res) => {
       return res.status(404).json({ success: false, message: "City not found" });
     }
 
-    city.featured = false;
-    await city.save();
+    city.featuredScore = 0;
+await city.save();
 
     res.json({
       success: true,

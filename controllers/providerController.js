@@ -51,38 +51,6 @@ export const getProviderBusinesses = asyncHandler(async (req, res) => {
 });
 
 // ================================
-// ADD BUSINESS
-// ================================
-export const addBusiness = asyncHandler(async (req, res) => {
-  const ownerId = req.user._id;
-  const role = req.user.role;
-
-  const { name, category, city, address, phone, description, images, businessHours } = req.body;
-
-  if (!name || !category || !city || !phone) {
-    res.status(400);
-    throw new Error("Required fields missing");
-  }
-
-  const status = role === "provider" ? "pending" : "approved";
-
-  const business = await Business.create({
-    name,
-    category,
-    city,
-    address,
-    phone,
-    description,
-    images: images || [],
-    businessHours: businessHours || {},
-    owner: ownerId,
-    status,
-  });
-
-  res.status(201).json({ success: true, message: "Business created successfully", business });
-});
-
-// ================================
 // EDIT BUSINESS
 // ================================
 export const editBusiness = asyncHandler(async (req, res) => {
@@ -105,31 +73,6 @@ export const editBusiness = asyncHandler(async (req, res) => {
   res.json({ success: true, message: "Business updated successfully", business });
 });
 
-// ================================
-// MANAGE BUSINESS HOURS
-// ================================
-export const updateBusinessHours = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
-  if (!business) { res.status(404); throw new Error("Business not found"); }
-
-  business.businessHours = req.body.businessHours;
-  await business.save();
-
-  res.json({ success: true, message: "Business hours updated", businessHours: business.businessHours });
-});
-
-// ================================
-// MANAGE BUSINESS MEDIA
-// ================================
-export const updateBusinessMedia = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
-  if (!business) { res.status(404); throw new Error("Business not found"); }
-
-  business.images = req.body.images || business.images;
-  await business.save();
-
-  res.json({ success: true, message: "Business media updated", images: business.images });
-});
 
 // ================================
 // PROVIDER MESSAGES

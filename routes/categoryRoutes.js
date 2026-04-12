@@ -1,3 +1,5 @@
+// backend/routes/categoryRoutes.js
+
 import express from "express";
 import {
   getAllCategories,
@@ -8,29 +10,48 @@ import {
   deleteCategory,
 } from "../controllers/categoryController.js";
 
+import {
+  protect,
+  authorizeRoles,
+} from "../middleware/authMiddleware.js";
+
 const router = express.Router();
 
 /* ================= PUBLIC ================= */
 
-// All categories (tree + flat)
+// Flat + tree (already included in controller)
 router.get("/", getAllCategories);
 
-// By slug
-router.get("/slug/:slug", getCategoryBySlug);
-
-// Trending
+// Trending categories
 router.get("/trending", getTrendingCategories);
 
+// Better REST naming (cleaner)
+router.get("/by-slug/:slug", getCategoryBySlug);
 
 /* ================= ADMIN ================= */
 
-// Create
-router.post("/", createCategory);
+// Create category (admin only)
+router.post(
+  "/",
+  protect,
+  authorizeRoles("admin", "superadmin"),
+  createCategory
+);
 
-// Update
-router.put("/:id", updateCategory);
+// Update category
+router.put(
+  "/:id",
+  protect,
+  authorizeRoles("admin", "superadmin"),
+  updateCategory
+);
 
-// Delete
-router.delete("/:id", deleteCategory);
+// Delete category
+router.delete(
+  "/:id",
+  protect,
+  authorizeRoles("admin", "superadmin"),
+  deleteCategory
+);
 
 export default router;

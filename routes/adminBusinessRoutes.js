@@ -18,14 +18,14 @@ const router = express.Router();
 
 // ================= GET ALL BUSINESSES =================
 router.get(
-  "/businesses",
+  "/",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
 
     const businesses = await Business.find()
       .populate("city")
-      .populate("category")
+      .populate("categoryId")
       .sort({ createdAt: -1 });
 
     res.json({
@@ -40,14 +40,14 @@ router.get(
 
 // ================= GET PENDING BUSINESSES =================
 router.get(
-  "/businesses/pending",
+  "/pending",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
 
     const businesses = await Business.find({ status: "pending" })
-      .populate("city")
-      .populate("category")
+      .populate("cityId")
+      .populate("categoryId")
       .sort({ createdAt: -1 });
 
     res.json({
@@ -61,7 +61,7 @@ router.get(
 
 // ================= APPROVE BUSINESS =================
 router.put(
-  "/business/:id/approve",
+  "/:id/approve",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -89,7 +89,7 @@ router.put(
 
 // ================= REJECT BUSINESS =================
 router.put(
-  "/business/:id/reject",
+  "/:id/reject",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -117,7 +117,7 @@ router.put(
 
 // ================= FEATURE BUSINESS =================
 router.put(
-  "/business/:id/feature",
+  "/:id/feature",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -145,7 +145,7 @@ router.put(
 
 // ================= DELETE BUSINESS =================
 router.delete(
-  "/business/:id",
+  "/:id",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -195,14 +195,13 @@ router.get(
   })
 );
 
-router.post("/admin/city", createCity);
-router.post("/admin/category", createCategory);
+router.post("/city", createCity);
+router.post("/category", createCategory);
 
-router.get("/admin/dashboard", getDashboardStats);
-router.get("/admin/business-stats", getBusinessStats);
+router.get("/dashboard", getDashboardStats);
 // ================= CREATE BUSINESS (ADMIN) =================
 router.post(
-  "/admin/business",
+  "/",
   protect,
   authorizeRoles("admin", "superadmin"),
   createBusiness

@@ -183,7 +183,8 @@ export const getAnalytics = async (req, res) => {
 export const getReports = async (req, res) => {
   try {
     // Example: return all businesses with metrics
-    const businesses = await Business.find().populate("category city");
+    const businesses = await Business.find().populate("categoryId")
+.populate("city");
     res.json({ businesses });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch reports", error: err.message });

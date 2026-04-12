@@ -8,17 +8,10 @@ import { buildSearchQuery } from "../utils/buildSearchQuery.js";
 import UserPreference from "../models/UserPreference.js";
 import BusinessClick from "../models/BusinessClick.js";
 import { unifiedRanking } from "../services/ranking/unifiedRankingEngine.js";
+import { computeFinalScore } from "../services/search/fusionScore.js";
 
 // ================= Role Check =================
 const isAdmin = (user) => ["admin", "superadmin"].includes(user.role);
-
-// ================= NORMALIZE CATEGORY =================
-const normalizeCategories = (body) => ({
-  categoryId: body.categoryId || body.category || null,
-  secondaryCategories: Array.isArray(body.secondaryCategories)
-    ? body.secondaryCategories
-    : [],
-});
 
 // ================= AUTO SET PARENT CATEGORY =================
 const getParentCategory = async (categoryId) => {
@@ -29,7 +22,7 @@ const getParentCategory = async (categoryId) => {
 
 // ================= SANITIZE INPUT =================
 const sanitizeBusinessInput = (body, user) => {
-  const isPrivileged = ["admin", "superadmin"].includes(user?.role);
+  const isPrivileged = isAdmin(user);
 
   const base = {
     name: body.name,
@@ -39,20 +32,29 @@ const sanitizeBusinessInput = (body, user) => {
     whatsapp: body.whatsapp,
     website: body.website,
     pincode: body.pincode ? String(body.pincode).trim() : undefined,
-    city: body.city || null,
+    cityId: body.cityId || body.city || null,
     state: body.state || null,
     district: body.district || null,
-    images: body.images,
-    services: body.services,
-    tags: body.tags,
+    logo: body.logo || "",
+    images: Array.isArray(body.images) ? body.images : [],
+    services: Array.isArray(body.services) ? body.services : [],
+    tags: Array.isArray(body.tags)
+  ? [...new Set(
+      body.tags
+        .filter(Boolean)
+        .map(tag => String(tag).toLowerCase().trim())
+    )]
+  : [],
+    categoryId: body.categoryId || body.category || null,
   };
 
-  const { categoryId, secondaryCategories } = normalizeCategories(body);
+  if (base.cityId && typeof base.cityId === "object") {
+  base.cityId = base.cityId._id || base.cityId.value || null;
+}
 
-base.categoryId = categoryId;
-base.secondaryCategories = secondaryCategories;
-
-  // normalize city if object comes from frontend
+if (typeof base.cityId === "string" && base.cityId.trim() === "") {
+  base.cityId = null;
+}
 
   if (isPrivileged) {
     base.parentCategoryId = body.parentCategoryId || null;
@@ -62,48 +64,32 @@ base.secondaryCategories = secondaryCategories;
   } else {
     base.status = "pending";
   }
-
-  if (base.city && typeof base.city === "object") {
-  base.city = base.city._id || base.city.value || null;
-}
-
-if (typeof base.city === "string" && base.city.trim() === "") {
-  base.city = null;
-}
-base.images = Array.isArray(body.images) ? body.images : [];
-base.services = Array.isArray(body.services) ? body.services : [];
-base.tags = Array.isArray(body.tags) ? body.tags : [];
-
   return base;
 };
 
-// ================= CREATE BUSINESS =================
+
+// ================= ADD BUSINESS =================
 export const createBusiness = asyncHandler(async (req, res) => {
-  if (!["provider", "admin", "superadmin"].includes(req.user.role)) {
+  const allowedRoles = ["provider", "admin", "superadmin"];
+
+  if (!allowedRoles.includes(req.user.role)) {
     return res.status(403).json({
       success: false,
       message: "Not authorized",
     });
   }
-
   const sanitized = sanitizeBusinessInput(req.body, req.user);
+  const missingFields = [];
 
-  // DEBUG (safe for dev)
-  console.log("CREATE BUSINESS BODY:", req.body);
-  console.log("SANITIZED:", sanitized);
-
-  // safe empty check
   const isEmpty = (v) =>
     v === undefined ||
     v === null ||
     v === "" ||
     (typeof v === "object" && !Object.keys(v).length);
 
-  const missingFields = [];
-
   if (isEmpty(sanitized.name)) missingFields.push("name");
   if (isEmpty(sanitized.categoryId)) missingFields.push("categoryId");
-  if (isEmpty(sanitized.city)) missingFields.push("city");
+  if (isEmpty(sanitized.cityId)) missingFields.push("cityId");
   if (isEmpty(sanitized.phone)) missingFields.push("phone");
 
   if (missingFields.length) {
@@ -113,44 +99,214 @@ export const createBusiness = asyncHandler(async (req, res) => {
       missingFields,
     });
   }
+  let parentCategoryId = null;
 
-  const parentCategoryId = await getParentCategory(sanitized.categoryId);
+  if (sanitized.categoryId) {
+    parentCategoryId = await getParentCategory(sanitized.categoryId);
+  }
 
+  const isProvider = req.user.role === "provider";
+  const normalizedIntentTags = Array.isArray(req.body.intentTags)
+    ? [...new Set(
+        req.body.intentTags
+          .filter(Boolean)
+          .map((tag) => tag.toLowerCase().trim())
+      )]
+    : [];
   const business = await Business.create({
     ...sanitized,
+
     parentCategoryId,
     owner: req.user._id,
+    isClaimed: isProvider,
+
+    intentTags: normalizedIntentTags,
   });
 
-  res.status(201).json({
+  return res.status(201).json({
     success: true,
+    business,
+  });
+});
+
+// ================= UPDATE BUSINESS =================
+export const updateBusiness = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id);
+  if (!business) return res.status(404).json({ success: false, message: "Business not found" });
+  const isOwner =
+  business.owner &&
+  req.user?._id &&
+  business.owner.equals(req.user._id);
+  const isPrivileged = isAdmin(req.user);
+
+  if (!isPrivileged && !isOwner) return res.status(403).json({ success: false, message: "Not authorized" });
+
+  const sanitized = sanitizeBusinessInput(req.body, req.user);
+
+  // remove empty/undefined fields
+  Object.keys(sanitized).forEach((key) => {
+    if (sanitized[key] === undefined || sanitized[key] === "") delete sanitized[key];
+  });
+
+  // Providers cannot override system fields
+  if (!isPrivileged) {
+    delete sanitized.categoryId;
+    delete sanitized.cityId;
+    delete sanitized.state;
+    delete sanitized.district;
+    delete sanitized.isFeatured;
+    delete sanitized._id;
+    delete sanitized.owner;
+    delete sanitized.createdAt;
+    delete sanitized.updatedAt;
+
+    // Provider updates → status = pending automatically
+    sanitized.status = "pending";
+  }
+
+  // Admin/Superadmin updating → claimed businesses remain approved
+  if (isPrivileged && business.isClaimed) {
+    sanitized.status = business.status === "approved" ? "approved" : business.status;
+  }
+
+  business.set(sanitized);
+
+// ✅ INTENT TAGS UPDATE
+if (req.body.intentTags !== undefined) {
+  business.intentTags = Array.isArray(req.body.intentTags)
+    ? [...new Set(
+        req.body.intentTags
+          .filter(Boolean)
+          .map(tag => String(tag).toLowerCase().trim())
+      )]
+    : [];
+}
+  await business.save();
+
+  res.json({ success: true, business });
+});
+
+// ================================
+// CLAIM BUSINESS (Provider claims admin/superadmin created business)
+// ================================
+export const claimBusiness = asyncHandler(async (req, res) => {
+  const providerId = req.user._id;
+
+  const { businessId } = req.body;
+  if (!businessId) {
+    res.status(400);
+    throw new Error("Business ID is required");
+  }
+
+  const business = await Business.findById(businessId);
+  if (!business) {
+    res.status(404);
+    throw new Error("Business not found");
+  }
+
+  if (business.isClaimed) {
+    res.status(400);
+    throw new Error("Business is already claimed");
+  }
+
+  // Transfer ownership to provider
+  business.owner = providerId;
+  business.isClaimed = true;
+  business.status = "pending"; // pending re-approval
+  await business.save();
+
+  res.status(200).json({
+    success: true,
+    message: "Business claimed successfully, pending admin approval",
     business,
   });
 });
 
 // ================= SEARCH =================
 export const searchBusinesses = asyncHandler(async (req, res) => {
-  const { city, category, keyword, page = 1, limit = 12 } = req.query;
+  // ================= SEARCH CONTEXT =================
+  const isDiscover = req.path.includes("discover");
+  const isLegacySearch = req.path.includes("search") || req.path === "/";
 
-  const query = buildSearchQuery({ city, keyword });
+  const {
+    city,
+    category,
+    keyword,
+    page = 1,
+    limit = 12,
+  } = req.query;
+
+  // ================= QUERY BUILD =================
+  const query = buildSearchQuery({ city, keyword, category });
+
   query.status = "approved";
 
-  if (category) {
-    query.$or = [
-      { categoryId: category },
-      { secondaryCategories: category },
-      { parentCategoryId: category },
-    ];
-  }
+  const pageNum = Math.max(1, parseInt(page) || 1);
+const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 12));
 
-  const businesses = await Business.find(query)
-    .sort({ isFeatured: -1, averageRating: -1, views: -1 })
-    .skip((page - 1) * limit)
-    .limit(Number(limit));
+  // ================= FETCH =================
+  let businesses = await Business.find(query)
+    .populate("categoryId", "name slug")
+    .select("name slug categoryId cityId cityName averageRating views isFeatured clickScore trendingScore vectorScore")
+    .lean();
 
-  const total = await Business.countDocuments(query);
+  // ================= NORMALIZATION =================
+  const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
-  res.json({ success: true, businesses, total });
+  const normalizeSignals = (b) => ({
+    keywordScore: clamp01(b.keywordScore || 0),
+    ratingScore: clamp01((b.averageRating || 0) / 5),
+    clickScore: clamp01(b.clickScore || 0),
+    distanceScore: clamp01(b.distanceScore ?? 1), 
+    trendingScore: clamp01(b.trendingScore || 0),
+    vectorScore: clamp01(b.vectorScore || 0)
+  });
+
+  // ================= RANKING ENGINE =================
+businesses = businesses.map((b) => {
+  const normalized = normalizeSignals(b);
+
+  const finalScore = computeFinalScore({
+  ...normalized,
+  featureBoost: b.isFeatured ? 1 : 0
+});
+
+  return {
+    id: b._id,
+    name: b.name,
+    slug: b.slug,
+    categoryId: b.categoryId,
+    cityId: b.cityId,
+    cityName: b.cityName,
+    averageRating: b.averageRating,
+    views: b.views,
+    isFeatured: b.isFeatured,
+    featureBoost: b.isFeatured ? 1 : 0,
+
+    finalScore
+  };
+});
+
+// ================= SORT =================
+businesses.sort((a, b) => {
+  const diff = (b.finalScore || 0) - (a.finalScore || 0);
+  return diff !== 0 ? diff : (b.views || 0) - (a.views || 0);
+});
+
+  // ================= PAGINATION =================
+  const start = (pageNum - 1) * limitNum;
+  const end = start + limitNum;
+
+  const paginated = businesses.slice(start, end);
+
+  // ================= TOTAL =================
+  const total = businesses.length;
+
+  res.json({
+    success: true,
+    businesses: paginated,
+    total
+  });
 });
 
 // ================= GET BY ID =================
@@ -225,17 +381,18 @@ export const getNearbyBusinesses = asyncHandler(async (req, res) => {
   }
 
   const businesses = await Business.aggregate([
-    {
-      $geoNear: {
-        near: {
-          type: "Point",
-          coordinates: [Number(lng), Number(lat)],
-        },
-        distanceField: "distance",
-        spherical: true,
+  {
+    $geoNear: {
+      near: {
+        type: "Point",
+        coordinates: [Number(lng), Number(lat)],
       },
+      distanceField: "distance",
+      spherical: true,
+      maxDistance: 50000 // v1 safety limit (50km)
     },
-  ]);
+  },
+]);
 
   res.json({ success: true, businesses });
 });
@@ -262,6 +419,21 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
   res.json({ success: true, businesses });
 });
 
+// ================== GET PROVIDER BUSINESSES ==============
+export const getProviderBusinesses = async (req, res) => {
+  try {
+    const businesses = await Business.find({
+      owner: req.user._id
+    })
+      .populate("categoryId")
+      .populate("cityId");
+
+    res.json({ businesses });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // ================= TRACK CLICK =================
 export const trackBusinessClick = asyncHandler(async (req, res) => {
   const { keyword, city } = req.body;
@@ -270,15 +442,49 @@ export const trackBusinessClick = asyncHandler(async (req, res) => {
     business: req.params.id,
     user: req.user?._id || null,
     keyword: keyword || null,
-    city: city || null,
+    cityId: city || null,
   });
 
   res.json({ success: true });
 });
 
-// ================= ANALYTICS =================
+// ================= ANALYTICS WITH USER PREFERENCE =================
 export const incrementViews = asyncHandler(async (req, res) => {
-  await Business.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
+  const businessId = req.params.id;
+  const userId = req.user?._id || null;
+
+  // Record in BusinessView collection
+  await BusinessView.create({
+    business: businessId,
+    user: userId,
+    viewedAt: new Date(),
+  });
+
+  // Increment total views in Business
+  await Business.findByIdAndUpdate(businessId, {
+  $inc: {
+    views: 1,
+    trendingScore: 0.01
+  }
+});
+
+  // Update UserPreference if user is logged in
+  if (userId) {
+    const business = await Business.findById(businessId).select("categoryId parentCategoryId");
+    if (business) {
+      await UserPreference.findOneAndUpdate(
+        { user: userId },
+        { 
+          $inc: { 
+            [`categories.${business.categoryId}`]: 1, 
+            [`parentCategories.${business.parentCategoryId}`]: 1 
+          } 
+        },
+        { upsert: true, new: true }
+      );
+    }
+  }
+
   res.json({ success: true });
 });
 
@@ -292,50 +498,6 @@ export const whatsappClick = asyncHandler(async (req, res) => {
   res.json({ success: true });
 });
 
-// ================= UPDATE =================
-export const updateBusiness = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
-
-  if (!business) {
-    return res.status(404).json({ success: false });
-  }
-
-  const isOwner = business.owner.equals(req.user._id);
-  const isPrivileged = isAdmin(req.user);
-
-  if (!isPrivileged && !isOwner) {
-    return res.status(403).json({ success: false });
-  }
-
-  const sanitized = sanitizeBusinessInput(req.body, req.user);
-
-// remove empty/undefined fields
-Object.keys(sanitized).forEach((key) => {
-  if (sanitized[key] === undefined || sanitized[key] === "") {
-    delete sanitized[key];
-  }
-});
-
-  // providers cannot override system fields
-  if (!isPrivileged) {
-    delete sanitized.categoryId;
-    delete sanitized.city;
-    delete sanitized.state;
-    delete sanitized.district;
-    delete sanitized.status;
-    delete sanitized.isFeatured;
-    delete sanitized._id;
-delete sanitized.owner;
-delete sanitized.createdAt;
-delete sanitized.updatedAt;
-  }
-
-  Object.assign(business, sanitized);
-
-  await business.save();
-
-  res.json({ success: true, business });
-});
 // ================= DELETE =================
 export const deleteBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
@@ -344,7 +506,10 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false });
   }
 
-  const isOwner = business.owner.equals(req.user._id);
+  const isOwner =
+  business.owner &&
+  req.user?._id &&
+  business.owner.equals(req.user._id);
   const isPrivileged = isAdmin(req.user);
 
   if (!isPrivileged && !isOwner) {
@@ -366,7 +531,7 @@ export const getCategoryCount = asyncHandler(async (req, res) => {
 
   const count = await Business.countDocuments({
     status: "approved",
-    city,
+    cityId: city,
     $or: [
       { categoryId: category },
       { parentCategoryId: category }
@@ -379,7 +544,7 @@ export const getCategoryCount = asyncHandler(async (req, res) => {
 // ================= SUGGEST =================
 export const suggestSearch = asyncHandler(async (req, res) => {
   const data = await Business.find({
-    name: new RegExp(req.query.q, "i"),
+    name: { $regex: req.query.q || "", $options: "i" },
     status: "approved",
   })
     .select("_id name slug")
@@ -395,4 +560,30 @@ export const suggestSearch = asyncHandler(async (req, res) => {
 // ================= PAID =================
 export const paidFeatureNotice = asyncHandler(async (req, res) => {
   res.status(403).json({ success: false, message: "Coming soon" });
+});
+
+// ================================
+// MANAGE BUSINESS HOURS
+// ================================
+export const updateBusinessHours = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id);
+  if (!business) { res.status(404); throw new Error("Business not found"); }
+
+  business.businessHours = req.body.businessHours;
+  await business.save();
+
+  res.json({ success: true, message: "Business hours updated", businessHours: business.businessHours });
+});
+
+// ================================
+// MANAGE BUSINESS MEDIA
+// ================================
+export const updateBusinessMedia = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id);
+  if (!business) { res.status(404); throw new Error("Business not found"); }
+
+  business.images = req.body.images || business.images;
+  await business.save();
+
+  res.json({ success: true, message: "Business media updated", images: business.images });
 });

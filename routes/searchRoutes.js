@@ -1,3 +1,4 @@
+// backend/routes/searchRoutes.js
 import express from "express";
 import { searchBusinesses } from "../controllers/searchController.js";
 import { getAutocompleteSuggestions } from "../controllers/autocompleteController.js";

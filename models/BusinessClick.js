@@ -21,7 +21,7 @@ const businessClickSchema = new mongoose.Schema(
       index: true,
     },
 
-    city: {
+    cityId: {
   type: mongoose.Schema.Types.ObjectId,
   ref: "City",
   index: true,

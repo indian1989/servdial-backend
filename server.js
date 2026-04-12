@@ -47,10 +47,10 @@ app.use("/api/user", userRoutes);
 
 // Business
 app.use("/api/business", publicBusinessRoutes);
-app.use("/api/admin", adminBusinessRoutes);
-
 // Admin Core
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/businesses", adminBusinessRoutes);
+
 
 // Categories (IMPORTANT FIX)
 app.use("/api/categories", categoryRoutes);

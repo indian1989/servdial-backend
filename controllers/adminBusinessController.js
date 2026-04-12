@@ -1,3 +1,4 @@
+// backend/controllers/adminBusnessController.js
 import Business from "../models/Business.js";
 import asyncHandler from "express-async-handler";
 

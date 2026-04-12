@@ -3,12 +3,13 @@ import Business from "../../models/Business.js";
 import BusinessClick from "../../models/BusinessClick.js";
 import mongoose from "mongoose";
 import { computeFinalScore } from "../search/fusionScore.js";
+import { parseSearchIntent } from "../../utils/parseSearchIntent.js";
 
 /**
  * Calculate real distance between two geo points (Haversine formula)
  */
 function getDistanceKm(coords, lat, lng) {
-  if (!coords || !lat || !lng) return null;
+  if (!coords || lat == null || lng == null) return null;
 
   const [bLng, bLat] = coords;
 
@@ -53,8 +54,11 @@ export async function unifiedRanking(context = {}) {
   const match = { status: "approved" };
 
   // ================= CITY FILTER =================
-  if (city && mongoose.Types.ObjectId.isValid(city)) {
-  match.city = new mongoose.Types.ObjectId(city);
+ if (city && mongoose.Types.ObjectId.isValid(city)) {
+  match.cityId = new mongoose.Types.ObjectId(city);
+}
+if (city && !mongoose.Types.ObjectId.isValid(city)) {
+  match.citySlug = city.toLowerCase();
 }
 
   // ================= CATEGORY FILTER =================
@@ -64,26 +68,24 @@ export async function unifiedRanking(context = {}) {
 
       match.$or = [
         { categoryId: catId },
-        { secondaryCategories: catId },
         { parentCategoryId: catId },
-      ];
-    } else {
-      match.$or = [
-        { tags: { $regex: new RegExp(category, "i") } },
       ];
     }
   }
 
   // ================= FETCH LIMIT =================
-  const fetchLimit = Math.max(limit * 5, city ? 200 : 300);
+  const fetchLimit = Math.min(
+  Math.max(Number(limit) * 5, 50),
+  150
+);
 
   const businesses = await Business.find(match)
     .select(`
-      _id name slug city averageRating totalReviews views
-      isFeatured featurePriority createdAt tags location
-      categoryId parentCategoryId secondaryCategories
-      phone images logo isVerified
-    `)
+  _id name slug city averageRating totalReviews views
+  isFeatured featurePriority createdAt tags location
+  categoryId parentCategoryId
+  phone images logo isVerified businessHours
+`)
     .limit(fetchLimit)
     .lean();
 
@@ -116,7 +118,7 @@ export async function unifiedRanking(context = {}) {
   });
 
   // ================= INTENT =================
-  const parsedIntent = context.q ? require("../../utils/parseSearchIntent.js").parseSearchIntent(context.q) : {};
+  const parsedIntent = context.q ? parseSearchIntent(context.q) : {};
 
   // ================= SCORING =================
   const scored = businesses.map((b) => {
@@ -140,8 +142,8 @@ export async function unifiedRanking(context = {}) {
       distanceScore = Math.exp(-distanceKm / 10);
 
       // intent boost
-      if (intent.isNearMe) distanceScore *= 2;
-      if (intent.isEmergency) distanceScore *= 3;
+      if (parsedIntent?.isNearMe) distanceScore *= 2;
+      if (parsedIntent?.isEmergency) distanceScore *= 3;
     }
 
     // ================= FINAL FUSION SCORE =================

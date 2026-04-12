@@ -21,9 +21,19 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   // ================= NORMALIZED CITY =================
   const normalizedCity = normalizeCity(city);
 
-  const cityFilter = normalizedCity
-    ? { city: new RegExp(`^${normalizedCity}$`, "i") }
-    : {};
+  let cityFilter = {};
+
+if (normalizedCity) {
+  const cityDoc = await City.findOne({
+    slug: normalizedCity,
+  }).select("_id");
+
+  if (cityDoc) {
+    cityFilter = { cityId: cityDoc._id }; // ✅ correct
+  } else {
+    cityFilter = { cityId: null }; // no match → empty results
+  }
+}
 
   // ================= FETCH DATA =================
   const [
@@ -50,9 +60,7 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     })
       .sort({ featurePriority: -1, averageRating: -1 })
       .limit(8)
-      .select(
-        "name slug city images averageRating totalReviews phone whatsapp isFeatured isVerified"
-      )
+      .select("name slug cityName citySlug images averageRating totalReviews phone whatsapp isFeatured isVerified")
       .lean(),
 
     // ================= TOP RATED =================
@@ -62,9 +70,7 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     })
       .sort({ averageRating: -1, totalReviews: -1 })
       .limit(8)
-      .select(
-        "name slug city images averageRating totalReviews phone whatsapp isVerified"
-      )
+      .select("name slug cityName citySlug images averageRating totalReviews phone whatsapp isFeatured isVerified")
       .lean(),
 
     // ================= LATEST =================
@@ -74,35 +80,34 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .limit(8)
-      .select(
-        "name slug city images averageRating totalReviews phone whatsapp isNew isVerified"
-      )
+      .select("name slug cityName citySlug images averageRating totalReviews phone whatsapp isFeatured isVerified")
       .lean(),
 
     // ================= NEARBY =================
-    lat && lng
-      ? Business.aggregate([
-          {
-            $geoNear: {
-              near: {
-                type: "Point",
-                coordinates: [Number(lng), Number(lat)],
-              },
-              distanceField: "distance",
-              maxDistance: 5000, // 5km
-              spherical: true,
-            },
+lat && lng
+  ? Business.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [Number(lng), Number(lat)],
           },
-          {
-            $match: {
-              status: "approved",
-            },
-          },
-          {
-            $limit: 8,
-          },
-        ])
-      : [],
+          distanceField: "distance",
+          maxDistance: 5000, // 5km
+          spherical: true,
+        },
+      },
+      {
+        $match: {
+          status: "approved",
+          ...(cityFilter.cityId ? { cityId: cityFilter.cityId } : {}),
+        },
+      },
+      {
+        $limit: 8,
+      },
+    ])
+  : [],
 
     // ================= RECOMMENDED =================
     Business.find({
@@ -111,9 +116,7 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     })
       .sort({ views: -1, averageRating: -1 })
       .limit(8)
-      .select(
-        "name slug city images averageRating totalReviews phone whatsapp isVerified"
-      )
+      .select("name slug cityName citySlug images averageRating totalReviews phone whatsapp isFeatured isVerified")
       .lean(),
 
     // ================= POPULAR CITIES =================

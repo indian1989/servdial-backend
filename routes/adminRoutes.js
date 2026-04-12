@@ -11,8 +11,6 @@ import SystemSettings from "../models/SystemSettings.js";
 import ActivityLogs from "../models/ActivityLogs.js";
 import Business from "../models/Business.js";
 
-import { toggleFeatured } from "../controllers/adminController.js";
-
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -40,16 +38,9 @@ router.get(
   })
 );
 
-router.put(
-  "/business/feature/:id",
-  protect,
-  authorizeRoles("admin", "superadmin"),
-  toggleFeatured
-);
-
 // ================= ADMINS =================
 router.post(
-  "/create-admin",
+  "/admins",
   protect,
   authorizeRoles("superadmin"),
   asyncHandler(async (req, res) => {
@@ -98,7 +89,7 @@ router.get(
 
 // ================= CITIES =================
 router.post(
-  "/city",
+  "/cities",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -131,7 +122,7 @@ router.get(
 );
 
 router.delete(
-  "/city/:id",
+  "/cities/:id",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -148,7 +139,7 @@ router.delete(
 
 // CREATE CATEGORY WITH LOWERCASE + PARENT
 router.post(
-  "/category",
+  "/categories",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -208,7 +199,7 @@ router.get(
 
 // DELETE CATEGORY (SAFE)
 router.delete(
-  "/category/:id",
+  "/categories/:id",
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
@@ -268,7 +259,8 @@ router.get(
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
-    const businesses = await Business.find().populate("category city");
+    const businesses = await Business.find().populate("categoryId")
+.populate("city");
     res.json({ businesses });
   })
 );

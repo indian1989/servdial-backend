@@ -4,6 +4,7 @@ import slugify from "../utils/slugify.js";
 
 const categorySchema = new mongoose.Schema(
   {
+    // ================= BASIC =================
     name: {
       type: String,
       required: true,
@@ -15,15 +16,31 @@ const categorySchema = new mongoose.Schema(
       type: String,
       unique: true,
       lowercase: true,
-      index: true,
     },
 
     description: {
       type: String,
       default: "",
-      trim: true, // ✅ improvement
+      trim: true,
     },
 
+    // ================= HIERARCHY (🔥 IMPORTANT) =================
+    parentCategory: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+      index: true,
+    },
+
+    // 0 = Parent Category (Home Services)
+    // 1 = Child Category (Electrician)
+    level: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+
+    // ================= MEDIA =================
     icon: {
       type: String,
       default: "",
@@ -34,20 +51,19 @@ const categorySchema = new mongoose.Schema(
       default: "",
     },
 
-    parentCategory: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Category",
-      default: null,
-      index: true,
-    },
+    // ================= SEO =================
+    seoTitle: String,
+    seoDescription: String,
 
-    // ✅ NEW (NO BREAKING CHANGE)
-    level: {
-      type: Number,
-      default: 0,
-      index: true,
-    },
+    keywords: [
+      {
+        type: String,
+        lowercase: true,
+        trim: true,
+      },
+    ],
 
+    // ================= STATUS =================
     status: {
       type: String,
       enum: ["active", "inactive"],
@@ -58,7 +74,6 @@ const categorySchema = new mongoose.Schema(
     order: {
       type: Number,
       default: 0,
-      min: 0,
       index: true,
     },
 
@@ -67,95 +82,114 @@ const categorySchema = new mongoose.Schema(
       default: false,
     },
 
-    // ✅ NEW (future-proof, no impact now)
     meta: {
       title: String,
       description: String,
     },
 
+    // ================= ANALYTICS =================
+    searchCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-
-// ✅ Allow same name under different parents
+// ================= UNIQUE =================
 categorySchema.index(
-  { name: 1, parentCategory: 1 },
-  { unique: true }
+  { name: 1 },
+  {
+    unique: true,
+    collation: { locale: "en", strength: 2 },
+  }
 );
 
-
-// ✅ SLUG GENERATION (SAFE VERSION)
-categorySchema.pre("save", async function (next) {
-  if (!this.isModified("name")) return next();
-
-  try {
-    let baseSlug = slugify(this.name);
-    let slug = baseSlug;
-    let count = 1;
-
-    while (true) {
-      const existing = await mongoose.models.Category.findOne({
-        slug,
-        _id: { $ne: this._id },
-      });
-
-      if (!existing) break;
-
-      slug = `${baseSlug}-${count++}`;
-    }
-
-    this.slug = slug;
-    next();
-
-  } catch (err) {
-    next(err);
+// ================= TEXT SEARCH =================
+categorySchema.index(
+  {
+    name: "text",
+    description: "text",
+    keywords: "text",
+  },
+  {
+    weights: {
+      name: 10,
+      keywords: 5,
+      description: 2,
+    },
   }
-});
+);
 
-
-// ✅ AUTO LEVEL CALCULATION (NEW — SAFE)
-categorySchema.pre("save", async function (next) {
-  try {
-    if (!this.parentCategory) {
-      this.level = 0;
-      return next();
-    }
-
-    const parent = await mongoose.models.Category.findById(this.parentCategory);
-    this.level = parent ? (parent.level || 0) + 1 : 0;
-
-    next();
-  } catch (err) {
-    next(err);
-  }
-});
-
-
-// ✅ PREVENT CIRCULAR PARENT (VERY IMPORTANT)
-categorySchema.pre("save", async function (next) {
-  if (!this.parentCategory) return next();
-
-  if (this.parentCategory.toString() === this._id.toString()) {
-    return next(new Error("Category cannot be its own parent"));
+// ================= NORMALIZE =================
+categorySchema.pre("save", function (next) {
+  if (this.name) {
+    this.name = this.name.trim().replace(/\s+/g, " ");
   }
 
-  let parent = await mongoose.models.Category.findById(this.parentCategory);
-
-  while (parent) {
-    if (parent.parentCategory?.toString() === this._id.toString()) {
-      return next(new Error("Circular parent relationship not allowed"));
-    }
-    parent = await mongoose.models.Category.findById(parent.parentCategory);
+  if (this.keywords?.length) {
+    this.keywords = this.keywords.map((k) =>
+      k.toLowerCase().trim()
+    );
   }
 
   next();
 });
 
+// ================= SLUG =================
+categorySchema.pre("save", async function (next) {
+  try {
+    if (!this.isModified("name") && this.slug) return next();
 
-// ✅ TEXT SEARCH
-categorySchema.index({ name: "text" });
+    const cleanName = this.name
+      ?.toString()
+      .trim()
+      .replace(/\s+/g, " ");
+
+    if (!cleanName) {
+      return next(new Error("Invalid category name for slug generation"));
+    }
+
+    let baseSlug = slugify(cleanName);
+
+    if (!baseSlug) {
+      baseSlug = `category-${Date.now()}`;
+    }
+
+    let slug = baseSlug;
+    let counter = 1;
+
+    while (
+      await mongoose.models.Category.exists({
+        slug,
+        _id: { $ne: this._id },
+      })
+    ) {
+      slug = `${baseSlug}-${counter++}`;
+
+      if (counter > 50) {
+        slug = `${baseSlug}-${Date.now()}`;
+        break;
+      }
+    }
+
+    this.slug = slug;
+
+    if (!this.seoTitle) {
+      this.seoTitle = this.name;
+    }
+
+    if (!this.seoDescription) {
+      this.seoDescription =
+        this.description || `${this.name} services`;
+    }
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default mongoose.model("Category", categorySchema);

@@ -1,3 +1,4 @@
+// backend/controllers/seoController.js
 import City from "../models/City.js";
 import Category from "../models/Category.js";
 

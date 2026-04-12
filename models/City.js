@@ -179,7 +179,11 @@ citySchema.index({
 
 // 🔍 Filter
 citySchema.index({ state: 1, district: 1, status: 1 });
-
+citySchema.index({ slug: 1 });
+citySchema.index({ stateSlug: 1 });
+citySchema.index({ districtSlug: 1 });
+citySchema.index({ featuredScore: -1 });
+citySchema.index({ status: 1 });
 // 🌍 Geo
 citySchema.index({ location: "2dsphere" });
 

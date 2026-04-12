@@ -29,9 +29,11 @@ const businessSchema = new mongoose.Schema(
     },
 
     slug: {
-      type: String,
-      lowercase: true,
-    },
+  type: String,
+  lowercase: true,
+  required: true,
+  unique: true,
+},
 
     services: [String],
 
@@ -53,19 +55,31 @@ const businessSchema = new mongoose.Schema(
     parentCategoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
+      required: true,
     },
 
-    secondaryCategories: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Category",
-      },
-    ],
+    // 🔥 SEO SLUG CACHE (VERY IMPORTANT)
+
+categorySlug: {
+  type: String,
+  lowercase: true,
+  index: true,
+},
+
+    
+// ================= INTENT TAGS =================
+intentTags: [
+  {
+    type: String,
+    lowercase: true,
+    trim: true,
+  }
+],
 
     // ================= LOCATION =================
     address: String,
 
-    city: {
+cityId: {
   type: mongoose.Schema.Types.ObjectId,
   ref: "City",
   required: true,
@@ -74,6 +88,12 @@ const businessSchema = new mongoose.Schema(
 
 // 🔥 KEEP FOR SEO + fallback (NOT primary)
 cityName: {
+  type: String,
+  lowercase: true,
+  index: true,
+},
+
+citySlug: {
   type: String,
   lowercase: true,
   index: true,
@@ -96,12 +116,24 @@ state: String,
       },
     },
 
+    isDeleted: {
+  type: Boolean,
+  default: false,
+  index: true,
+},
+
     // ================= CONTACT =================
     phone: {
       type: String,
       required: true,
-      unique: true,
     },
+
+    phoneVerified: {
+  type: Boolean,
+  default: false,
+},
+
+phoneVerifiedAt: Date,
 
     whatsapp: String,
     email: String,
@@ -117,14 +149,14 @@ state: String,
 
     // ================= BUSINESS HOURS =================
     businessHours: {
-      monday: { open: String, close: String },
-      tuesday: { open: String, close: String },
-      wednesday: { open: String, close: String },
-      thursday: { open: String, close: String },
-      friday: { open: String, close: String },
-      saturday: { open: String, close: String },
-      sunday: { open: String, close: String },
-    },
+  monday: { open: String, close: String, closed: { type: Boolean, default: false } },
+  tuesday: { open: String, close: String, closed: { type: Boolean, default: false } },
+  wednesday: { open: String, close: String, closed: { type: Boolean, default: false } },
+  thursday: { open: String, close: String, closed: { type: Boolean, default: false } },
+  friday: { open: String, close: String, closed: { type: Boolean, default: false } },
+  saturday: { open: String, close: String, closed: { type: Boolean, default: false } },
+  sunday: { open: String, close: String, closed: { type: Boolean, default: false } },
+},
 
     // ================= REVIEWS =================
     averageRating: {
@@ -186,12 +218,34 @@ businessSchema.pre("save", async function (next) {
     if (this.state) this.state = normalizeText(this.state);
 
     // ✅ AUTO FILL cityName for SEO
-if (this.isModified("city")) {
-  const cityDoc = await mongoose.models.City.findById(this.city);
+// ================= AUTO CITY SYNC =================
+if (this.isModified("cityId")) {
+  const cityDoc = await mongoose.models.City.findById(this.cityId);
+
   if (cityDoc) {
-    this.cityName = cityDoc.name.toLowerCase();
-    this.district = cityDoc.district;
-    this.state = cityDoc.state;
+    this.cityName = normalizeCity(cityDoc.name);
+    this.district = normalizeText(cityDoc.district);
+    this.state = normalizeText(cityDoc.state);
+  }
+}
+
+// 🔥 SAFETY: ensure consistency even if manually set somewhere
+if (this.cityName) {
+  this.cityName = normalizeCity(this.cityName);
+}
+
+// ================= AUTO CATEGORY + CITY SLUG =================
+if (this.isModified("categoryId")) {
+  const categoryDoc = await mongoose.models.Category.findById(this.categoryId);
+  if (categoryDoc) {
+    this.categorySlug = categoryDoc.slug;
+  }
+}
+
+if (this.isModified("cityId")) {
+  const cityDoc = await mongoose.models.City.findById(this.cityId);
+  if (cityDoc) {
+    this.citySlug = cityDoc.slug;
   }
 }
 
@@ -201,7 +255,9 @@ if (this.isModified("city")) {
 
     // ✅ Auto slug
     if (!this.slug && this.name) {
-      let baseSlug = slugify(this.name);
+  let baseSlug = slugify(
+    `${this.name}-${this.cityName || ""}`
+  );
       let slug = baseSlug;
       let counter = 1;
 
@@ -220,34 +276,50 @@ if (this.isModified("city")) {
 
 // ================= INDEXES =================
 
-// 🔍 TEXT SEARCH
+// 🔍 TEXT SEARCH (for keyword search)
 businessSchema.index({
   name: "text",
   description: "text",
-  city: "text",
   tags: "text",
   keywords: "text",
+  cityName: "text",
+  categorySlug: "text",
 });
 
-// 📍 GEO INDEX
+// 📍 GEO SEARCH
 businessSchema.index({ location: "2dsphere" });
 
-// ⚡ CORE SEARCH INDEX (VERY IMPORTANT FOR SCALE)
+// 🚀 MAIN SEARCH INDEX (MOST IMPORTANT)
 businessSchema.index({
-  city: 1,
-  status: 1,
+  cityId: 1,
   categoryId: 1,
-  parentCategoryId: 1,
+  status: 1,
+  isDeleted: 1,
   isFeatured: -1,
   featurePriority: -1,
   averageRating: -1,
+  totalReviews: -1,
   views: -1,
 });
 
-// ⚡ SORTING
-businessSchema.index({ averageRating: -1 });
-businessSchema.index({ createdAt: -1 });
-businessSchema.index({ views: -1 });
+// 🚀 CATEGORY TREE SUPPORT
+businessSchema.index({
+  parentCategoryId: 1,
+});
+
+// 🚀 SEO ROUTING
+businessSchema.index({
+  citySlug: 1,
+  categorySlug: 1,
+  slug: 1,
+});
+
+// 🚀 FILTERS (LIGHTWEIGHT)
+businessSchema.index({
+  cityId: 1,
+  categoryId: 1,
+  status: 1,
+});
 
 // ⚡ UNIQUE
 businessSchema.index({ slug: 1 }, { unique: true });
