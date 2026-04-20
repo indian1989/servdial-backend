@@ -8,9 +8,26 @@ dotenv.config();
 
 const app = express();
 
+// 🚨 CRITICAL: DISABLE ETAG (fix 304 issue)
+app.set("etag", false);
+
 // ================= Middleware =================
 app.use(cors());
 app.use(express.json());
+
+// ================= GLOBAL NO CACHE (FINAL) =================
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  next();
+});
+
+app.use((req, res, next) => {
+  res.removeHeader("ETag");
+  next();
+});
 
 // ================= Routes =================
 import authRoutes from "./routes/authRoutes.js";
@@ -21,7 +38,9 @@ import userRoutes from "./routes/userRoutes.js";
 import adminBusinessRoutes from "./routes/adminBusinessRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import cityRoutes from "./routes/cityRoutes.js";
+import adminCityRoutes from "./routes/adminCityRoutes.js";
 import bannerRoutes from "./routes/bannerRoutes.js";
+import adminBannerRoutes from "./routes/adminBannerRoutes.js";
 import homepageRoutes from "./routes/homepageRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
 import leadRoutes from "./routes/leadRoutes.js";
@@ -34,10 +53,9 @@ import sitemapRoutes from "./routes/sitemapRoutes.js";
 
 import healthRoutes from "./routes/health.js";
 // ================= Health Check =================
-app.get("/", (req, res) => {
+app.get("/api", (req, res) => {
   res.json({ message: "🚀 ServDial API Running..." });
 });
-
 
 // ================= API ROUTES =================
 
@@ -49,31 +67,43 @@ app.use("/api/user", userRoutes);
 app.use("/api/business", publicBusinessRoutes);
 // Admin Core
 app.use("/api/admin", adminRoutes);
-app.use("/api/admin/businesses", adminBusinessRoutes);
 
+// Admin Businesses (separate namespace)
+app.use("/api/admin-businesses", adminBusinessRoutes);
 
-// Categories (IMPORTANT FIX)
+// ============= BANNERS =============
+app.use("/api/banners", bannerRoutes);              // public + user
+app.use("/api/admin/banners", adminBannerRoutes);   // admin + superadmin
+
+// Categories
+// ⚠️ TEMP: shared routes (admin + public)
+// TODO: split into adminCategoryRoutes & publicCategoryRoutes later
 app.use("/api/categories", categoryRoutes);
 app.use("/api/admin/categories", categoryRoutes);
-app.use("/api/admin/cities", cityRoutes);
+
+// Public (read only)
+app.use("/api/cities", cityRoutes);
+
+// Admin only
+app.use("/api/admin/cities", adminCityRoutes);
 
 // Others
 app.use("/api/featured", featuredRoutes);
-app.use("/api/cities", cityRoutes);
-app.use("/api/banner", bannerRoutes);
 app.use("/api/homepage", homepageRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/provider", providerRoutes);
-app.use("/api/seo", seoRoutes);
 app.use("/api/location", locationRoutes);
 
 app.use("/health", healthRoutes);
-// Sitemap
-app.use("/", sitemapRoutes);
 
+// Sitemap
+app.use("/api/sitemap", sitemapRoutes);
+
+// SEO PUBLIC ROUTES
+app.use("/", seoRoutes);
 
 // ================= MongoDB =================
 const connectDB = async () => {
@@ -94,6 +124,13 @@ const connectDB = async () => {
   }
 };
 
+// ================= 404 Handler =================
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.originalUrl}`,
+  });
+});
 
 // ================= Error Handler =================
 app.use((err, req, res, next) => {

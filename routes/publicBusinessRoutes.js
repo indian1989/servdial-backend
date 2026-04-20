@@ -19,32 +19,26 @@ import {
 
 const router = express.Router();
 
+/* ================= CORE SEO ROUTE ================= */
+router.get("/:citySlug/:categorySlug", searchBusinesses);
 
-// ================= DISCOVERY (CORE) =================
-router.get("/discover", searchBusinesses);   // 👈 unified default entry
-router.get("/search", searchBusinesses);     // backward compatibility
-
+/* ================= STATIC ROUTES ================= */
 router.get("/suggest", suggestSearch);
 
-
-// ================= RANKED FEEDS =================
 router.get("/featured", getFeaturedBusinesses);
 router.get("/top-rated", getTopRatedBusinesses);
 router.get("/nearby", getNearbyBusinesses);
 router.get("/recommended", getRecommendedBusinesses);
 router.get("/latest", getLatestBusinesses);
 
-
-// ================= METRICS =================
+/* ================= METRICS ================= */
 router.get("/count", getCategoryCount);
 
-
-// ================= BUSINESS DETAIL (SEO) =================
-router.get("/b/:slug", getBusinessBySlug);
-
-
-// ================= RELATED =================
+/* ================= RELATED ================= */
 router.get("/similar/:id", getSimilarBusinesses);
+
+/* ================= BUSINESS DETAIL ================= */
+router.get("/:slug", getBusinessBySlug);
 
 
 // ================= ANALYTICS (UNIFIED SYSTEM) =================
@@ -78,9 +72,5 @@ router.post("/:id/click", trackBusinessClick);
 router.post("/:id/view", incrementViews);
 router.post("/:id/phone", phoneClick);
 router.post("/:id/whatsapp", whatsappClick);
-
-
-// ================= DEFAULT FALLBACK =================
-router.get("/", searchBusinesses);
 
 export default router;

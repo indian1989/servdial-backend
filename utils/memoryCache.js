@@ -1,3 +1,4 @@
+// backend/utils/memoryCache.js
 const cache = new Map();
 
 /* ================= SET CACHE ================= */
@@ -34,3 +35,16 @@ setInterval(() => {
     }
   }
 }, 60000);
+
+export const deleteCache = (key) => {
+  if (!key) return;
+
+  if (cache.has(key)) {
+    cache.delete(key);
+  }
+};
+
+/* ================= CLEAR CACHE ================= */
+export const clearCache = () => {
+  cache.clear();
+};

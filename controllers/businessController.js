@@ -7,8 +7,9 @@ import asyncHandler from "express-async-handler";
 import { buildSearchQuery } from "../utils/buildSearchQuery.js";
 import UserPreference from "../models/UserPreference.js";
 import BusinessClick from "../models/BusinessClick.js";
-import { unifiedRanking } from "../services/ranking/unifiedRankingEngine.js";
-import { computeFinalScore } from "../services/search/fusionScore.js";
+import { resolveCategoryBySlug, getLeafCategoryIds } from "./categoryController.js";
+import { resolveCity } from "../services/cityResolver.js";
+import { rankBusinesses } from "../utils/rankBusinesses.js";
 
 // ================= Role Check =================
 const isAdmin = (user) => ["admin", "superadmin"].includes(user.role);
@@ -224,88 +225,88 @@ export const claimBusiness = asyncHandler(async (req, res) => {
 
 // ================= SEARCH =================
 export const searchBusinesses = asyncHandler(async (req, res) => {
-  // ================= SEARCH CONTEXT =================
-  const isDiscover = req.path.includes("discover");
-  const isLegacySearch = req.path.includes("search") || req.path === "/";
+  const { citySlug, categorySlug, page = 1, limit = 12 } = req.query;
 
-  const {
-    city,
-    category,
-    keyword,
-    page = 1,
-    limit = 12,
-  } = req.query;
+  const pageNum = Math.max(1, parseInt(page));
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
 
-  // ================= QUERY BUILD =================
-  const query = buildSearchQuery({ city, keyword, category });
+  /* =========================================================
+     🔥 STEP 1: RESOLVE CITY
+     ========================================================= */
+  const city = await resolveCity({ citySlug });
 
-  query.status = "approved";
+  if (!city) {
+    return res.status(404).json({
+      success: false,
+      message: "City not found",
+    });
+  }
 
-  const pageNum = Math.max(1, parseInt(page) || 1);
-const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 12));
+  /* =========================================================
+     🔥 STEP 2: RESOLVE CATEGORY
+     ========================================================= */
+  const category = await resolveCategoryBySlug(categorySlug);
 
-  // ================= FETCH =================
-  let businesses = await Business.find(query)
-    .populate("categoryId", "name slug")
-    .select("name slug categoryId cityId cityName averageRating views isFeatured clickScore trendingScore vectorScore")
+  if (!category) {
+    return res.status(404).json({
+      success: false,
+      message: "Category not found",
+    });
+  }
+
+  /* =========================================================
+     🔥 STEP 3: EXPAND TO LEAF IDS
+     ========================================================= */
+  const leafCategoryIds = await getLeafCategoryIds(category._id);
+
+  /* =========================================================
+     🔥 STEP 4: DB QUERY (ID ONLY — GOLDEN RULE)
+     ========================================================= */
+  const businesses = await Business.find({
+    cityId: city._id,
+    categoryId: { $in: leafCategoryIds },
+    status: "approved",
+  })
+    .select("name slug rating averageRating totalReviews reviewCount views isFeatured")
     .lean();
 
-  // ================= NORMALIZATION =================
-  const clamp01 = (n) => Math.max(0, Math.min(1, n));
+    /* =========================================================
+     🔥 STEP 5: RANKING
+     ========================================================= */
+    const ranked = await rankBusinesses(
+  businesses,
+  null, // userLocation (add later)
+  "",   // searchQuery (add later)
+  {},   // intent (add later)
+  req.user?._id || null,
+  city._id
+);
 
-  const normalizeSignals = (b) => ({
-    keywordScore: clamp01(b.keywordScore || 0),
-    ratingScore: clamp01((b.averageRating || 0) / 5),
-    clickScore: clamp01(b.clickScore || 0),
-    distanceScore: clamp01(b.distanceScore ?? 1), 
-    trendingScore: clamp01(b.trendingScore || 0),
-    vectorScore: clamp01(b.vectorScore || 0)
-  });
-
-  // ================= RANKING ENGINE =================
-businesses = businesses.map((b) => {
-  const normalized = normalizeSignals(b);
-
-  const finalScore = computeFinalScore({
-  ...normalized,
-  featureBoost: b.isFeatured ? 1 : 0
-});
-
-  return {
-    id: b._id,
-    name: b.name,
-    slug: b.slug,
-    categoryId: b.categoryId,
-    cityId: b.cityId,
-    cityName: b.cityName,
-    averageRating: b.averageRating,
-    views: b.views,
-    isFeatured: b.isFeatured,
-    featureBoost: b.isFeatured ? 1 : 0,
-
-    finalScore
-  };
-});
-
-// ================= SORT =================
-businesses.sort((a, b) => {
-  const diff = (b.finalScore || 0) - (a.finalScore || 0);
-  return diff !== 0 ? diff : (b.views || 0) - (a.views || 0);
-});
-
-  // ================= PAGINATION =================
+  /* =========================================================
+     🔥 STEP 6: PAGINATION
+     ========================================================= */
   const start = (pageNum - 1) * limitNum;
-  const end = start + limitNum;
+  const paginated = ranked.slice(start, start + limitNum);
 
-  const paginated = businesses.slice(start, end);
-
-  // ================= TOTAL =================
-  const total = businesses.length;
-
+  /* =========================================================
+     🔥 STEP 7: RESPONSE (STANDARDIZED)
+     ========================================================= */
   res.json({
     success: true,
-    businesses: paginated,
-    total
+    data: paginated,
+    meta: {
+      total: ranked.length,
+      page: pageNum,
+      pages: Math.ceil(ranked.length / limitNum),
+      city: {
+        name: city.name,
+        slug: city.slug,
+      },
+      category: {
+        name: category.name,
+        slug: category.slug,
+      },
+    },
   });
 });
 
@@ -365,8 +366,25 @@ export const getLatestBusinesses = asyncHandler(async (req, res) => {
 
 // ================= RECOMMENDED =================
 export const getRecommendedBusinesses = asyncHandler(async (req, res) => {
-  const data = await unifiedRanking(req.query);
-  res.json(data);
+  let businesses = await Business.find({
+    status: "approved"
+  })
+    .limit(50)
+    .lean();
+
+  const ranked = await rankBusinesses(
+    businesses,
+    null,
+    "",
+    { recommendation: true },
+    req.user?._id || null,
+    null
+  );
+
+  res.json({
+    success: true,
+    data: ranked
+  });
 });
 
 // ================= NEARBY =================
@@ -438,11 +456,39 @@ export const getProviderBusinesses = async (req, res) => {
 export const trackBusinessClick = asyncHandler(async (req, res) => {
   const { keyword, city } = req.body;
 
+  const ip =
+    req.headers["x-forwarded-for"]?.split(",")[0] ||
+    req.socket.remoteAddress ||
+    null;
+
+  const userAgent = req.headers["user-agent"] || null;
+
+  const fingerprint = `${ip}-${userAgent}`;
+
+  // 🔥 PREVENT SPAM (1 click per 10 minutes)
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+  const existingClick = await BusinessClick.findOne({
+    business: req.params.id,
+    $or: [
+      { user: req.user?._id || null },
+      { fingerprint }
+    ],
+    createdAt: { $gte: tenMinutesAgo }
+  });
+
+  if (existingClick) {
+    return res.json({ success: true, deduplicated: true });
+  }
+
   await BusinessClick.create({
     business: req.params.id,
     user: req.user?._id || null,
     keyword: keyword || null,
     cityId: city || null,
+    ipAddress: ip,
+    userAgent,
+    fingerprint
   });
 
   res.json({ success: true });
@@ -453,32 +499,60 @@ export const incrementViews = asyncHandler(async (req, res) => {
   const businessId = req.params.id;
   const userId = req.user?._id || null;
 
-  // Record in BusinessView collection
+  const ip =
+    req.headers["x-forwarded-for"]?.split(",")[0] ||
+    req.socket.remoteAddress ||
+    null;
+
+  const userAgent = req.headers["user-agent"] || null;
+
+  const fingerprint = `${ip}-${userAgent}`;
+
+  // 🔥 PREVENT SPAM (1 view per 15 minutes)
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+
+  const existingView = await BusinessView.findOne({
+    business: businessId,
+    $or: [
+      { user: userId },
+      { fingerprint }
+    ],
+    createdAt: { $gte: fifteenMinutesAgo }
+  });
+
+  if (existingView) {
+    return res.json({ success: true, deduplicated: true });
+  }
+
+  // ✅ VALID VIEW → STORE
   await BusinessView.create({
     business: businessId,
     user: userId,
-    viewedAt: new Date(),
+    ipAddress: ip,
+    userAgent,
+    fingerprint
   });
 
-  // Increment total views in Business
+  // ✅ SAFE INCREMENT
   await Business.findByIdAndUpdate(businessId, {
-  $inc: {
-    views: 1,
-    trendingScore: 0.01
-  }
-});
+    $inc: {
+      views: 1,
+      trendingScore: 0.01
+    }
+  });
 
-  // Update UserPreference if user is logged in
+  // ✅ USER PREFERENCE UPDATE (UNCHANGED)
   if (userId) {
     const business = await Business.findById(businessId).select("categoryId parentCategoryId");
+
     if (business) {
       await UserPreference.findOneAndUpdate(
         { user: userId },
-        { 
-          $inc: { 
-            [`categories.${business.categoryId}`]: 1, 
-            [`parentCategories.${business.parentCategoryId}`]: 1 
-          } 
+        {
+          $inc: {
+            [`categories.${business.categoryId}`]: 1,
+            [`parentCategories.${business.parentCategoryId}`]: 1
+          }
         },
         { upsert: true, new: true }
       );

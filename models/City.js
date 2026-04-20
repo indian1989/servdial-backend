@@ -13,11 +13,22 @@ const citySchema = new mongoose.Schema(
   },
 
   slug: {
+  type: String,
+  required: false,
+  unique: true,
+  lowercase: true,
+  trim: true,
+  match: /^[a-z0-9-]+$/,   // ✅ enforce URL-safe slug
+  index: true
+},
+
+slugHistory: [
+  {
     type: String,
-    unique: true,
     lowercase: true,
-    index: true
+    trim: true,
   },
+],
 
   // ✅ KEEP THESE (YOU REMOVED EARLIER - WRONG)
   state: {
@@ -112,11 +123,15 @@ citySchema.index(
 );
 
 
-// ================= AUTO SLUG =================
-citySchema.pre("save", async function(next){
+// ================= AUTO SLUG + HISTORY (BLUEPRINT STRICT) =================
+citySchema.pre("save", async function (next) {
   try {
-    if (!this.isModified("name")) return next();
+    // ================= VALIDATION SAFETY =================
+    if (!this.name || !this.state || !this.district) {
+      return next(new Error("Missing required fields before save"));
+    }
 
+    // ================= SLUG =================
     let baseSlug = slugify(this.name);
     let slug = baseSlug;
     let count = 1;
@@ -124,49 +139,40 @@ citySchema.pre("save", async function(next){
     while (
       await mongoose.models.City.findOne({
         slug,
-        _id: { $ne: this._id }
+        _id: { $ne: this._id },
       })
     ) {
       slug = `${baseSlug}-${count++}`;
     }
 
+    // 🔥 slugHistory support (BLUEPRINT)
+    if (this.slug && this.slug !== slug) {
+      this.slugHistory = this.slugHistory || [];
+      if (!this.slugHistory.includes(this.slug)) {
+        this.slugHistory.push(this.slug);
+      }
+    }
+
     this.slug = slug;
 
+    // ================= STATE / DISTRICT SLUG =================
+    this.stateSlug = slugify(this.state);
+    this.districtSlug = slugify(this.district);
+
+    // ================= GEO =================
+    if (this.latitude && this.longitude) {
+      this.location = {
+        type: "Point",
+        coordinates: [this.longitude, this.latitude],
+      };
+    }
+
     next();
+
   } catch (err) {
     next(err);
   }
 });
-
-
-// ================= AUTO STATE + DISTRICT SLUG =================
-citySchema.pre("save", function(next){
-
-  if (this.state) {
-    this.stateSlug = slugify(this.state);
-  }
-
-  if (this.district) {
-    this.districtSlug = slugify(this.district);
-  }
-
-  next();
-});
-
-
-// ================= AUTO GEO SYNC =================
-citySchema.pre("save", function(next){
-
-  if (this.latitude && this.longitude) {
-    this.location = {
-      type: "Point",
-      coordinates: [this.longitude, this.latitude]
-    };
-  }
-
-  next();
-});
-
 
 // ================= INDEXES =================
 
@@ -182,10 +188,13 @@ citySchema.index({ state: 1, district: 1, status: 1 });
 citySchema.index({ slug: 1 });
 citySchema.index({ stateSlug: 1 });
 citySchema.index({ districtSlug: 1 });
-citySchema.index({ featuredScore: -1 });
 citySchema.index({ status: 1 });
+
+citySchema.index({ slug: 1, status: 1 });
+citySchema.index({ slugHistory: 1 });
+
 // 🌍 Geo
 citySchema.index({ location: "2dsphere" });
 
 
-export default mongoose.model("City", citySchema);
+export default mongoose.models.City || mongoose.model("City", citySchema);

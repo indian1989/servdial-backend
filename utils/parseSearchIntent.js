@@ -1,5 +1,3 @@
-// backend/utils/parseSearchIntent.js
-
 export const parseSearchIntent = (keyword = "") => {
   if (!keyword) return {};
 
@@ -10,6 +8,8 @@ export const parseSearchIntent = (keyword = "") => {
     minRating: null,
     pricePreference: null,
     openNow: false,
+    isNearMe: false,
+    isEmergency: false,
   };
 
   /* ================= RATING INTENT ================= */
@@ -37,8 +37,13 @@ export const parseSearchIntent = (keyword = "") => {
   }
 
   /* ================= NEAR ME ================= */
-  if (query.includes("near me")) {
-    intent.nearMe = true;
+  if (query.includes("near me") || query.includes("nearby")) {
+    intent.isNearMe = true;
+  }
+
+  /* ================= EMERGENCY ================= */
+  if (query.includes("emergency") || query.includes("urgent")) {
+    intent.isEmergency = true;
   }
 
   return intent;

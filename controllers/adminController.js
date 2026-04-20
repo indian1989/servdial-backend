@@ -132,22 +132,7 @@ export const getBusinessStats = async (req, res) => {
   }
 };
 
-/* ================================
-   CITY
-================================ */
-export const createCity = async (req, res) => {
-  try {
-    const { city, state } = req.body;
-    const existing = await City.findOne({ city, state });
-    if (existing) return res.status(400).json({ success: false, message: "City already exists" });
 
-    const newCity = await City.create({ city, state });
-    res.status(201).json({ success: true, message: "City created successfully", city: newCity });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
-};
 
 /* ================================
    CATEGORY

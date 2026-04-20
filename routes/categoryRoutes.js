@@ -19,14 +19,14 @@ const router = express.Router();
 
 /* ================= PUBLIC ================= */
 
-// Flat + tree (already included in controller)
-router.get("/", getAllCategories);
-
-// Trending categories
+// 🔥 Trending (must come before dynamic routes)
 router.get("/trending", getTrendingCategories);
 
-// Better REST naming (cleaner)
-router.get("/by-slug/:slug", getCategoryBySlug);
+// 🔥 Get by slug (SEO standard)
+router.get("/:slug", getCategoryBySlug);
+
+// 🔥 Get flat categories (with parent filter)
+router.get("/", getAllCategories);
 
 /* ================= ADMIN ================= */
 
@@ -46,7 +46,7 @@ router.put(
   updateCategory
 );
 
-// Delete category
+// Delete category (soft delete)
 router.delete(
   "/:id",
   protect,

@@ -1,405 +1,216 @@
 // backend/controllers/cityController.js
-import City from "../models/City.js";
-import slugify from "../utils/slugify.js";
+import {
+  createCityService,
+  getCitiesService,
+  deleteCityService,
+  updateCityService,
+  featureCityService,
+  getStatesService,
+  getDistrictsService,
+  getCitiesByDistrictService,
+} from "../services/cityService.js";
 
-/* ================= GET ALL CITIES ================= */
+import mongoose from "mongoose";
+
+// 🚨 IMPORTANT:
+// City slug resolution MUST happen inside cityService
+// Controller should NEVER resolve slugs directly
+
+const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
+
+/* ================= GET ================= */
 export const getCities = async (req, res) => {
   try {
-    const { search, state, status } = req.query;
+    const result = await getCitiesService(req.query);
 
-    let query = {};
+    res.json({
+      success: true,
+      cities: result.cities || [],   // ✅ FIXED
+      total: result.total || 0,
+      page: result.page || 1,
+      pages: result.pages || 1,
+    });
 
-    if (state) query.state = state;
-    if (status) {
-  query.status = status;
-} else {
-  query.status = "active"; // default
-}
-
-    if (search) {
-  const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-  query.$or = [
-    { name: new RegExp("^" + safe, "i") },
-    { district: new RegExp("^" + safe, "i") },
-    { state: new RegExp("^" + safe, "i") },
-  ];
-}
-
-    const page = Number(req.query.page) || 1;
-const limit = Number(req.query.limit) || 50;
-const skip = (page - 1) * limit;
-
-const [cities, total] = await Promise.all([
-  City.find(query)
-    .sort({ state: 1, district: 1, name: 1 })
-    .skip(skip)
-    .limit(limit)
-    .lean(),
-
-  City.countDocuments(query),
-]);
-
-res.json({
-  success: true,
-  total,
-  page,
-  pages: Math.ceil(total / limit),
-  cities,
-});
-
-  } catch (error) {
-    console.error("GET CITIES ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error",
+    });
   }
 };
 
-
-/* ================= ADD CITY ================= */
+/* ================= CREATE ================= */
 export const addCity = async (req, res) => {
   try {
-    const { name, state, district, latitude, longitude } = req.body;
-
-    if (!name || !state || !district) {
-      return res.status(400).json({
-        success: false,
-        message: "City, district and state are required",
-      });
-    }
-
-    const cleanName = name.trim();
-    const cleanState = state.trim();
-    const cleanDistrict = district.trim();
-
-    try {
-  const city = await City.create({
-    name: cleanName,
-    state: cleanState,
-    district: cleanDistrict,
-    slug: slugify(cleanName),
-    stateSlug: slugify(cleanState),
-    districtSlug: slugify(cleanDistrict),
-    latitude,
-    longitude,
-  });
-
-  return res.status(201).json({
-    success: true,
-    message: "City added successfully",
-    city,
-  });
-
-} catch (err) {
-  if (err.code === 11000) {
-    return res.status(400).json({
-      success: false,
-      message: "City already exists",
-    });
-  }
-  throw err;
-}
-
-  } catch (error) {
-    console.error("ADD CITY ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
+    const city = await createCityService(req.body);
+    res.status(201).json({
+  success: true,
+  data: city,
+  meta: {
+    timestamp: new Date().toISOString(),
+  },
+});
+  } catch (err) {
+    res.status(500).json({
+  success: false,
+  message: err.message || "Server error",
+});
   }
 };
 
-
-/* ================= BULK UPLOAD ================= */
-export const bulkUploadCities = async (req, res) => {
-  try {
-    const cities = req.body.cities;
-
-    if (!Array.isArray(cities) || cities.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No cities provided",
-      });
-    }
-
-    const validCities = [];
-    const failed = [];
-    const uniqueSet = new Set();
-
-    for (let i = 0; i < cities.length; i++) {
-      const row = cities[i];
-
-      const name = row.name?.trim();
-      const district = row.district?.trim();
-      const state = row.state?.trim();
-
-      if (!name || !district || !state) {
-        failed.push({ row: i + 1, reason: "Missing fields" });
-        continue;
-      }
-
-      const key = `${name.toLowerCase()}-${district.toLowerCase()}-${state.toLowerCase()}`;
-
-      if (uniqueSet.has(key)) {
-        failed.push({ row: i + 1, reason: "Duplicate in file" });
-        continue;
-      }
-
-      uniqueSet.add(key);
-
-      validCities.push({
-        name,
-        district,
-        state,
-        slug: slugify(name),
-        stateSlug: slugify(state),
-        districtSlug: slugify(district),
-      });
-    }
-
-    let existingSet = new Set();
-
-if (validCities.length > 0) {
-  const existingCities = await City.find({
-  $or: validCities.map(c => ({
-    name: c.name,
-    district: c.district,
-    state: c.state,
-  }))
-}).lean();
-
-  existingSet = new Set(
-    existingCities.map(
-      c =>
-        `${c.name.toLowerCase()}-${c.district.toLowerCase()}-${c.state.toLowerCase()}`
-    )
-  );
-}
-
-    const operations = [];
-    let skipped = 0;
-
-    for (const c of validCities) {
-      const key = `${c.name.toLowerCase()}-${c.district.toLowerCase()}-${c.state.toLowerCase()}`;
-
-      if (existingSet.has(key)) {
-        skipped++;
-        continue;
-      }
-
-      operations.push({
-        insertOne: { document: c },
-      });
-    }
-
-    let inserted = 0;
-
-    if (operations.length > 0) {
-      const result = await City.bulkWrite(operations, { ordered: false });
-      inserted = result.insertedCount || operations.length;
-    }
-
-    res.json({
-      success: true,
-      message: "Bulk upload completed",
-      total: cities.length,
-      inserted,
-      skipped,
-      failedCount: failed.length,
-      failed,
-    });
-
-  } catch (error) {
-    console.error("BULK UPLOAD ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-
-/* ================= UPDATE CITY ================= */
+/* ================= UPDATE ================= */
 export const updateCity = async (req, res) => {
+  
+  if (!isValidId(req.params.id)) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid city ID",
+  });
+}
+
   try {
-    const { id } = req.params;
-
-    const city = await City.findById(id);
-    if (!city) {
-      return res.status(404).json({ success: false, message: "City not found" });
-    }
-
-    const updates = { ...req.body };
-
-    if (updates.name) updates.slug = slugify(updates.name);
-    if (updates.state) updates.stateSlug = slugify(updates.state);
-    if (updates.district) updates.districtSlug = slugify(updates.district);
-
-    const updatedCity = await City.findByIdAndUpdate(
-      id,
-      updates,
-      { new: true, runValidators: true }
-    );
-
+    const city = await updateCityService(req.params.id, req.body);
     res.json({
-      success: true,
-      message: "City updated successfully",
-      city: updatedCity,
-    });
+  success: true,
+  data: city,
+  meta: {
+    timestamp: new Date().toISOString(),
+  },
+});
 
-  } catch (error) {
-    console.error("UPDATE CITY ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
+deleteCache(`city:slug:${city.slug}`);
+deleteCache(`city:id:${city._id}`);
+
+  } catch (err) {
+    res.status(500).json({
+  success: false,
+  message: err.message || "Server error",
+});
   }
 };
 
-
-/* ================= DELETE CITY ================= */
+/* ================= DELETE ================= */
 export const deleteCity = async (req, res) => {
+  
+  if (!isValidId(req.params.id)) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid city ID",
+  });
+}
+
   try {
-    const city = await City.findById(req.params.id);
-
-    if (!city) {
-      return res.status(404).json({ success: false, message: "City not found" });
-    }
-
-    await city.deleteOne();
-
+    await deleteCityService(req.params.id);
     res.json({
-      success: true,
-      message: "City deleted successfully",
-    });
+  success: true,
+  data: null,
+  meta: {
+    timestamp: new Date().toISOString(),
+  },
+});
 
-  } catch (error) {
-    console.error("DELETE CITY ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-
-/* ================= STATES ================= */
-export const getStates = async (req, res) => {
-  try {
-    const states = await City.aggregate([
-      {
-        $group: {
-          _id: "$stateSlug",
-          name: { $first: "$state" }
-        }
-      },
-      { $sort: { name: 1 } }
-    ]);
-
-    res.json({ success: true, states });
+deleteCache(`city:slug:${city.slug}`);
+deleteCache(`city:id:${city._id}`);
 
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({
+  success: false,
+  message: err.message || "Server error",
+});
   }
 };
-
-
-/* ================= DISTRICTS ================= */
-export const getDistrictsByState = async (req, res) => {
-  try {
-    const { stateSlug } = req.params;
-
-    const districts = await City.aggregate([
-      { $match: { stateSlug } },
-      {
-        $group: {
-          _id: "$districtSlug",
-          name: { $first: "$district" }
-        }
-      },
-      { $sort: { name: 1 } }
-    ]);
-
-    res.json({ success: true, districts });
-
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-
-/* ================= CITIES BY DISTRICT ================= */
-export const getCitiesByDistrict = async (req, res) => {
-  try {
-    const { districtSlug } = req.params;
-
-    const cities = await City.find({
-      districtSlug,
-      status: "active"
-    }).sort({ name: 1 }).lean();
-
-    res.json({
-      success: true,
-      cities,
-    });
-
-  } catch (error) {
-    console.error("GET CITIES BY DISTRICT ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
 
 /* ================= FEATURE ================= */
-export const getFeaturedCities = async (req, res) => {
-  try {
-    const cities = await City.find({
-      status: "active",
-      featuredScore: { $gt: 0 },
-    })
-      .sort({ featuredScore: -1, population: -1, name: 1 })
-      .limit(12)
-      .lean();
-
-    res.json({
-      success: true,
-      count: cities.length,
-      cities,
-    });
-
-  } catch (error) {
-    console.error("FEATURED CITY ERROR:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
 export const markCityAsFeatured = async (req, res) => {
   try {
-    const city = await City.findById(req.params.id);
-
-    if (!city) {
-      return res.status(404).json({ success: false, message: "City not found" });
-    }
-
-    city.featuredScore = 10; // default boost
-await city.save();
-
+    const city = await featureCityService(req.params.id, 10);
     res.json({
-      success: true,
-      message: `${city.name} marked as featured`,
-      city,
-    });
-
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+  success: true,
+  data: city,
+  meta: {
+    timestamp: new Date().toISOString(),
+  },
+});
+  } catch (err) {
+    res.status(500).json({
+  success: false,
+  message: err.message || "Server error",
+});
   }
 };
 
 export const unmarkCityAsFeatured = async (req, res) => {
   try {
-    const city = await City.findById(req.params.id);
-
-    if (!city) {
-      return res.status(404).json({ success: false, message: "City not found" });
-    }
-
-    city.featuredScore = 0;
-await city.save();
-
+    const city = await featureCityService(req.params.id, 0);
     res.json({
-      success: true,
-      message: `${city.name} removed from featured`,
-      city,
-    });
+  success: true,
+  data: city,
+  meta: {
+    timestamp: new Date().toISOString(),
+  },
+});
+  } catch (err) {
+    res.status(500).json({
+  success: false,
+  message: err.message || "Server error",
+});
+  }
+};
 
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+/* ================= META ================= */
+export const getStates = async (req, res) => {
+  try {
+    const states = await getStatesService();
+    res.json({
+  success: true,
+  data: states,
+  meta: {
+    total: states.length,
+    timestamp: new Date().toISOString(),
+  },
+});
+  } catch (err) {
+    res.status(500).json({
+  success: false,
+  message: err.message || "Server error",
+});
+  }
+};
+
+export const getDistrictsByState = async (req, res) => {
+  try {
+    const districts = await getDistrictsService(req.params.stateSlug);
+    res.json({
+  success: true,
+  data: districts,
+  meta: {
+    total: districts.length,
+    timestamp: new Date().toISOString(),
+  },
+});
+  } catch (err) {
+    res.status(500).json({
+  success: false,
+  message: err.message || "Server error",
+});
+  }
+};
+
+export const getCitiesByDistrict = async (req, res) => {
+  try {
+    const cities = await getCitiesByDistrictService(req.params.districtSlug);
+    res.json({
+  success: true,
+  data: cities,
+  meta: {
+    total: cities.length,
+    timestamp: new Date().toISOString(),
+  },
+});
+  } catch (err) {
+    res.status(500).json({
+  success: false,
+  message: err.message || "Server error",
+});
   }
 };

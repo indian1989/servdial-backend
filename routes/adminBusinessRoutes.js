@@ -6,7 +6,6 @@ import asyncHandler from "express-async-handler";
 import Business from "../models/Business.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 import {
-  createCity,
   createCategory,
   getDashboardStats,
   getBusinessStats
@@ -195,7 +194,6 @@ router.get(
   })
 );
 
-router.post("/city", createCity);
 router.post("/category", createCategory);
 
 router.get("/dashboard", getDashboardStats);

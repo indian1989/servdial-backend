@@ -37,6 +37,25 @@ const reviewSchema = new mongoose.Schema(
     trim: true
   },
 
+  ipAddress: {
+  type: String,
+  index: true
+},
+
+userAgent: {
+  type: String
+},
+
+fingerprint: {
+  type: String,
+  index: true
+},
+
+createdDay: {
+  type: String,
+  index: true
+},
+
   // moderation
   isApproved: {
     type: Boolean,
@@ -63,6 +82,11 @@ const reviewSchema = new mongoose.Schema(
 reviewSchema.index({ business: 1, createdAt: -1 });
 
 // Prevent duplicate review from same user
-reviewSchema.index({ business: 1, user: 1 }, { unique: false });
+reviewSchema.index(
+  { business: 1, user: 1 },
+  { unique: true, partialFilterExpression: { user: { $ne: null } } }
+);
+
+reviewSchema.index({ business: 1, fingerprint: 1 });
 
 export default mongoose.model("Review", reviewSchema);

@@ -13,10 +13,19 @@ const categorySchema = new mongoose.Schema(
     },
 
     slug: {
-      type: String,
-      unique: true,
-      lowercase: true,
-    },
+  type: String,
+  lowercase: true,
+  required: true,
+  unique: true,
+},
+
+    slugHistory: [
+  {
+    type: String,
+    lowercase: true,
+    trim: true,
+  },
+],
 
     description: {
       type: String,
@@ -29,14 +38,6 @@ const categorySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       default: null,
-      index: true,
-    },
-
-    // 0 = Parent Category (Home Services)
-    // 1 = Child Category (Electrician)
-    level: {
-      type: Number,
-      default: 0,
       index: true,
     },
 
@@ -98,6 +99,10 @@ const categorySchema = new mongoose.Schema(
   }
 );
 
+categorySchema.pre("init", function () {
+  this._originalSlug = this.slug;
+});
+
 // ================= UNIQUE =================
 categorySchema.index(
   { name: 1 },
@@ -141,49 +146,47 @@ categorySchema.pre("save", function (next) {
 // ================= SLUG =================
 categorySchema.pre("save", async function (next) {
   try {
-    if (!this.isModified("name") && this.slug) return next();
-
-    const cleanName = this.name
-      ?.toString()
-      .trim()
-      .replace(/\s+/g, " ");
-
-    if (!cleanName) {
-      return next(new Error("Invalid category name for slug generation"));
+    // store original slug
+    if (!this.isNew && !this._originalSlug) {
+      const existing = await mongoose.models.Category.findById(this._id).select("slug");
+      this._originalSlug = existing?.slug;
     }
 
-    let baseSlug = slugify(cleanName);
+    // generate slug ONLY if new
+    if (this.isNew && this.name) {
+      let baseSlug = slugify(this.name);
+      let slug = baseSlug;
+      let counter = 1;
 
-    if (!baseSlug) {
-      baseSlug = `category-${Date.now()}`;
-    }
-
-    let slug = baseSlug;
-    let counter = 1;
-
-    while (
-      await mongoose.models.Category.exists({
-        slug,
-        _id: { $ne: this._id },
-      })
-    ) {
-      slug = `${baseSlug}-${counter++}`;
-
-      if (counter > 50) {
-        slug = `${baseSlug}-${Date.now()}`;
-        break;
+      while (
+        await mongoose.models.Category.exists({ slug })
+      ) {
+        slug = `${baseSlug}-${counter++}`;
       }
+
+      this.slug = slug;
     }
 
-    this.slug = slug;
+    // 🚨 prevent accidental slug overwrite
+if (!this.isNew && this.isModified("slug")) {
+  // allow only if explicitly bypassed (admin control later)
+  if (!this._allowSlugUpdate) {
+    return next(new Error("Slug cannot be modified directly"));
+  }
 
-    if (!this.seoTitle) {
-      this.seoTitle = this.name;
+  this.slugHistory = this.slugHistory || [];
+
+  if (this._originalSlug && this._originalSlug !== this.slug) {
+    if (!this.slugHistory.includes(this._originalSlug)) {
+      this.slugHistory.push(this._originalSlug);
     }
+  }
+}
 
+    // SEO defaults
+    if (!this.seoTitle) this.seoTitle = this.name;
     if (!this.seoDescription) {
-      this.seoDescription =
-        this.description || `${this.name} services`;
+      this.seoDescription = this.description || `${this.name} services`;
     }
 
     next();
@@ -191,5 +194,13 @@ categorySchema.pre("save", async function (next) {
     next(err);
   }
 });
+
+categorySchema.index({
+  parentCategory: 1,
+  status: 1,
+  order: 1,
+});
+
+categorySchema.index({ slug: 1 }, { unique: true });
 
 export default mongoose.model("Category", categorySchema);

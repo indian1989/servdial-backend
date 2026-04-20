@@ -56,14 +56,12 @@ export const buildSearchQuery = ({
   };
 
   /* ================= CITY ================= */
-
 if (city) {
-  if (mongoose.Types.ObjectId.isValid(city)) {
-    query.cityId = new mongoose.Types.ObjectId(city);
-  } else {
-    // fallback (SEO/search)
-    query.citySlug = city.trim().toLowerCase();
+  if (!mongoose.Types.ObjectId.isValid(city)) {
+    throw new Error("Invalid cityId: must be ObjectId");
   }
+
+  query.cityId = new mongoose.Types.ObjectId(city);
 }
 
   /* ================= CATEGORY ================= */

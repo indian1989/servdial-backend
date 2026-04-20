@@ -4,16 +4,15 @@ import BusinessClick from "../../models/BusinessClick.js";
 import mongoose from "mongoose";
 import { computeFinalScore } from "../search/fusionScore.js";
 import { parseSearchIntent } from "../../utils/parseSearchIntent.js";
+import { resolveCity } from "../cityResolver.js";
 
-/**
- * Calculate real distance between two geo points (Haversine formula)
- */
+/* ================= DISTANCE ================= */
 function getDistanceKm(coords, lat, lng) {
   if (!coords || lat == null || lng == null) return null;
 
   const [bLng, bLat] = coords;
 
-  const R = 6371; // Earth radius in km
+  const R = 6371;
   const dLat = ((bLat - lat) * Math.PI) / 180;
   const dLng = ((bLng - lng) * Math.PI) / 180;
 
@@ -26,66 +25,82 @@ function getDistanceKm(coords, lat, lng) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-/**
- * Detect search intent for smarter ranking
- */
-function detectIntent(context) {
-  const q = (context.q || "").toLowerCase();
-
-  return {
-    isNearMe: q.includes("near") || q.includes("near me"),
-    isBest: q.includes("best"),
-    isEmergency: q.includes("emergency") || q.includes("urgent"),
-  };
-}
-
-/**
- * Unified Ranking Engine (Production Grade)
- */
+/* ================= MAIN ================= */
 export async function unifiedRanking(context = {}) {
   const {
-    city,
-    category,
-    limit = 12,
+    q,
+    candidates = [],
+    citySlug,
+    cityName,
     lat,
     lng,
+    category,
+    limit = 12,
   } = context;
 
-  const match = { status: "approved" };
-
-  // ================= CITY FILTER =================
- if (city && mongoose.Types.ObjectId.isValid(city)) {
-  match.cityId = new mongoose.Types.ObjectId(city);
-}
-if (city && !mongoose.Types.ObjectId.isValid(city)) {
-  match.citySlug = city.toLowerCase();
-}
-
-  // ================= CATEGORY FILTER =================
-  if (category) {
-    if (mongoose.Types.ObjectId.isValid(category)) {
-      const catId = new mongoose.Types.ObjectId(category);
-
-      match.$or = [
-        { categoryId: catId },
-        { parentCategoryId: catId },
-      ];
-    }
+  /* ================= SCORE MAP ================= */
+  const scoreMap = {};
+  if (candidates.length > 0) {
+    candidates.forEach((c) => {
+      scoreMap[c._id.toString()] = {
+        vectorScore: c.vectorScore || 0,
+        keywordScore: c.keywordScore || 0,
+      };
+    });
   }
 
-  // ================= FETCH LIMIT =================
+  /* ================= CITY RESOLUTION ================= */
+  let resolvedCity = null;
+
+  if (citySlug || cityName || (lat && lng)) {
+    resolvedCity = await resolveCity({
+      citySlug,
+      cityName,
+      latitude: lat,
+      longitude: lng,
+    });
+  }
+
+  /* ================= MATCH ================= */
+  const match = { status: "approved" };
+
+  // 🔥 CANDIDATE FILTER
+  if (candidates.length > 0) {
+    match._id = {
+      $in: candidates.map((c) => c._id),
+    };
+  }
+
+  // 🔥 CITY FILTER (STRICT BLUEPRINT)
+  if (resolvedCity?._id) {
+    match.cityId = new mongoose.Types.ObjectId(resolvedCity._id);
+  }
+
+  // 🔥 CATEGORY FILTER
+  if (category && mongoose.Types.ObjectId.isValid(category)) {
+    const catId = new mongoose.Types.ObjectId(category);
+
+    match.$or = [
+      { categoryId: catId },
+      { parentCategoryId: catId },
+    ];
+  }
+
+  /* ================= FETCH ================= */
   const fetchLimit = Math.min(
-  Math.max(Number(limit) * 5, 50),
-  150
-);
+    Math.max(Number(limit) * 5, 50),
+    150
+  );
 
   const businesses = await Business.find(match)
     .select(`
-  _id name slug city averageRating totalReviews views
-  isFeatured featurePriority createdAt tags location
-  categoryId parentCategoryId
-  phone images logo isVerified businessHours
-`)
+      _id name slug
+      averageRating totalReviews views
+      isFeatured featurePriority
+      createdAt tags location
+      categoryId parentCategoryId
+      phone images logo isVerified businessHours
+    `)
     .limit(fetchLimit)
     .lean();
 
@@ -93,7 +108,7 @@ if (city && !mongoose.Types.ObjectId.isValid(city)) {
 
   const businessIds = businesses.map((b) => b._id);
 
-  // ================= CLICK DATA =================
+  /* ================= CLICK DATA ================= */
   const last7Days = new Date();
   last7Days.setDate(last7Days.getDate() - 7);
 
@@ -117,18 +132,24 @@ if (city && !mongoose.Types.ObjectId.isValid(city)) {
     clickMap[c._id.toString()] = c.clickScore;
   });
 
-  // ================= INTENT =================
-  const parsedIntent = context.q ? parseSearchIntent(context.q) : {};
+  /* ================= INTENT ================= */
+  const parsedIntent = q ? parseSearchIntent(q) : {};
 
-  // ================= SCORING =================
+  /* ================= SCORING ================= */
   const scored = businesses.map((b) => {
     const id = b._id.toString();
+
     const clicks = clickMap[id] || 0;
 
+    const baseScores = scoreMap[id] || {};
+    const vectorScore = baseScores.vectorScore || 0;
+    const keywordScore = baseScores.keywordScore || 0;
+
+    /* FEATURE SCORE */
     const featureScore =
       (b.isFeatured ? 1 : 0) + (b.featurePriority || 0) * 0.2;
 
-    // ================= DISTANCE SCORE =================
+    /* DISTANCE SCORE */
     const distanceKm = getDistanceKm(
       b.location?.coordinates,
       lat,
@@ -138,65 +159,82 @@ if (city && !mongoose.Types.ObjectId.isValid(city)) {
     let distanceScore = 0;
 
     if (distanceKm !== null) {
-      // exponential decay (Google-like behavior)
       distanceScore = Math.exp(-distanceKm / 10);
 
-      // intent boost
-      if (parsedIntent?.isNearMe) distanceScore *= 2;
+      if (parsedIntent?.nearMe) distanceScore *= 2;
       if (parsedIntent?.isEmergency) distanceScore *= 3;
     }
 
-    // ================= FINAL FUSION SCORE =================
-    let ratingScore = b.averageRating || 0;
+    /* RATING SCORE */
+const averageRating = b.averageRating || 0;
+const totalReviews = b.totalReviews || 0;
 
-// 🔥 INTENT BOOSTS
-if (parsedIntent?.minRating) {
-  if (ratingScore >= parsedIntent.minRating) {
-    ratingScore *= 1.5;
-  } else {
-    ratingScore *= 0.7;
-  }
-}
-
-if (parsedIntent?.sortBy === "rating") {
-  ratingScore *= 1.3;
-}
-
-if (parsedIntent?.openNow) {
-  const now = new Date();
-  const day = now.toLocaleString("en-US", { weekday: "long" }).toLowerCase();
-  const time = now.toTimeString().slice(0, 5);
-
-  const open = b.businessHours?.[day]?.open;
-  const close = b.businessHours?.[day]?.close;
-
-  if (open && close && open <= time && close >= time) {
-    ratingScore *= 1.2;
-  } else {
-    ratingScore *= 0.5;
-  }
-}
-
-const score = computeFinalScore({
-  vectorScore: 0.2,
-  keywordScore: 0.2,
+    /* FINAL SCORE */
+    const score = computeFinalScore({
+  vectorScore,
+  keywordScore,
   trendingScore: clicks > 10 ? 1 : 0,
-  clickScore: Math.log10(clicks + 1),
-  ratingScore,
-  featureScore,
+  clickScore: Math.log2(clicks + 1),
   distanceScore,
+
+  // 🔥 CLEAN INPUTS
+  averageRating,
+  totalReviews
 });
 
-    return {
-      ...b,
-      qualityScore: score,
-      distanceKm,
-    };
+let finalScore = score;
+
+// ✅ feature boost (clean layer)
+if (b.isFeatured) {
+  finalScore += 0.08 + (b.featurePriority || 0) * 0.02;
+}
+
+let penalty = 0;
+
+// 🚨 low rating + low reviews
+if (avgRating < 2.5 && reviewCount < 5) {
+  penalty -= 40;
+}
+
+// 🚨 tag stuffing
+if ((b.tags || []).length > 20) {
+  penalty -= 15;
+}
+
+  return {
+  ...b,
+  qualityScore: finalScore + penalty,
+  distanceKm,
+};
   });
 
-  // ================= SORT =================
+  /* ================= SORT ================= */
   scored.sort((a, b) => b.qualityScore - a.qualityScore);
 
-  // ================= RETURN =================
-  return scored.slice(0, Number(limit) || 12);
+// 🔥 DIVERSITY CONTROL
+const diversified = [];
+const categoryCount = {};
+
+for (let biz of scored) {
+  const cat =
+    biz.categoryId?.toString() ||
+    biz.parentCategoryId?.toString() ||
+    "other";
+
+  categoryCount[cat] = categoryCount[cat] || 0;
+
+  if (categoryCount[cat] < 3) {
+    diversified.push(biz);
+    categoryCount[cat]++;
+  }
+}
+
+if (diversified.length < scored.length) {
+  const remaining = scored.filter(
+    (b) => !diversified.includes(b)
+  );
+  diversified.push(...remaining);
+}
+
+return diversified.slice(0, Number(limit) || 12);
 }

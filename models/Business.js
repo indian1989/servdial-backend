@@ -35,6 +35,14 @@ const businessSchema = new mongoose.Schema(
   unique: true,
 },
 
+slugHistory: [
+  {
+    type: String,
+    lowercase: true,
+    trim: true,
+  },
+],
+
     services: [String],
 
     description: {
@@ -55,7 +63,8 @@ const businessSchema = new mongoose.Schema(
     parentCategoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
-      required: true,
+      required: false,
+      index: true,
     },
 
     // 🔥 SEO SLUG CACHE (VERY IMPORTANT)
@@ -204,60 +213,62 @@ phoneVerifiedAt: Date,
   { timestamps: true }
 );
 
+// ================= CAPTURE ORIGINAL SLUG =================
+businessSchema.pre("init", function () {
+  this._originalSlug = this.slug;
+});
+
 // ================= PRE SAVE HOOK =================
 businessSchema.pre("save", async function (next) {
   try {
-    // ✅ Normalize text fields
+    // ================= BASIC NORMALIZATION =================
     this.name = normalizeText(this.name);
     this.description = normalizeText(this.description);
     this.address = normalizeText(this.address);
 
-    // ✅ Normalize location fields (CRITICAL FIX)
-    
     if (this.district) this.district = normalizeText(this.district);
     if (this.state) this.state = normalizeText(this.state);
 
-    // ✅ AUTO FILL cityName for SEO
-// ================= AUTO CITY SYNC =================
-if (this.isModified("cityId")) {
-  const cityDoc = await mongoose.models.City.findById(this.cityId);
+    // ================= HARD VALIDATION =================
+    if (!this.cityId) {
+      throw new Error("cityId is required");
+    }
 
-  if (cityDoc) {
-    this.cityName = normalizeCity(cityDoc.name);
-    this.district = normalizeText(cityDoc.district);
-    this.state = normalizeText(cityDoc.state);
-  }
-}
+    // ================= CITY SYNC =================
+    if (this.isModified("cityId")) {
+      const cityDoc = await mongoose.models.City.findById(this.cityId);
 
-// 🔥 SAFETY: ensure consistency even if manually set somewhere
-if (this.cityName) {
-  this.cityName = normalizeCity(this.cityName);
-}
+      if (!cityDoc) {
+        throw new Error("Invalid cityId: City not found");
+      }
 
-// ================= AUTO CATEGORY + CITY SLUG =================
-if (this.isModified("categoryId")) {
-  const categoryDoc = await mongoose.models.Category.findById(this.categoryId);
-  if (categoryDoc) {
-    this.categorySlug = categoryDoc.slug;
-  }
-}
+      this.cityName = normalizeCity(cityDoc.name); // cache only
+      this.citySlug = cityDoc.slug;
 
-if (this.isModified("cityId")) {
-  const cityDoc = await mongoose.models.City.findById(this.cityId);
-  if (cityDoc) {
-    this.citySlug = cityDoc.slug;
-  }
-}
+      this.district = normalizeText(cityDoc.district);
+      this.state = normalizeText(cityDoc.state);
+    }
 
-    // ✅ Normalize phone numbers
+    // ================= SAFETY NORMALIZATION =================
+    if (this.cityName) {
+      this.cityName = normalizeCity(this.cityName);
+    }
+
+    // ================= CATEGORY SYNC =================
+    if (this.isModified("categoryId")) {
+      const categoryDoc = await mongoose.models.Category.findById(this.categoryId);
+      if (categoryDoc) {
+        this.categorySlug = categoryDoc.slug;
+      }
+    }
+
+    // ================= PHONE =================
     if (this.phone) this.phone = normalizePhone(this.phone);
     if (this.whatsapp) this.whatsapp = normalizePhone(this.whatsapp);
 
-    // ✅ Auto slug
+    // ================= SLUG GENERATION =================
     if (!this.slug && this.name) {
-  let baseSlug = slugify(
-    `${this.name}-${this.cityName || ""}`
-  );
+      let baseSlug = slugify(this.name);
       let slug = baseSlug;
       let counter = 1;
 
@@ -266,6 +277,17 @@ if (this.isModified("cityId")) {
       }
 
       this.slug = slug;
+    }
+
+    // ================= SLUG HISTORY =================
+    if (!this.isNew && this.isModified("slug")) {
+      this.slugHistory = this.slugHistory || [];
+
+      if (this._originalSlug && this._originalSlug !== this.slug) {
+        if (!this.slugHistory.includes(this._originalSlug)) {
+          this.slugHistory.push(this._originalSlug);
+        }
+      }
     }
 
     next();
@@ -282,21 +304,29 @@ businessSchema.index({
   description: "text",
   tags: "text",
   keywords: "text",
-  cityName: "text",
   categorySlug: "text",
 });
 
 // 📍 GEO SEARCH
 businessSchema.index({ location: "2dsphere" });
 
-// 🚀 MAIN SEARCH INDEX (MOST IMPORTANT)
+// CORE QUERY INDEX (MOST IMPORTANT)
 businessSchema.index({
   cityId: 1,
   categoryId: 1,
   status: 1,
   isDeleted: 1,
+});
+
+// RANKING INDEX
+businessSchema.index({
   isFeatured: -1,
   featurePriority: -1,
+  featuredUntil: 1,
+});
+
+// ANALYTICS INDEX
+businessSchema.index({
   averageRating: -1,
   totalReviews: -1,
   views: -1,
@@ -314,15 +344,13 @@ businessSchema.index({
   slug: 1,
 });
 
-// 🚀 FILTERS (LIGHTWEIGHT)
-businessSchema.index({
-  cityId: 1,
-  categoryId: 1,
-  status: 1,
-});
-
 // ⚡ UNIQUE
 businessSchema.index({ slug: 1 }, { unique: true });
+
+businessSchema.index({
+  cityId: 1,
+  location: "2dsphere",
+});
 
 // ================= EXPORT =================
 export default mongoose.model("Business", businessSchema);

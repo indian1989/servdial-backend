@@ -1,12 +1,8 @@
+// backend/services/search/unifiedSearchEngine.js
 import { correctQuery } from "../../utils/spellCorrection.js";
-import { computeFinalScore } from "./fusionScorer.js";
-
 import vectorSearch from "../vector/vectorSearch.js";
 import keywordSearch from "../mongo/keywordSearch.js";
-import getRankingSignals from "../ranking/getRankingSignals.js";
-
-// 🔥 ADD THIS
-import Business from "../../models/Business.js";
+import { unifiedRanking } from "../ranking/unifiedRankingEngine.js";
 
 export async function unifiedSearch(rawQuery, context = {}) {
   // ================= 1. CLEAN QUERY =================
@@ -19,83 +15,50 @@ export async function unifiedSearch(rawQuery, context = {}) {
   ]);
 
   // ================= 3. MERGE IDS =================
-  const map = new Map();
+  const scoreMap = new Map();
 
-  function addResult(item, source) {
-    const id = item._id.toString();
+function addResult(item, source) {
+  const id = item._id.toString();
 
-    if (!map.has(id)) {
-      map.set(id, {
-        _id: item._id,
-        vectorScore: 0,
-        keywordScore: 0,
-      });
-    }
-
-    const existing = map.get(id);
-
-    if (source === "vector") {
-      existing.vectorScore = item.score || 0;
-    }
-
-    if (source === "keyword") {
-      existing.keywordScore = item.score || 0;
-    }
+  if (!scoreMap.has(id)) {
+    scoreMap.set(id, {
+      _id: item._id,
+      vectorScore: 0,
+      keywordScore: 0,
+    });
   }
 
-  vectorResults.forEach((r) => addResult(r, "vector"));
-  keywordResults.forEach((r) => addResult(r, "keyword"));
+  const existing = scoreMap.get(id);
 
-  const ids = Array.from(map.keys());
+  if (source === "vector") {
+    existing.vectorScore = item.score || 0;
+  }
 
-  // ================= 4. 🔥 FETCH FULL BUSINESS DATA =================
-  const businesses = await Business.find({
-    _id: { $in: ids },
-    status: "approved",
-  })
-    .select(`
-      name slug city category
-      phone images logo
-      isVerified isFeatured featurePriority
-      averageRating totalReviews views createdAt location
-    `)
-    .lean();
+  if (source === "keyword") {
+    existing.keywordScore = item.score || 0;
+  }
+}
 
-  // ================= 5. MERGE FULL DATA =================
-  const enriched = await Promise.all(
-    businesses.map(async (b) => {
-      const base = map.get(b._id.toString());
+vectorResults.forEach((r) => addResult(r, "vector"));
+keywordResults.forEach((r) => addResult(r, "keyword"));
 
-      const signals = await getRankingSignals(b._id);
+const MAX_FETCH = 100;
 
-      return {
-        ...b,
+const candidates = Array.from(scoreMap.values()).slice(0, MAX_FETCH);
 
-        // 🔥 KEEP SCORES
-        vectorScore: base?.vectorScore || 0,
-        keywordScore: base?.keywordScore || 0,
+  // ================= 4. DELEGATE TO RANKING ENGINE =================
+const ranked = await unifiedRanking({
+  q: query,
+  candidates,
+  cityId: context.cityId,
+  lat: context.lat,
+  lng: context.lng,
+  category: context.category,
+  limit: context.limit || 20,
+});
 
-        // 🔥 SIGNALS
-        trendingScore: signals.trendingScore,
-        clickScore: signals.clickScore,
-        ratingScore: signals.ratingScore,
-        distanceScore: signals.distanceScore,
-      };
-    })
-  );
-
-  // ================= 6. FINAL SCORE =================
-  const scored = enriched.map((item) => ({
-    ...item,
-    finalScore: computeFinalScore(item),
-  }));
-
-  // ================= 7. SORT =================
-  scored.sort((a, b) => b.finalScore - a.finalScore);
-
-  // ================= 8. RETURN =================
-  return {
-    query,
-    results: scored,
-  };
+return {
+  query,
+  results: ranked,
+};
 }

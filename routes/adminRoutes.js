@@ -10,6 +10,11 @@ import Category from "../models/Category.js";
 import SystemSettings from "../models/SystemSettings.js";
 import ActivityLogs from "../models/ActivityLogs.js";
 import Business from "../models/Business.js";
+import {
+  addCity,
+  getCities,
+  deleteCity
+} from "../controllers/cityController.js";
 
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
@@ -88,52 +93,11 @@ router.get(
 );
 
 // ================= CITIES =================
-router.post(
-  "/cities",
-  protect,
-  authorizeRoles("admin", "superadmin"),
-  asyncHandler(async (req, res) => {
-    const { name, state } = req.body;
+router.post("/cities", protect, authorizeRoles("admin","superadmin"), addCity);
 
-    if (!name || !state)
-      throw new Error("City name and state are required");
+router.get("/cities", protect, authorizeRoles("admin","superadmin"), getCities);
 
-    const exists = await City.findOne({
-      name: { $regex: `^${name}$`, $options: "i" },
-      state: { $regex: `^${state}$`, $options: "i" },
-    });
-
-    if (exists) throw new Error("This city already exists in this state");
-
-    const city = await City.create({ name, state });
-
-    res.status(201).json({ success: true, city });
-  })
-);
-
-router.get(
-  "/cities",
-  protect,
-  authorizeRoles("admin", "superadmin"),
-  asyncHandler(async (req, res) => {
-    const cities = await City.find().sort({ name: 1 });
-    res.json({ success: true, cities });
-  })
-);
-
-router.delete(
-  "/cities/:id",
-  protect,
-  authorizeRoles("admin", "superadmin"),
-  asyncHandler(async (req, res) => {
-    const city = await City.findById(req.params.id);
-    if (!city) throw new Error("City not found");
-
-    await city.deleteOne();
-
-    res.json({ success: true, message: "City deleted successfully" });
-  })
-);
+router.delete("/cities/:id", protect, authorizeRoles("admin","superadmin"), deleteCity);
 
 // ================= CATEGORIES =================
 

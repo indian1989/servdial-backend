@@ -16,12 +16,40 @@ const bannerSchema = new mongoose.Schema(
   },
 
   link: {
-    type: String,
-    trim: true
-  },
+  type: String,
+  trim: true,
+  validate: {
+    validator: function (v) {
+      return !v || /^https?:\/\/.+/.test(v);
+    },
+    message: "Invalid URL format"
+  }
+},
+
+  status: {
+  type: String,
+  enum: ["pending", "approved", "rejected"],
+  default: "pending",
+  index: true
+},
+
+paymentStatus: {
+  type: String,
+  enum: ["pending", "paid", "failed"],
+  default: "pending"
+},
+
+paymentId: {
+  type: String
+},
+
+role: {
+  type: String,
+  default: "user"
+},
 
   // Banner placement
-  position: {
+  placement: {
     type: String,
     enum: [
       "homepage_top",
@@ -30,7 +58,8 @@ const bannerSchema = new mongoose.Schema(
       "category_page",
       "city_page"
     ],
-    default: "homepage_top"
+    default: "homepage_top",
+    index: true
   },
 
   // Display order
@@ -40,13 +69,17 @@ const bannerSchema = new mongoose.Schema(
   },
 
   // Optional targeting
-  city: {
-    type: String
-  },
+  cityId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "City",
+  index: true
+},
 
-  category: {
-    type: String
-  },
+categoryId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Category",
+  index: true
+},
 
   // Scheduling
   startDate: {
@@ -57,6 +90,7 @@ const bannerSchema = new mongoose.Schema(
     type: Date
   },
 
+  // System toggle (admin and superadmin can disable even approved banner)
   isActive: {
     type: Boolean,
     default: true,
@@ -65,8 +99,18 @@ const bannerSchema = new mongoose.Schema(
 
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User"
-  }
+    ref: "User",
+    required: true
+  },
+
+  approvedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User"
+},
+
+approvedAt: {
+  type: Date
+}
 
 },
 {
@@ -77,8 +121,27 @@ const bannerSchema = new mongoose.Schema(
 
 // ================= INDEXES =================
 
-bannerSchema.index({ position: 1 });
-bannerSchema.index({ city: 1 });
-bannerSchema.index({ category: 1 });
+bannerSchema.index({
+  cityId: 1,
+  categoryId: 1,
+  placement: 1
+});
+bannerSchema.index({
+  status: 1,
+  isActive: 1,
+  placement: 1
+});
+
+bannerSchema.index({ paymentStatus: 1 });
+bannerSchema.index({ createdBy: 1 });
+bannerSchema.index({ order: 1, createdAt: -1 });
+bannerSchema.index({
+  status: 1,
+  isActive: 1,
+  paymentStatus: 1,
+  placement: 1,
+  cityId: 1,
+  categoryId: 1
+});
 
 export default mongoose.model("Banner", bannerSchema);

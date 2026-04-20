@@ -7,6 +7,7 @@ export const detectIntent = (query = "") => {
     transactional: 0,
     navigational: 0,
     emergency: 0,
+    quality: 0, // 🔥 NEW
   };
 
   /* ================= LOCAL INTENT ================= */
@@ -50,7 +51,7 @@ export const detectIntent = (query = "") => {
     intents.navigational += 60;
   }
 
-  /* ================= EMERGENCY BOOST ================= */
+  /* ================= EMERGENCY ================= */
   if (
     q.includes("emergency") ||
     q.includes("urgent") ||
@@ -60,5 +61,29 @@ export const detectIntent = (query = "") => {
     intents.emergency += 100;
   }
 
-  return intents;
+  /* ================= QUALITY INTENT (NEW) ================= */
+  if (
+    q.includes("best") ||
+    q.includes("top") ||
+    q.includes("rating") ||
+    q.includes("review")
+  ) {
+    intents.quality += 75;
+  }
+
+  /* ================= FINAL INTENT PICK ================= */
+  let finalType = "default";
+  let maxScore = 0;
+
+  for (const key in intents) {
+    if (intents[key] > maxScore) {
+      maxScore = intents[key];
+      finalType = key;
+    }
+  }
+
+  return {
+    type: maxScore > 0 ? finalType : "default",
+    scores: intents,
+  };
 };

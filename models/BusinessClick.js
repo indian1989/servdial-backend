@@ -27,6 +27,20 @@ const businessClickSchema = new mongoose.Schema(
   index: true,
 },
 
+ipAddress: {
+  type: String,
+  index: true,
+},
+
+userAgent: {
+  type: String,
+},
+
+fingerprint: {
+  type: String,
+  index: true,
+},
+
     clickedAt: {
       type: Date,
       default: Date.now,
@@ -36,6 +50,11 @@ const businessClickSchema = new mongoose.Schema(
 );
 
 // ⚡ Index for fast ranking
-businessClickSchema.index({ business: 1, keyword: 1, city: 1 });
+businessClickSchema.index({ business: 1, keyword: 1, cityId: 1 });
+
+businessClickSchema.index(
+  { business: 1, user: 1, ipAddress: 1 },
+  { partialFilterExpression: { user: { $ne: null } } }
+);
 
 export default mongoose.model("BusinessClick", businessClickSchema);

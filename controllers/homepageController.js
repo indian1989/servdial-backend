@@ -1,41 +1,35 @@
+// backend/controllers/homepageController.js
 import asyncHandler from "express-async-handler";
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
 import City from "../models/City.js";
+import { resolveCity } from "../services/cityResolver.js";
+import { rankBusinesses } from "../utils/rankBusinesses.js";
 
-// ================= NORMALIZE CITY =================
-const normalizeCity = (city) => {
-  if (!city) return null;
-
-  return city
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-};
-
-// ================= HOMEPAGE DATA =================
+// ================= HOMEPAGE CONTROLLER =================
 export const getHomepageData = asyncHandler(async (req, res) => {
   const { city, lat, lng } = req.query;
 
-  // ================= NORMALIZED CITY =================
-  const normalizedCity = normalizeCity(city);
+  // ================= CITY RESOLUTION =================
+  let cityDoc = null;
+let cityFilter = {};
 
-  let cityFilter = {};
-
-if (normalizedCity) {
-  const cityDoc = await City.findOne({
-    slug: normalizedCity,
-  }).select("_id");
+if (city) {
+  cityDoc = await resolveCity({ citySlug: city });
 
   if (cityDoc) {
-    cityFilter = { cityId: cityDoc._id }; // ✅ correct
-  } else {
-    cityFilter = { cityId: null }; // no match → empty results
+    cityFilter.cityId = cityDoc._id;
   }
 }
 
-  // ================= FETCH DATA =================
+  // ================= BASE FILTER =================
+  const baseBusinessFilter = {
+    status: "approved",
+    isDeleted: false,
+    ...cityFilter,
+  };
+
+  // ================= DATA FETCH =================
   const [
     categories,
     featuredBusinesses,
@@ -45,82 +39,71 @@ if (normalizedCity) {
     recommendedBusinesses,
     cities,
   ] = await Promise.all([
-
-    // ================= CATEGORIES =================
     Category.find({ status: "active" })
-      .sort({ name: 1 })
+      .select("name slug icon parentCategory order")  
+      .sort({ level: 1, order: 1, name: 1 })
       .limit(12)
       .lean(),
 
-    // ================= FEATURED =================
-    Business.find({
-      isFeatured: true,
-      status: "approved",
-      ...cityFilter,
-    })
+    Business.find(baseBusinessFilter)
+      .select("name slug averageRating views isFeatured featurePriority")
       .sort({ featurePriority: -1, averageRating: -1 })
       .limit(8)
-      .select("name slug cityName citySlug images averageRating totalReviews phone whatsapp isFeatured isVerified")
       .lean(),
 
-    // ================= TOP RATED =================
-    Business.find({
-      status: "approved",
-      ...cityFilter,
-    })
+    Business.find(baseBusinessFilter)
+      .select("name slug averageRating views isFeatured featurePriority")
       .sort({ averageRating: -1, totalReviews: -1 })
       .limit(8)
-      .select("name slug cityName citySlug images averageRating totalReviews phone whatsapp isFeatured isVerified")
       .lean(),
 
-    // ================= LATEST =================
-    Business.find({
-      status: "approved",
-      ...cityFilter,
-    })
+    Business.find(baseBusinessFilter)
+      .select("name slug averageRating views isFeatured featurePriority")
       .sort({ createdAt: -1 })
       .limit(8)
-      .select("name slug cityName citySlug images averageRating totalReviews phone whatsapp isFeatured isVerified")
       .lean(),
 
-    // ================= NEARBY =================
-lat && lng
-  ? Business.aggregate([
-      {
-        $geoNear: {
-          near: {
-            type: "Point",
-            coordinates: [Number(lng), Number(lat)],
+    lat && lng
+      ? Business.aggregate([
+          {
+            $geoNear: {
+              near: {
+                type: "Point",
+                coordinates: [Number(lng), Number(lat)],
+              },
+              distanceField: "distance",
+              spherical: true,
+              maxDistance: 5000,
+            },
           },
-          distanceField: "distance",
-          maxDistance: 5000, // 5km
-          spherical: true,
-        },
-      },
-      {
-        $match: {
-          status: "approved",
-          ...(cityFilter.cityId ? { cityId: cityFilter.cityId } : {}),
-        },
-      },
-      {
-        $limit: 8,
-      },
-    ])
-  : [],
+          {
+  $match: {
+    status: "approved",
+    isDeleted: false,
+    ...(cityFilter.cityId && { cityId: cityFilter.cityId })
+  }
+},
+          { $limit: 8 },
+        ])
+      : [],
 
-    // ================= RECOMMENDED =================
-    Business.find({
-      status: "approved",
-      ...cityFilter,
-    })
-      .sort({ views: -1, averageRating: -1 })
-      .limit(8)
-      .select("name slug cityName citySlug images averageRating totalReviews phone whatsapp isFeatured isVerified")
-      .lean(),
+    (async () => {
+  const businesses = await Business.find(baseBusinessFilter)
+    .select("name slug averageRating views isFeatured featurePriority")
+    .limit(30)
+    .lean();
 
-    // ================= POPULAR CITIES =================
-    City.find({ isPopular: true, status: "active" })
+  return await rankBusinesses(
+    businesses,
+    lat && lng ? { lat: Number(lat), lng: Number(lng) } : null,
+    "",
+    { recommendation: true },
+    req.user?._id || null,
+    cityDoc?._id || null
+  );
+})(),
+
+    City.find({ popular: true, status: active })
       .sort({ name: 1 })
       .limit(8)
       .lean(),
@@ -135,12 +118,14 @@ lat && lng
   // ================= RESPONSE =================
   res.json({
     success: true,
-    categories,
-    featuredBusinesses,
-    topRatedBusinesses,
-    latestBusinesses,
-    nearbyBusinesses: formattedNearby,
-    recommendedBusinesses,
-    cities,
+    data: {
+      categories,
+      featuredBusinesses,
+      topRatedBusinesses,
+      latestBusinesses,
+      nearbyBusinesses: formattedNearby,
+      recommendedBusinesses,
+      cities,
+    }
   });
 });
