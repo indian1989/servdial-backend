@@ -75,8 +75,7 @@ export const toggleFeatured = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: "Business not found" });
   }
 
-  // Ensure consistent property naming with main businessController
-  business.featured = !business.featured;
+  business.isFeatured = !business.isFeatured; // ✅ FIXED FIELD
 
   await business.save();
 

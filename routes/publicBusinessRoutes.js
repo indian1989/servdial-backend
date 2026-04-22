@@ -35,11 +35,11 @@ router.get("/count", getCategoryCount);
 /* ================= RELATED ================= */
 router.get("/similar/:id", getSimilarBusinesses);
 
-/* ================= BUSINESS DETAIL ================= */
-router.get("/:slug", getBusinessBySlug);
-
 /* ================= CORE SEO ROUTE ================= */
 router.get("/:citySlug/:categorySlug", searchBusinesses);
+
+/* ================= BUSINESS DETAIL ================= */
+router.get("/:slug", getBusinessBySlug);
 
 // ================= ANALYTICS (UNIFIED SYSTEM) =================
 router.post("/analytics", (req, res, next) => {

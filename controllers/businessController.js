@@ -139,6 +139,14 @@ if (existing) {
   });
 }
 
+// 🔥 GENERATE SLUG
+const slugBase = sanitized.name
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/(^-|-$)/g, "");
+
+const slug = `${slugBase}-${Date.now().toString().slice(-4)}`;
+
   const business = await Business.create({
     ...sanitized,
     slug,
@@ -147,14 +155,6 @@ if (existing) {
     isClaimed: isProvider,
     intentTags: normalizedIntentTags,
   });
-
-  // 🔥 GENERATE SLUG
-const slugBase = sanitized.name
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, "-")
-  .replace(/(^-|-$)/g, "");
-
-const slug = `${slugBase}-${Date.now().toString().slice(-4)}`;
 
   return res.status(201).json({
     success: true,
@@ -253,7 +253,7 @@ export const claimBusiness = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Business claimed successfully, pending admin approval",
-    data: business,
+    data: businesses,
   });
 });
 
@@ -354,7 +354,7 @@ export const getBusinessById = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false });
   }
 
-  res.json({ success: true, data: business, });
+  res.json({ success: true, data: businesses, });
 });
 
 export const getBusinesses = asyncHandler(async (req, res) => {
@@ -394,7 +394,7 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false });
   }
 
-  res.json({ success: true, data: business, });
+  res.json({ success: true, data: businesses, });
 });
 
 // ================= FEATURED =================
@@ -402,27 +402,41 @@ export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
   const businesses = await Business.find({
     isFeatured: true,
     status: "approved",
-  }).limit(10);
+  })
+    .sort({ featurePriority: -1, createdAt: -1 })
+    .limit(10)
+    .lean();
 
-  res.json({ success: true, data: business,s });
+  res.json({
+    success: true,
+    data: businesses,
+  });
 });
 
 // ================= TOP RATED =================
 export const getTopRatedBusinesses = asyncHandler(async (req, res) => {
   const businesses = await Business.find({ status: "approved" })
-    .sort({ averageRating: -1 })
-    .limit(10);
+    .sort({ averageRating: -1, totalReviews: -1 })
+    .limit(10)
+    .lean();
 
-  res.json({ success: true, businesses });
+  res.json({
+    success: true,
+    data: businesses,
+  });
 });
 
 // ================= LATEST =================
 export const getLatestBusinesses = asyncHandler(async (req, res) => {
   const businesses = await Business.find({ status: "approved" })
     .sort({ createdAt: -1 })
-    .limit(10);
+    .limit(10)
+    .lean();
 
-  res.json({ success: true, businesses });
+  res.json({
+    success: true,
+    data: businesses,
+  });
 });
 
 // ================= RECOMMENDED =================
@@ -444,7 +458,7 @@ export const getRecommendedBusinesses = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: ranked
+    data: ranked,
   });
 });
 
@@ -473,7 +487,10 @@ export const getNearbyBusinesses = asyncHandler(async (req, res) => {
   },
 ]);
 
-  res.json({ success: true, businesses });
+  res.json({
+  success: true,
+  data: businesses
+});
 });
 
 // ================= SIMILAR =================
@@ -495,7 +512,10 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
     .sort({ isFeatured: -1, averageRating: -1, views: -1 })
     .limit(10);
 
-  res.json({ success: true, businesses });
+  res.json({
+  success: true,
+  data: businesses
+});
 });
 
 // ================== GET PROVIDER BUSINESSES ==============

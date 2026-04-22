@@ -120,9 +120,15 @@ state: String,
         default: "Point",
       },
       coordinates: {
-        type: [Number], // [lng, lat]
-        default: [0, 0],
-      },
+  type: [Number],
+  required: true,
+  validate: {
+    validator: function (val) {
+      return Array.isArray(val) && val.length === 2;
+    },
+    message: "Location must have [lng, lat]",
+  },
+},
     },
 
     isDeleted: {
@@ -234,6 +240,15 @@ businessSchema.pre("save", async function (next) {
       throw new Error("cityId is required");
     }
 
+    // ================= LOCATION VALIDATION =================
+if (
+  !this.location ||
+  !this.location.coordinates ||
+  this.location.coordinates.length !== 2
+) {
+  throw new Error("Valid location (lng, lat) is required");
+}
+
     // ================= CITY SYNC =================
     if (this.isModified("cityId")) {
       const cityDoc = await mongoose.models.City.findById(this.cityId);
@@ -249,6 +264,10 @@ businessSchema.pre("save", async function (next) {
       this.state = normalizeText(cityDoc.state);
     }
 
+    // NEVER trust manual input
+if (this.cityName) delete this.cityName;
+if (this.citySlug) delete this.citySlug;
+
     // ================= SAFETY NORMALIZATION =================
     if (this.cityName) {
       this.cityName = normalizeCity(this.cityName);
@@ -261,9 +280,18 @@ businessSchema.pre("save", async function (next) {
         this.categorySlug = categoryDoc.slug;
       }
     }
+    if (!this.categoryId) {
+  throw new Error("categoryId is required");
+}
 
     // ================= PHONE =================
-    if (this.phone) this.phone = normalizePhone(this.phone);
+    if (this.phone) {
+  this.phone = normalizePhone(this.phone);
+
+  if (this.phone.length !== 10) {
+    throw new Error("Phone must be 10 digits");
+  }
+}
     if (this.whatsapp) this.whatsapp = normalizePhone(this.whatsapp);
 
     // ================= SLUG GENERATION =================
@@ -313,10 +341,12 @@ businessSchema.pre(/^find/, function (next) {
   }
 
   // Public safe filter
+  if (!query.includeAll) {
   this.where({
     isDeleted: { $ne: true },
     status: "approved",
   });
+}
 
   next();
 });
@@ -368,10 +398,7 @@ businessSchema.index({
 // ⚡ UNIQUE
 businessSchema.index({ slug: 1 }, { unique: true });
 
-businessSchema.index({
-  cityId: 1,
-  location: "2dsphere",
-});
+businessSchema.index({ location: "2dsphere" });
 
 // ================= EXPORT =================
 export default mongoose.model("Business", businessSchema);
