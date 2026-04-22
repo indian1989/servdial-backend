@@ -192,7 +192,7 @@ if (b.isFeatured) {
 let penalty = 0;
 
 // 🚨 low rating + low reviews
-if (avgRating < 2.5 && reviewCount < 5) {
+if (averageRating < 2.5 && totalReviews < 5) {
   penalty -= 40;
 }
 

@@ -85,14 +85,15 @@ export const getHomepageData = asyncHandler(async (req, res) => {
       ? Business.aggregate([
           {
             $geoNear: {
-              near: {
-                type: "Point",
-                coordinates: [Number(lng), Number(lat)],
-              },
-              distanceField: "distance",
-              spherical: true,
-              maxDistance: 5000,
-            },
+  near: {
+    type: "Point",
+    coordinates: [Number(lng), Number(lat)],
+  },
+  distanceField: "distance",
+  spherical: true,
+  maxDistance: 5000,
+  key: "location", // 🔥 CRITICAL FIX
+},
           },
           {
             $match: {
@@ -113,13 +114,13 @@ export const getHomepageData = asyncHandler(async (req, res) => {
         .lean();
 
       return await rankBusinesses(
-        businesses,
-        lat && lng ? { lat: Number(lat), lng: Number(lng) } : null,
-        "",
-        { recommendation: true },
-        req.user?._id || null,
-        cityDoc?._id || null
-      );
+  businesses,
+  lat && lng ? { lat: Number(lat), lng: Number(lng) } : {}, // 🔥 NEVER null
+  "",
+  { recommendation: true },
+  req.user?._id || null,
+  cityDoc?._id || null
+);
     })(),
 
     // ================= POPULAR CITIES =================

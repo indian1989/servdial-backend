@@ -2,7 +2,7 @@
 import City from "../models/City.js";
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
-//import memoryCache from "../utils/memoryCache.js"; // or wherever it is ( temporarly commented need fix)
+import { getCache, setCache} from "../utils/memoryCache.js"; // or wherever it is ( temporarly commented need fix)
 
 const baseUrl = "https://servdial.com";
 
@@ -58,8 +58,8 @@ export const getCityCategoryPage = async (req, res) => {
     const { citySlug, categorySlug } = req.params;
 
     // ================= CACHE =================
-    let cityId = memoryCache.get(`city:slug:${citySlug}`);
-    let category = memoryCache.get(`category:slug:${categorySlug}`);
+    let cityId = getCache(`city:slug:${citySlug}`);
+    let category = getCache(`category:slug:${categorySlug}`);
 
     // ================= CITY RESOLUTION =================
     if (!cityId) {
@@ -75,7 +75,7 @@ export const getCityCategoryPage = async (req, res) => {
       }
 
       cityId = city._id;
-      memoryCache.set(`city:slug:${citySlug}`, cityId, 60 * 60 * 6);
+      setCache(`city:slug:${citySlug}`, cityId, 60 * 60 * 6);
     }
 
     // ================= CATEGORY RESOLUTION =================
@@ -95,7 +95,7 @@ export const getCityCategoryPage = async (req, res) => {
       }
 
       category = categoryDoc;
-      memoryCache.set(`category:slug:${categorySlug}`, categoryDoc, 60 * 60 * 6);
+      setCache(`category:slug:${categorySlug}`, categoryDoc, 60 * 60 * 6);
     }
 
     // ================= CATEGORY EXPANSION =================
