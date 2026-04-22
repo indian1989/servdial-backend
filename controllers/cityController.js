@@ -78,9 +78,6 @@ export const updateCity = async (req, res) => {
   },
 });
 
-deleteCache(`city:slug:${city.slug}`);
-deleteCache(`city:id:${city._id}`);
-
   } catch (err) {
     res.status(500).json({
   success: false,
@@ -108,9 +105,6 @@ export const deleteCity = async (req, res) => {
     timestamp: new Date().toISOString(),
   },
 });
-
-deleteCache(`city:slug:${city.slug}`);
-deleteCache(`city:id:${city._id}`);
 
   } catch (err) {
     res.status(500).json({

@@ -33,7 +33,6 @@ app.use((req, res, next) => {
 import authRoutes from "./routes/authRoutes.js";
 import publicBusinessRoutes from "./routes/publicBusinessRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
-import featuredRoutes from "./routes/featuredRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import adminBusinessRoutes from "./routes/adminBusinessRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
@@ -88,7 +87,7 @@ app.use("/api/cities", cityRoutes);
 app.use("/api/admin/cities", adminCityRoutes);
 
 // Others
-app.use("/api/featured", featuredRoutes);
+
 app.use("/api/homepage", homepageRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/leads", leadRoutes);

@@ -23,14 +23,15 @@ router.get(
   asyncHandler(async (req, res) => {
 
     const businesses = await Business.find()
-      .populate("city")
-      .populate("categoryId")
-      .sort({ createdAt: -1 });
+  .setOptions({ includeAll: true })
+  .populate("city")
+  .populate("categoryId")
+  .sort({ createdAt: -1 });
 
     res.json({
       success: true,
       count: businesses.length,
-      businesses
+      data: business,
     });
 
   })
@@ -45,13 +46,14 @@ router.get(
   asyncHandler(async (req, res) => {
 
     const businesses = await Business.find({ status: "pending" })
-      .populate("cityId")
-      .populate("categoryId")
-      .sort({ createdAt: -1 });
+  .setOptions({ includeAll: true })
+  .populate("cityId")
+  .populate("categoryId")
+  .sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      businesses
+      data: business,
     });
 
   })
@@ -65,7 +67,8 @@ router.put(
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
 
-    const business = await Business.findById(req.params.id);
+    const business = await Business.findById(req.params.id)
+    .setOptions({ includeAll: true });
 
     if (!business) {
       res.status(404);
@@ -79,7 +82,7 @@ router.put(
     res.json({
       success: true,
       message: "Business approved successfully",
-      business
+      data: business,
     });
 
   })
@@ -93,7 +96,8 @@ router.put(
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
 
-    const business = await Business.findById(req.params.id);
+    const business = await Business.findById(req.params.id)
+    .setOptions({ includeAll: true });
 
     if (!business) {
       res.status(404);
@@ -107,7 +111,7 @@ router.put(
     res.json({
       success: true,
       message: "Business rejected",
-      business
+      data: business,
     });
 
   })
@@ -121,7 +125,8 @@ router.put(
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
 
-    const business = await Business.findById(req.params.id);
+    const business = await Business.findById(req.params.id)
+    .setOptions({ includeAll: true });
 
     if (!business) {
       res.status(404);
@@ -135,7 +140,7 @@ router.put(
     res.json({
       success: true,
       message: "Featured status updated",
-      business
+      data: business,
     });
 
   })
@@ -149,7 +154,8 @@ router.delete(
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
 
-    const business = await Business.findById(req.params.id);
+    const business = await Business.findById(req.params.id)
+    .setOptions({ includeAll: true });
 
     if (!business) {
       res.status(404);

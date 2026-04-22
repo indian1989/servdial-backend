@@ -132,7 +132,7 @@ citySchema.pre("save", async function (next) {
     }
 
     // ================= SLUG =================
-    let baseSlug = slugify(this.name);
+    let baseSlug = slugify(`${this.name}-${this.district}-${this.state}`);
     let slug = baseSlug;
     let count = 1;
 

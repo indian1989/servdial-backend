@@ -28,11 +28,11 @@ const businessSchema = new mongoose.Schema(
       trim: true,
     },
 
-    slug: {
+slug: {
   type: String,
   lowercase: true,
-  required: true,
   unique: true,
+  index: true,
 },
 
 slugHistory: [
@@ -290,10 +290,35 @@ businessSchema.pre("save", async function (next) {
       }
     }
 
+    // ================= FEATURE EXPIRY =================
+if (this.featuredUntil && this.featuredUntil < new Date()) {
+  this.isFeatured = false;
+  this.featurePriority = 0;
+}
+
     next();
   } catch (err) {
     next(err);
   }
+});
+
+// ================= GLOBAL QUERY FILTER =================
+businessSchema.pre(/^find/, function (next) {
+  const query = this.getQuery();
+
+  // Allow override for admin/provider
+  if (query.includeAll === true) {
+    delete query.includeAll;
+    return next();
+  }
+
+  // Public safe filter
+  this.where({
+    isDeleted: { $ne: true },
+    status: "approved",
+  });
+
+  next();
 });
 
 // ================= INDEXES =================
@@ -304,11 +329,7 @@ businessSchema.index({
   description: "text",
   tags: "text",
   keywords: "text",
-  categorySlug: "text",
 });
-
-// 📍 GEO SEARCH
-businessSchema.index({ location: "2dsphere" });
 
 // CORE QUERY INDEX (MOST IMPORTANT)
 businessSchema.index({

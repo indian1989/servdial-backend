@@ -34,8 +34,14 @@ const sanitizeBusinessInput = (body, user) => {
     website: body.website,
     pincode: body.pincode ? String(body.pincode).trim() : undefined,
     cityId: body.cityId || body.city || null,
-    state: body.state || null,
-    district: body.district || null,
+    state: isPrivileged ? body.state || null : null,
+    district: isPrivileged ? body.district || null : null,
+    location:
+       body.location &&
+       body.location.type === "Point" &&
+       Array.isArray(body.location.coordinates)
+       ? body.location
+       : undefined,
     logo: body.logo || "",
     images: Array.isArray(body.images) ? body.images : [],
     services: Array.isArray(body.services) ? body.services : [],
@@ -53,13 +59,18 @@ const sanitizeBusinessInput = (body, user) => {
   base.cityId = base.cityId._id || base.cityId.value || null;
 }
 
+// 🔥 ENSURE VALID OBJECTID FORMAT
+if (base.cityId && !mongoose.Types.ObjectId.isValid(base.cityId)) {
+  base.cityId = null;
+}
+
 if (typeof base.cityId === "string" && base.cityId.trim() === "") {
   base.cityId = null;
 }
 
   if (isPrivileged) {
     base.parentCategoryId = body.parentCategoryId || null;
-    base.status = body.status || "approved";
+    base.status = "approved";
     base.isFeatured = body.isFeatured || false;
     base.featurePriority = body.featurePriority || 0;
   } else {
@@ -114,25 +125,47 @@ export const createBusiness = asyncHandler(async (req, res) => {
           .map((tag) => tag.toLowerCase().trim())
       )]
     : [];
+
+    // 🔥 DUPLICATE CHECK (name + city)
+const existing = await Business.findOne({
+  name: { $regex: `^${sanitized.name}$`, $options: "i" },
+  cityId: sanitized.cityId,
+});
+
+if (existing) {
+  return res.status(400).json({
+    success: false,
+    message: "Business already exists in this city",
+  });
+}
+
   const business = await Business.create({
     ...sanitized,
-
+    slug,
     parentCategoryId,
     owner: req.user._id,
     isClaimed: isProvider,
-
     intentTags: normalizedIntentTags,
   });
 
+  // 🔥 GENERATE SLUG
+const slugBase = sanitized.name
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/(^-|-$)/g, "");
+
+const slug = `${slugBase}-${Date.now().toString().slice(-4)}`;
+
   return res.status(201).json({
     success: true,
-    business,
+    data: business,
   });
 });
 
 // ================= UPDATE BUSINESS =================
 export const updateBusiness = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
+  const business = await Business.findById(req.params.id)
+  .setOptions({ includeAll: true });
   if (!business) return res.status(404).json({ success: false, message: "Business not found" });
   const isOwner =
   business.owner &&
@@ -184,7 +217,7 @@ if (req.body.intentTags !== undefined) {
 }
   await business.save();
 
-  res.json({ success: true, business });
+  res.json({ success: true, data: business, });
 });
 
 // ================================
@@ -199,7 +232,8 @@ export const claimBusiness = asyncHandler(async (req, res) => {
     throw new Error("Business ID is required");
   }
 
-  const business = await Business.findById(businessId);
+  const business = await Business.findById(businessId)
+  .setOptions({ includeAll: true });
   if (!business) {
     res.status(404);
     throw new Error("Business not found");
@@ -219,7 +253,7 @@ export const claimBusiness = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Business claimed successfully, pending admin approval",
-    business,
+    data: business,
   });
 });
 
@@ -320,7 +354,7 @@ export const getBusinessById = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false });
   }
 
-  res.json({ success: true, business });
+  res.json({ success: true, data: business, });
 });
 
 // ================= GET BY SLUG =================
@@ -333,7 +367,7 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false });
   }
 
-  res.json({ success: true, business });
+  res.json({ success: true, data: business, });
 });
 
 // ================= FEATURED =================
@@ -343,7 +377,7 @@ export const getFeaturedBusinesses = asyncHandler(async (req, res) => {
     status: "approved",
   }).limit(10);
 
-  res.json({ success: true, businesses });
+  res.json({ success: true, data: business,s });
 });
 
 // ================= TOP RATED =================
@@ -443,6 +477,7 @@ export const getProviderBusinesses = async (req, res) => {
     const businesses = await Business.find({
       owner: req.user._id
     })
+      .setOptions({ includeAll: true })
       .populate("categoryId")
       .populate("cityId");
 
@@ -574,7 +609,8 @@ export const whatsappClick = asyncHandler(async (req, res) => {
 
 // ================= DELETE =================
 export const deleteBusiness = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
+  const business = await Business.findById(req.params.id)
+  .setOptions({ includeAll: true });
 
   if (!business) {
     return res.status(404).json({ success: false });
@@ -640,7 +676,8 @@ export const paidFeatureNotice = asyncHandler(async (req, res) => {
 // MANAGE BUSINESS HOURS
 // ================================
 export const updateBusinessHours = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
+  const business = await Business.findById(req.params.id)
+  .setOptions({ includeAll: true });
   if (!business) { res.status(404); throw new Error("Business not found"); }
 
   business.businessHours = req.body.businessHours;
@@ -653,7 +690,8 @@ export const updateBusinessHours = asyncHandler(async (req, res) => {
 // MANAGE BUSINESS MEDIA
 // ================================
 export const updateBusinessMedia = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
+  const business = await Business.findById(req.params.id)
+  .setOptions({ includeAll: true });
   if (!business) { res.status(404); throw new Error("Business not found"); }
 
   business.images = req.body.images || business.images;

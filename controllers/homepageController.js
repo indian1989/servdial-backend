@@ -14,12 +14,22 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   let cityFilter = {};
 
   if (city) {
-    cityDoc = await resolveCity({ citySlug: city });
+  cityDoc = await resolveCity({ citySlug: city });
 
-    if (cityDoc) {
-      cityFilter.cityId = cityDoc._id;
-    }
+  // ✅ IMPORTANT FIX
+  if (!cityDoc && city === "india") {
+    cityDoc = null; // allow global data
+  } else if (!cityDoc) {
+    return res.status(404).json({
+      success: false,
+      message: "City not found",
+    });
   }
+
+  if (cityDoc) {
+    cityFilter.cityId = cityDoc._id;
+  }
+}
 
   // ================= BASE FILTER =================
   const baseBusinessFilter = {

@@ -132,8 +132,6 @@ export const getBusinessStats = async (req, res) => {
   }
 };
 
-
-
 /* ================================
    CATEGORY
 ================================ */

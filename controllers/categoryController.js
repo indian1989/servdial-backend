@@ -1,6 +1,7 @@
 import asyncHandler from "express-async-handler";
 import mongoose from "mongoose";
 import Category from "../models/Category.js";
+import { buildCategoryTree } from "../utils/buildCategoryTree.js";
 import slugify from "../utils/slugify.js";
 import { getCache, setCache, deleteCache } from "../utils/memoryCache.js";
 
@@ -346,7 +347,7 @@ export const getAllCategories = asyncHandler(async (req, res) => {
   return res.json({
     success: true,
     categories,
-    tree: buildTree(categories),
+    tree: buildCategoryTree(categories),
   });
 });
 

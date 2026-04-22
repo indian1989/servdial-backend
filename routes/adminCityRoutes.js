@@ -19,7 +19,7 @@ router.post("/", addCity);
 router.put("/:id", updateCity);
 router.delete("/:id", deleteCity);
 
-router.put("/feature/:id", markCityAsFeatured);
-router.put("/unfeature/:id", unmarkCityAsFeatured);
+router.put("/:id/feature", markCityAsFeatured);
+router.put("/:id/unfeature", unmarkCityAsFeatured);
 
 export default router;
