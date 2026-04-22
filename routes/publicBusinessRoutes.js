@@ -3,6 +3,7 @@ import express from "express";
 import {
   searchBusinesses,
   suggestSearch,
+  getBusinesses,
   getFeaturedBusinesses,
   getTopRatedBusinesses,
   getNearbyBusinesses,
@@ -19,12 +20,9 @@ import {
 
 const router = express.Router();
 
-/* ================= CORE SEO ROUTE ================= */
-router.get("/:citySlug/:categorySlug", searchBusinesses);
-
 /* ================= STATIC ROUTES ================= */
+router.get("/", getBusinesses);
 router.get("/suggest", suggestSearch);
-
 router.get("/featured", getFeaturedBusinesses);
 router.get("/top-rated", getTopRatedBusinesses);
 router.get("/nearby", getNearbyBusinesses);
@@ -40,6 +38,8 @@ router.get("/similar/:id", getSimilarBusinesses);
 /* ================= BUSINESS DETAIL ================= */
 router.get("/:slug", getBusinessBySlug);
 
+/* ================= CORE SEO ROUTE ================= */
+router.get("/:citySlug/:categorySlug", searchBusinesses);
 
 // ================= ANALYTICS (UNIFIED SYSTEM) =================
 router.post("/analytics", (req, res, next) => {

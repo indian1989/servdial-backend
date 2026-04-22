@@ -357,6 +357,33 @@ export const getBusinessById = asyncHandler(async (req, res) => {
   res.json({ success: true, data: business, });
 });
 
+export const getBusinesses = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20 } = req.query;
+
+  const query = {
+    status: "approved",
+    isDeleted: false,
+  };
+
+  const businesses = await Business.find(query)
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(Number(limit))
+    .lean();
+
+  const total = await Business.countDocuments(query);
+
+  res.json({
+    success: true,
+    data: businesses,
+    meta: {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+    },
+  });
+});
+
 // ================= GET BY SLUG =================
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
   const business = await Business.findOne({ slug: req.params.slug })

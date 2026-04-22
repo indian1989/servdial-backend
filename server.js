@@ -63,7 +63,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 
 // Business
-app.use("/api/business", publicBusinessRoutes);
+app.use("/api/businesses", publicBusinessRoutes);
 // Admin Core
 app.use("/api/admin", adminRoutes);
 
