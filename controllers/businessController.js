@@ -33,7 +33,7 @@ const sanitizeBusinessInput = (body, user) => {
     whatsapp: body.whatsapp,
     website: body.website,
     pincode: body.pincode ? String(body.pincode).trim() : undefined,
-    cityId: body.cityId || body.city || null,
+    cityId: body.cityId || null,
     state: isPrivileged ? body.state || null : null,
     district: isPrivileged ? body.district || null : null,
     location:
@@ -52,7 +52,7 @@ const sanitizeBusinessInput = (body, user) => {
         .map(tag => String(tag).toLowerCase().trim())
     )]
   : [],
-    categoryId: body.categoryId || body.category || null,
+    categoryId: body.categoryId || null,
   };
 
   if (base.cityId && typeof base.cityId === "object") {

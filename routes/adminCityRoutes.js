@@ -6,6 +6,7 @@ import {
   deleteCity,
   markCityAsFeatured,
   unmarkCityAsFeatured,
+  bulkUploadCities,
 } from "../controllers/cityController.js";
 
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
@@ -16,6 +17,7 @@ router.use(protect);
 router.use(authorizeRoles("admin", "superadmin"));
 
 router.post("/", addCity);
+router.post("/bulk", bulkUploadCities);
 router.put("/:id", updateCity);
 router.delete("/:id", deleteCity);
 

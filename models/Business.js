@@ -241,12 +241,12 @@ businessSchema.pre("save", async function (next) {
     }
 
     // ================= LOCATION VALIDATION =================
-if (
-  !this.location ||
-  !this.location.coordinates ||
-  this.location.coordinates.length !== 2
-) {
-  throw new Error("Valid location (lng, lat) is required");
+if (!this.location || !Array.isArray(this.location.coordinates)) {
+  return next(new Error("Location coordinates must be provided"));
+}
+
+if (this.location.coordinates.length !== 2) {
+  return next(new Error("Location must have [lng, lat]"));
 }
 
     // ================= CITY SYNC =================
