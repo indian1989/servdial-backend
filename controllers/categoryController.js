@@ -353,8 +353,11 @@ export const getAllCategories = asyncHandler(async (req, res) => {
 
 /* ================= GET BY SLUG ================= */
 export const getCategoryBySlug = asyncHandler(async (req, res) => {
+  const { slug } = req.params;
+
+  // 1️⃣ GET CATEGORY FIRST
   const category = await Category.findOne({
-    slug: req.params.slug,
+    slug,
     status: "active",
   }).lean();
 
@@ -365,9 +368,30 @@ export const getCategoryBySlug = asyncHandler(async (req, res) => {
     });
   }
 
+  // 2️⃣ GET CHILDREN
+  const children = await Category.find({
+    parentCategory: category._id,
+    status: "active",
+  })
+    .select("_id name slug icon order parentCategory")
+    .sort({ order: 1 })
+    .lean();
+
+  // 3️⃣ DEBUG LOGS (SAFE NOW)
+  console.log("CATEGORY LOADED:", category.name);
+  console.log("CHILD COUNT:", children.length);
+
+  // 4️⃣ RESPONSE
   return res.json({
     success: true,
-    category,
+    category: {
+      _id: category._id,
+      name: category.name,
+      slug: category.slug,
+      icon: category.icon || null,
+      parentCategory: category.parentCategory || null,
+      children,
+    },
   });
 });
 

@@ -3,6 +3,7 @@
 import express from "express";
 import {
   getAllCategories,
+  getCategoryWithChildren,
   getCategoryBySlug,
   getTrendingCategories,
   createCategory,
@@ -22,6 +23,7 @@ const router = express.Router();
 // 🔥 Trending (must come before dynamic routes)
 router.get("/trending", getTrendingCategories);
 
+router.get("/:slug/children", getCategoryWithChildren);
 // 🔥 Get by slug (SEO standard)
 router.get("/:slug", getCategoryBySlug);
 

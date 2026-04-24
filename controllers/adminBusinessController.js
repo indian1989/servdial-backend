@@ -75,9 +75,20 @@ export const toggleFeatured = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: "Business not found" });
   }
 
-  business.isFeatured = !business.isFeatured; // ✅ FIXED FIELD
+  business.isFeatured = !business.isFeatured;
+
+  // 🔥 ALIGN WITH HOMEPAGE RANKING SYSTEM
+  if (business.isFeatured) {
+    business.featurePriority = business.featurePriority || 1;
+  } else {
+    business.featurePriority = 0;
+  }
 
   await business.save();
 
-  res.json({ success: true, message: "Featured status updated", business });
+  res.json({
+    success: true,
+    message: "Featured status updated",
+    business,
+  });
 });

@@ -24,15 +24,15 @@ router.get(
 
     const businesses = await Business.find()
   .setOptions({ includeAll: true })
-  .populate("city")
+  .populate("cityId", "name slug")
   .populate("categoryId")
   .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      count: businesses.length,
-      data: business,
-    });
+res.json({
+  success: true,
+  count: businesses.length,
+  data: businesses,
+});
 
   })
 );
@@ -202,7 +202,7 @@ router.get(
 
 router.post("/category", createCategory);
 
-router.get("/dashboard", getDashboardStats);
+router.get("/admin/dashboard", getDashboardStats);
 // ================= CREATE BUSINESS (ADMIN) =================
 router.post(
   "/",

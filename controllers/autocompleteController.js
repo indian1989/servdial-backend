@@ -1,3 +1,4 @@
+// backend/controllers/autocompleteController.js
 import Business from "../models/Business.js";
 import asyncHandler from "express-async-handler";
 import { buildAutocompleteQuery } from "../utils/buildAutocompleteQuery.js";
@@ -41,8 +42,8 @@ let cityId = null;
 
 if (city) {
   const cityDoc = await City.findOne({
-    slug: city.toLowerCase().trim(),
-  }).select("_id");
+  slug: city.toLowerCase().trim(),
+}).select("_id name slug");
 
   if (cityDoc) {
     cityId = cityDoc._id;
@@ -83,16 +84,18 @@ await SearchTrend.findOneAndUpdate(
 // ✅ TRACK RECENT (SEPARATE — NOT inside Promise.all)
 if (userId) {
   await RecentSearch.findOneAndUpdate(
-    {
-      user: userId,
-      query: queryText,
-    },
-    {
-      cityId: cityId || null,
-      lastSearchedAt: new Date(),
-    },
-    { upsert: true }
-  );
+  {
+    user: userId,
+    query: queryText,
+  },
+  {
+    cityId: cityDoc?._id || null,
+    citySlug: cityDoc?.slug || null,
+    cityName: cityDoc?.name || null,
+    lastSearchedAt: new Date(),
+  },
+  { upsert: true }
+);
 }
 
 // ✅ FETCH TRENDING + RECENT

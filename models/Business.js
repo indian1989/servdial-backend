@@ -334,19 +334,16 @@ if (this.featuredUntil && this.featuredUntil < new Date()) {
 businessSchema.pre(/^find/, function (next) {
   const query = this.getQuery();
 
-  // Allow override for admin/provider
-  if (query.includeAll === true) {
-    delete query.includeAll;
-    return next();
-  }
+  const isAdminQuery =
+    this.options?.includeAll === true ||
+    query._includeAll === true;
 
-  // Public safe filter
-  if (!query.includeAll) {
-  this.where({
-    isDeleted: { $ne: true },
-    status: "approved",
-  });
-}
+  if (!isAdminQuery) {
+    this.where({
+      isDeleted: { $ne: true },
+      status: "approved",
+    });
+  }
 
   next();
 });

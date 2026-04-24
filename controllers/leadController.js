@@ -47,7 +47,7 @@ export const getBusinessLeads = asyncHandler(async (req, res) => {
 // ================= ADMIN ALL LEADS =================
 export const getAllLeads = asyncHandler(async (req, res) => {
   const leads = await Lead.find()
-    .populate("business", "name city")
+    .populate("business", "name cityId")
     .sort({ createdAt: -1 });
 
   res.status(200).json({

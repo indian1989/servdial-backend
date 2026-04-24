@@ -4,6 +4,7 @@ import Business from "../models/Business.js";
 import City from "../models/City.js";
 import { resolveCity } from "../services/cityResolver.js";
 import { rankBusinesses } from "../utils/rankBusinesses.js";
+import { buildCategoryTree } from "../utils/buildCategoryTree.js";
 
 // ================= HOMEPAGE CONTROLLER =================
 export const getHomepageData = asyncHandler(async (req, res) => {
@@ -53,11 +54,14 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     cities,
   ] = await Promise.all([
     // ================= CATEGORIES =================
-    Category.find({ status: "active" })
-      .select("name slug icon parentCategory order")
-      .sort({ level: 1, order: 1, name: 1 })
-      .limit(12)
-      .lean(),
+    Category.find({
+  status: "active",
+  parentCategory: null, // ✅ ONLY PARENT
+})
+  .select("name slug icon order")
+  .sort({ order: 1, name: 1 })
+  .limit(20) // ✅ SHOW 20
+  .lean(),
 
     // ================= FEATURED =================
     Business.find(baseBusinessFilter)

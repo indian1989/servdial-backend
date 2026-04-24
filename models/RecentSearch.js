@@ -15,9 +15,24 @@ const recentSearchSchema = new mongoose.Schema(
       trim: true,
     },
 
-    city: {
-      type: String,
+    // ✅ STRICT ALIGNMENT WITH BUSINESS MODEL
+    cityId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "City",
       default: null,
+      index: true,
+    },
+
+    citySlug: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      index: true,
+    },
+
+    cityName: {
+      type: String,
+      trim: true,
     },
 
     category: {

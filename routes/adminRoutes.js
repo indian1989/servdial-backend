@@ -223,8 +223,9 @@ router.get(
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
-    const businesses = await Business.find().populate("categoryId")
-.populate("city");
+    const businesses = await Business.find()
+  .populate("categoryId")
+  .populate("cityId", "name slug");
     res.json({ businesses });
   })
 );

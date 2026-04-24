@@ -35,6 +35,9 @@ router.get("/count", getCategoryCount);
 /* ================= RELATED ================= */
 router.get("/similar/:id", getSimilarBusinesses);
 
+/* ================= DYNAMIN SEARCH ROUTE ================= */
+router.get("/search", searchBusinesses);
+
 /* ================= CORE SEO ROUTE ================= */
 router.get("/:citySlug/:categorySlug", searchBusinesses);
 
