@@ -16,6 +16,8 @@ import {
   deleteCity
 } from "../controllers/cityController.js";
 
+import { getDashboardStats } from "../controllers/adminController.js";
+
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -25,22 +27,7 @@ router.get(
   "/dashboard",
   protect,
   authorizeRoles("admin", "superadmin"),
-  asyncHandler(async (req, res) => {
-    const totalUsers = await User.countDocuments({ role: "user" });
-    const totalAdmins = await User.countDocuments({ role: "admin" });
-    const totalCities = await City.countDocuments();
-    const totalCategories = await Category.countDocuments();
-
-    res.json({
-      success: true,
-      stats: {
-        users: totalUsers,
-        admins: totalAdmins,
-        cities: totalCities,
-        categories: totalCategories,
-      },
-    });
-  })
+  getDashboardStats
 );
 
 // ================= ADMINS =================
@@ -87,7 +74,9 @@ router.get(
   protect,
   authorizeRoles("admin", "superadmin"),
   asyncHandler(async (req, res) => {
-    const users = await User.find({ role: "user" }).select("-password");
+    const users = await User.find({
+  role: { $in: ["user", "provider"] }
+}).select("-password");
     res.json({ success: true, users });
   })
 );

@@ -1,3 +1,4 @@
+// backend/controllers/adminController.js
 import Business from "../models/Business.js";
 import Category from "../models/Category.js";
 import City from "../models/City.js";
@@ -106,8 +107,14 @@ export const toggleFeatured = async (req, res) => {
 ================================ */
 export const getDashboardStats = async (req, res) => {
   try {
-    const users = await User.countDocuments({ role: "user" });
-    const admins = await User.countDocuments({ role: "admin" });
+    // 🔥 FIXED ROLE LOGIC
+const users = await User.countDocuments({
+  role: { $in: ["user", "provider"] } // include providers
+});
+
+const admins = await User.countDocuments({
+  role: { $in: ["admin", "superadmin"] }
+});
     const cities = await City.countDocuments();
     const categories = await Category.countDocuments();
 
