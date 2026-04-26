@@ -91,14 +91,29 @@ export const deleteBusiness = async (req, res) => {
 export const toggleFeatured = async (req, res) => {
   try {
     const business = await Business.findById(req.params.id);
-    if (!business) return res.status(404).json({ success: false, message: "Business not found" });
+    if (!business) {
+      return res.status(404).json({ success: false, message: "Business not found" });
+    }
 
-    business.featured = !business.featured;
+    // ✅ FIXED FIELD NAME
+    business.isFeatured = !business.isFeatured;
+
+    // optional ranking boost
+    business.featurePriority = business.isFeatured ? 10 : 0;
+
     await business.save();
 
-    res.json({ success: true, message: "Featured status updated", featured: business.featured });
+    res.json({
+      success: true,
+      message: "Featured status updated",
+      business
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 };
 
@@ -131,7 +146,11 @@ export const getBusinessStats = async (req, res) => {
   try {
     const total = await Business.countDocuments();
     const pending = await Business.countDocuments({ status: "pending" });
-    const featured = await Business.countDocuments({ featured: true });
+    const featured = await Business.countDocuments({ isFeatured: true });
+const expiredFeatured = await Business.countDocuments({
+  isFeatured: true,
+  featuredUntil: { $lt: new Date() }
+});
 
     res.json({ success: true, stats: { total, pending, featured } });
   } catch (error) {
