@@ -53,6 +53,9 @@ import locationRoutes from "./routes/locationRoutes.js";
 import sitemapRoutes from "./routes/sitemapRoutes.js";
 
 import healthRoutes from "./routes/health.js";
+
+console.log("🚀 SERVER FILE LOADED");
+
 // ================= Health Check =================
 app.get("/api", (req, res) => {
   res.json({ message: "🚀 ServDial API Running..." });
@@ -89,6 +92,7 @@ app.use("/api/admin/cities", adminCityRoutes);
 // Others
 
 app.use("/api/homepage", homepageRoutes);
+console.log("✅ Homepage route mounted");
 app.use("/api/search", searchRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/reviews", reviewRoutes);
