@@ -149,18 +149,18 @@ const rankedFeatured = await rankBusinesses(
 
   const rankedTopRated = await rankBusinesses(
     topRatedRaw,
-    null,
-    "",
-    {},
+    safeLocation,
+  "",
+  safeContext,
     req.user?._id || null,
     cityDoc?._id || null
   );
 
   const rankedLatest = await rankBusinesses(
     latestRaw,
-    null,
-    "",
-    {},
+    safeLocation,
+  "",
+  safeContext,
     req.user?._id || null,
     cityDoc?._id || null
   );
