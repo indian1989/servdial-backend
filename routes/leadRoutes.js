@@ -5,18 +5,33 @@ import {
   getAllLeads
 } from "../controllers/leadController.js";
 
-import { protect } from "../middleware/authMiddleware.js";
-import roleMiddleware from "../middleware/roleMiddleware.js";
+import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Create lead (public)
+/* ===============================
+   CREATE LEAD (PUBLIC)
+================================ */
 router.post("/", createLead);
 
-// Business owner leads
-router.get("/business/:businessId", protect, getBusinessLeads);
+/* ===============================
+   BUSINESS OWNER LEADS
+================================ */
+router.get(
+  "/business/:businessId",
+  protect,
+  authorizeRoles("admin", "superadmin", "provider"),
+  getBusinessLeads
+);
 
-// Admin leads
-router.get("/", protect, roleMiddleware("admin"), getAllLeads);
+/* ===============================
+   ADMIN LEADS ONLY
+================================ */
+router.get(
+  "/",
+  protect,
+  authorizeRoles("admin", "superadmin"),
+  getAllLeads
+);
 
 export default router;

@@ -86,7 +86,7 @@ slugHistory: [
   },
 
   // ================= DISPLAY =================
-  featured: {
+  isFeatured: {
     type: Boolean,
     default: false
   },

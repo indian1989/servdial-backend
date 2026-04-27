@@ -37,45 +37,53 @@ const sanitizeBusinessInput = (body, user) => {
     state: isPrivileged ? body.state || null : null,
     district: isPrivileged ? body.district || null : null,
     location:
-       body.location &&
-       body.location.type === "Point" &&
-       Array.isArray(body.location.coordinates)
-       ? body.location
-       : undefined,
+      body.location &&
+      body.location.type === "Point" &&
+      Array.isArray(body.location.coordinates)
+        ? body.location
+        : undefined,
     logo: body.logo || "",
     images: Array.isArray(body.images) ? body.images : [],
     services: Array.isArray(body.services) ? body.services : [],
     tags: Array.isArray(body.tags)
-  ? [...new Set(
-      body.tags
-        .filter(Boolean)
-        .map(tag => String(tag).toLowerCase().trim())
-    )]
-  : [],
+      ? [...new Set(
+          body.tags
+            .filter(Boolean)
+            .map(tag => String(tag).toLowerCase().trim())
+        )]
+      : [],
     categoryId: body.categoryId || null,
   };
 
+  // normalize cityId
   if (base.cityId && typeof base.cityId === "object") {
-  base.cityId = base.cityId._id || base.cityId.value || null;
-}
+    base.cityId = base.cityId._id || base.cityId.value || null;
+  }
 
-// 🔥 ENSURE VALID OBJECTID FORMAT
-if (base.cityId && !mongoose.Types.ObjectId.isValid(base.cityId)) {
-  base.cityId = null;
-}
+  if (base.cityId && !mongoose.Types.ObjectId.isValid(base.cityId)) {
+    base.cityId = null;
+  }
 
-if (typeof base.cityId === "string" && base.cityId.trim() === "") {
-  base.cityId = null;
-}
+  if (typeof base.cityId === "string" && base.cityId.trim() === "") {
+    base.cityId = null;
+  }
 
+  // ROLE LOGIC (FIXED)
   if (isPrivileged) {
     base.parentCategoryId = body.parentCategoryId || null;
     base.status = "approved";
-    base.isFeatured = body.isFeatured || false;
-    base.featurePriority = body.featurePriority || 0;
+
+    if (typeof body.isFeatured === "boolean") {
+      base.isFeatured = body.isFeatured;
+    }
+
+    if (typeof body.featurePriority === "number") {
+      base.featurePriority = body.featurePriority;
+    }
   } else {
     base.status = "pending";
   }
+
   return base;
 };
 
@@ -253,7 +261,7 @@ export const claimBusiness = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Business claimed successfully, pending admin approval",
-    data: businesses,
+    data: business,
   });
 });
 
@@ -354,7 +362,7 @@ export const getBusinessById = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false });
   }
 
-  res.json({ success: true, data: businesses, });
+  res.json({ success: true, data: business, });
 });
 
 export const getBusinesses = asyncHandler(async (req, res) => {
@@ -394,7 +402,7 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false });
   }
 
-  res.json({ success: true, data: businesses, });
+  res.json({ success: true, data: business, });
 });
 
 // ================= FEATURED =================

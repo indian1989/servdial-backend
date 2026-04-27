@@ -31,11 +31,13 @@ app.use((req, res, next) => {
 
 // ================= Routes =================
 import authRoutes from "./routes/authRoutes.js";
+import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 import publicBusinessRoutes from "./routes/publicBusinessRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import adminBusinessRoutes from "./routes/adminBusinessRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
+import adminCategoryRoutes from "./routes/adminCategoryRoutes.js";
 import cityRoutes from "./routes/cityRoutes.js";
 import adminCityRoutes from "./routes/adminCityRoutes.js";
 import bannerRoutes from "./routes/bannerRoutes.js";
@@ -68,17 +70,15 @@ app.use("/api/businesses", publicBusinessRoutes);
 app.use("/api/admin", adminRoutes);
 
 // Admin Businesses (separate namespace)
-app.use("/api/admin-businesses", adminBusinessRoutes);
+app.use("/api/admin/businesses", adminBusinessRoutes);
 
 // ============= BANNERS =============
 app.use("/api/banners", bannerRoutes);              // public + user
 app.use("/api/admin/banners", adminBannerRoutes);   // admin + superadmin
 
 // Categories
-// ⚠️ TEMP: shared routes (admin + public)
-// TODO: split into adminCategoryRoutes & publicCategoryRoutes later
 app.use("/api/categories", categoryRoutes);
-app.use("/api/admin/categories", categoryRoutes);
+app.use("/api/admin/categories", adminCategoryRoutes);
 
 // Public (read only)
 app.use("/api/cities", cityRoutes);
@@ -96,13 +96,13 @@ app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/provider", providerRoutes);
 app.use("/api/location", locationRoutes);
 
-app.use("/health", healthRoutes);
+app.use("/api/health", healthRoutes);
 
 // Sitemap
 app.use("/api/sitemap", sitemapRoutes);
 
 // SEO PUBLIC ROUTES
-app.use("/", seoRoutes);
+app.use("/api/seo", seoRoutes);
 
 // ================= MongoDB =================
 const connectDB = async () => {
@@ -123,23 +123,11 @@ const connectDB = async () => {
   }
 };
 
-// ================= 404 Handler =================
-app.use((req, res, next) => {
-  res.status(404).json({
-    success: false,
-    message: `Route not found: ${req.originalUrl}`,
-  });
-});
+/* ================= 404 ================= */
+app.use(notFound);
 
-// ================= Error Handler =================
-app.use((err, req, res, next) => {
-  console.error("🔥 ERROR:", err);
-
-  res.status(err.statusCode || 500).json({
-    success: false,
-    message: err.message || "Server Error",
-  });
-});
+/* ================= GLOBAL ERROR ================= */
+app.use(errorHandler);
 
 
 // ================= Start Server =================

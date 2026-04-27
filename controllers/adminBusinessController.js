@@ -1,4 +1,3 @@
-// backend/controllers/adminBusnessController.js
 import Business from "../models/Business.js";
 import asyncHandler from "express-async-handler";
 
@@ -8,87 +7,147 @@ GET ALL BUSINESSES (ADMIN)
 export const getAllBusinessesAdmin = asyncHandler(async (req, res) => {
   const businesses = await Business.find()
     .populate("owner", "name email")
-    .sort({ createdAt: -1 });
+    .populate("cityId", "name slug")
+    .populate("categoryId", "name slug")
+    .sort({ createdAt: -1 })
+    .lean();
 
   res.json({
     success: true,
-    message: "Businesses fetched successfully",
-    total: businesses.length,
-    businesses,
+    data: businesses,
+    meta: {
+      total: businesses.length,
+    },
   });
 });
 
 /*
-APPROVE BUSINESS
+APPROVE
 */
 export const approveBusiness = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndUpdate(
-    req.params.id,
-    { status: "approved" },
-    { new: true }
-  );
+  const business = await Business.findById(req.params.id);
 
   if (!business) {
-    return res.status(404).json({ success: false, message: "Business not found" });
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
   }
 
-  res.json({ success: true, message: "Business approved", business });
+  business.status = "approved";
+  await business.save();
+
+  res.json({
+    success: true,
+    data: business,
+    meta: null,
+  });
 });
 
 /*
-REJECT BUSINESS
+REJECT
 */
 export const rejectBusiness = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndUpdate(
-    req.params.id,
-    { status: "rejected" },
-    { new: true }
-  );
+  const business = await Business.findById(req.params.id);
 
   if (!business) {
-    return res.status(404).json({ success: false, message: "Business not found" });
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
   }
 
-  res.json({ success: true, message: "Business rejected", business });
+  business.status = "rejected";
+  await business.save();
+
+  res.json({
+    success: true,
+    data: business,
+    meta: null,
+  });
 });
 
 /*
-DELETE BUSINESS
+DELETE
 */
 export const deleteBusinessAdmin = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndDelete(req.params.id);
+  const business = await Business.findById(req.params.id);
 
   if (!business) {
-    return res.status(404).json({ success: false, message: "Business not found" });
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
   }
 
-  res.json({ success: true, message: "Business deleted successfully" });
+  await business.deleteOne();
+
+  res.json({
+    success: true,
+    data: null,
+    meta: null,
+  });
 });
 
 /*
-TOGGLE FEATURED
+TOGGLE FEATURE
 */
 export const toggleFeatured = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
   if (!business) {
-    return res.status(404).json({ success: false, message: "Business not found" });
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
   }
 
   business.isFeatured = !business.isFeatured;
 
-  // 🔥 ALIGN WITH HOMEPAGE RANKING SYSTEM
   if (business.isFeatured) {
-    business.featurePriority = business.featurePriority || 1;
+    if (business.featurePriority == null) {
+      business.featurePriority = 1;
+    }
+
+    if (!business.featuredUntil) {
+      const now = new Date();
+      business.featuredUntil = new Date(
+        now.setDate(now.getDate() + 30)
+      );
+    }
   } else {
     business.featurePriority = 0;
+    business.featuredUntil = null;
   }
 
-  await business.save();
+  const updated = await business.save();
 
   res.json({
     success: true,
-    message: "Featured status updated",
-    business,
+    data: updated,
+    meta: null,
+  });
+});
+
+/*
+STATS
+*/
+export const getBusinessStats = asyncHandler(async (req, res) => {
+  const total = await Business.countDocuments();
+  const approved = await Business.countDocuments({ status: "approved" });
+  const pending = await Business.countDocuments({ status: "pending" });
+  const rejected = await Business.countDocuments({ status: "rejected" });
+  const featured = await Business.countDocuments({ isFeatured: true });
+
+  res.json({
+    success: true,
+    data: {
+      total,
+      approved,
+      pending,
+      rejected,
+      featured,
+    },
+    meta: null,
   });
 });
