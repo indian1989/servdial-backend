@@ -163,7 +163,7 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   );
 
   // ================= FORMAT NEARBY =================
-  const formattedNearby = nearbyRaw.map((b) => ({
+  const formattedNearby = (nearbyRaw || []).map((b) => ({
     ...b,
     distance: b.distance ? Number((b.distance / 1000).toFixed(1)) : null,
   }));
