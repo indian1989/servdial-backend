@@ -135,14 +135,17 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   ]);
 
   // ================= APPLY RANKING (CONSISTENCY FIX) =================
-  const rankedFeatured = await rankBusinesses(
-    featuredRaw,
-    null,
-    "",
-    {},
-    req.user?._id || null,
-    cityDoc?._id || null
-  );
+  const safeLocation = lat && lng ? { lat: Number(lat), lng: Number(lng) } : {};
+const safeContext = { intent: "homepage" }; // 🔥 prevents crash
+
+const rankedFeatured = await rankBusinesses(
+  featuredRaw,
+  safeLocation,
+  "",
+  safeContext,
+  req.user?._id || null,
+  cityDoc?._id || null
+);
 
   const rankedTopRated = await rankBusinesses(
     topRatedRaw,
