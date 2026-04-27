@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import asyncHandler from "express-async-handler";
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
@@ -27,8 +28,8 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     });
   }
 
-  if (cityDoc) {
-    cityFilter.cityId = cityDoc._id;
+ if (cityDoc) {
+  cityFilter.cityId = new mongoose.Types.ObjectId(cityDoc._id);
   }
 }
 
