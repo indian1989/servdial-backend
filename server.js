@@ -8,6 +8,8 @@ dotenv.config();
 
 const app = express();
 
+console.log("🔥 SERVER VERSION: homepage-fix-v2");
+
 // 🚨 CRITICAL: DISABLE ETAG (fix 304 issue)
 app.set("etag", false);
 
