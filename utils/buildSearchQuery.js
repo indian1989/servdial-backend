@@ -1,6 +1,7 @@
 // backend/utils/buildSearchQuery.js
 import mongoose from "mongoose";
-// ================= SEMANTIC MAP =================
+
+/* ================= SEMANTIC MAP ================= */
 const semanticMap = {
   plumber: ["pipe", "leak", "tap", "drain", "water leak"],
   electrician: ["light", "wiring", "switch", "fan", "power"],
@@ -11,39 +12,42 @@ const semanticMap = {
   mechanic: ["car repair", "bike repair", "engine"],
 };
 
-// ================= EXPAND KEYWORD =================
-const expandKeyword = (keyword) => {
-  if (!keyword) return [];
+/* ================= NORMALIZE ================= */
+const normalize = (str = "") =>
+  str.toLowerCase().trim().replace(/\s+/g, " ");
 
-  const lower = keyword.toLowerCase();
+/* ================= EXPAND KEYWORD ================= */
+const expandKeyword = (keyword = "") => {
+  const lower = normalize(keyword);
+  if (!lower) return [];
+
   let expanded = [lower];
 
-  Object.entries(semanticMap).forEach(([main, synonyms]) => {
+  for (const [main, synonyms] of Object.entries(semanticMap)) {
+    const normMain = normalize(main);
+
     if (
-      lower.includes(main) ||
-      synonyms.some((s) => lower.includes(s))
+      lower.includes(normMain) ||
+      synonyms.some((s) => lower.includes(normalize(s)))
     ) {
-      expanded.push(main, ...synonyms.slice(0, 3));
+      expanded.push(normMain, ...synonyms.slice(0, 3).map(normalize));
     }
-  });
+  }
 
   return [...new Set(expanded)];
 };
 
-// ================= SPLIT WORDS =================
-const splitWords = (text) => {
-  return text
-    .toLowerCase()
-    .split(/\s+/)
+/* ================= SPLIT WORDS ================= */
+const splitWords = (text = "") =>
+  normalize(text)
+    .split(" ")
     .filter((w) => w.length > 2);
-};
 
-// ================= ESCAPE REGEX (ADD HERE) =================
-const escapeRegex = (text) =>
+/* ================= ESCAPE REGEX ================= */
+const escapeRegex = (text = "") =>
   text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-
-// ================= BUILD QUERY =================
+/* ================= BUILD QUERY ================= */
 export const buildSearchQuery = ({
   city,
   category,
@@ -52,60 +56,58 @@ export const buildSearchQuery = ({
   openNow,
 }) => {
   const query = {
-    status: "approved", // ✅ KEEP
+    status: "approved",
   };
 
   /* ================= CITY ================= */
-if (city) {
-  if (!mongoose.Types.ObjectId.isValid(city)) {
-    throw new Error("Invalid cityId: must be ObjectId");
-  }
+  if (city) {
+    if (!mongoose.Types.ObjectId.isValid(city)) {
+      throw new Error("Invalid cityId: must be ObjectId");
+    }
 
-  query.cityId = new mongoose.Types.ObjectId(city);
-}
+    query.cityId = new mongoose.Types.ObjectId(city);
+  }
 
   /* ================= CATEGORY ================= */
   if (category) {
-  const isObjectId = /^[0-9a-fA-F]{24}$/.test(category);
+    const isObjectId = mongoose.Types.ObjectId.isValid(category);
 
-if (isObjectId) {
-  const catId = new mongoose.Types.ObjectId(category);
+    if (isObjectId) {
+      const catId = new mongoose.Types.ObjectId(category);
 
-  query.$and = query.$and || [];
+      query.$and = query.$and || [];
 
-  query.$and.push({
-    $or: [
-      { categoryId: catId },
-      { parentCategoryId: catId },
-    ],
-  });
-}
+      query.$and.push({
+        $or: [
+          { categoryId: catId },
+          { parentCategoryId: catId },
+        ],
+      });
+    }
   }
 
-  /* ================= KEYWORD (UPGRADED SEMANTIC) ================= */
+  /* ================= KEYWORD ================= */
   if (keyword) {
-    const safeKeyword = keyword.trim().toLowerCase();
-const safeRegex = escapeRegex(safeKeyword);
-const expanded = expandKeyword(safeKeyword);
-const split = splitWords(safeKeyword);
+    const safeKeyword = normalize(keyword);
+    const safeRegex = escapeRegex(safeKeyword);
 
-query.$and = query.$and || [];
+    const expanded = expandKeyword(safeKeyword);
+    const split = splitWords(safeKeyword);
 
-query.$and.push({
-  $or: [
-    // ✅ primary (light regex)
-    { name: { $regex: safeRegex, $options: "i" } },
+    query.$and = query.$and || [];
 
-    // ✅ fast semantic (INDEX FRIENDLY)
-    { tags: { $in: expanded } },
-    { keywords: { $in: expanded } },
-
-    // ✅ fallback split (limited)
-    ...split.slice(0, 3).map((word) => ({
-  name: { $regex: escapeRegex(word), $options: "i" },
-})),
-  ],
-});
+    query.$and.push({
+      $or: [
+        { name: { $regex: safeRegex, $options: "i" } },
+        { tags: { $in: expanded } },
+        ...(Array.isArray(expanded)
+          ? [{ keywords: { $in: expanded } }]
+          : []),
+        ...split.slice(0, 3).map((word) => ({
+          name: { $regex: escapeRegex(word), $options: "i" },
+        })),
+      ],
+    });
   }
 
   /* ================= RATING ================= */
@@ -115,14 +117,23 @@ query.$and.push({
     };
   }
 
-  /* ================= OPEN NOW ================= */
+  /* ================= OPEN NOW (SAFE VERSION) ================= */
   if (openNow === "true") {
     const now = new Date();
-    const day = now
-      .toLocaleString("en-US", { weekday: "long" })
-      .toLowerCase();
+    const utcDay = now.getUTCDay();
 
-    const time = now.toTimeString().slice(0, 5);
+    const days = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
+
+    const day = days[utcDay];
+    const time = now.toISOString().slice(11, 16);
 
     query[`businessHours.${day}.open`] = { $lte: time };
     query[`businessHours.${day}.close`] = { $gte: time };

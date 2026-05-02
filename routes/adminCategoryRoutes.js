@@ -1,21 +1,19 @@
-// backend/routes/adminCategoryRoutes.js
-
 import express from "express";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 import {
   createCategory,
   updateCategory,
-  deleteCategory
+  deleteCategory,
 } from "../controllers/categoryController.js";
 
 const router = express.Router();
 
-// 🔒 Admin protection
+// 🔒 lock admin access
 router.use(protect);
 router.use(authorizeRoles("admin", "superadmin"));
 
-// Admin actions
+// admin operations ONLY
 router.post("/", createCategory);
 router.put("/:id", updateCategory);
 router.delete("/:id", deleteCategory);

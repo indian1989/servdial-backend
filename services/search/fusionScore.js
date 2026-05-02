@@ -1,6 +1,8 @@
+// backend/services/search/fusionScore.js
+
 const computeWeightedRating = (rating = 0, reviewCount = 0) => {
-  const C = 3.5; // global avg
-  const m = 10;  // min reviews threshold
+  const C = 3.5;
+  const m = 10;
 
   return (
     (reviewCount / (reviewCount + m)) * rating +
@@ -8,6 +10,7 @@ const computeWeightedRating = (rating = 0, reviewCount = 0) => {
   );
 };
 
+/* ================= FINAL SCORE ENGINE ================= */
 export function computeFinalScore({
   vectorScore = 0,
   keywordScore = 0,
@@ -15,34 +18,46 @@ export function computeFinalScore({
   clickScore = 0,
   distanceScore = 0,
 
-  // 🔥 RAW INPUTS ONLY
   averageRating = 0,
-  totalReviews = 0
+  totalReviews = 0,
 }) {
-  /* ================= RATING (ANTI-MANIPULATION) ================= */
+  /* ================= SAFETY NORMALIZATION ================= */
+  const safeNum = (v) => (isNaN(v) || v == null ? 0 : v);
 
-  let finalRatingScore = 0;
+  vectorScore = safeNum(vectorScore);
+  keywordScore = safeNum(keywordScore);
+  trendingScore = safeNum(trendingScore);
+  clickScore = safeNum(clickScore);
+  distanceScore = safeNum(distanceScore);
+  averageRating = safeNum(averageRating);
+  totalReviews = safeNum(totalReviews);
+
+  /* ================= RATING ================= */
+  let ratingScore = 0;
 
   if (totalReviews > 0) {
     const weighted = computeWeightedRating(averageRating, totalReviews);
 
-    // normalize (0–1)
-    finalRatingScore = weighted / 5;
+    ratingScore = weighted / 5;
 
-    // 🔒 confidence damping
-    const confidence = Math.min(1, totalReviews / 20);
-    finalRatingScore *= confidence;
+    // FIXED: smoother confidence curve (less aggressive penalty)
+    const confidence = Math.min(1, totalReviews / 50);
+    ratingScore *= confidence;
   }
 
-  /* ================= FINAL SCORE ================= */
+  /* ================= TRENDING ================= */
+  // FIXED: keep raw signal (don’t destroy resolution)
+  const trendingNormalized = trendingScore;
 
-  const score =
+  /* ================= FINAL SCORE ================= */
+  let score =
     keywordScore * 0.30 +
-    finalRatingScore * 0.20 +
+    ratingScore * 0.22 +
     clickScore * 0.15 +
     distanceScore * 0.15 +
-    trendingScore * 0.10 +
+    trendingNormalized * 0.08 +
     vectorScore * 0.10;
 
+  /* ================= RETURN RAW SCORE (NO CLAMP) ================= */
   return score;
 }

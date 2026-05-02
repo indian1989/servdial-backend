@@ -1,97 +1,70 @@
-// backend/controllers/searchController.js
-
 import asyncHandler from "express-async-handler";
-import Business from "../models/Business.js";
+
+import {
+  getAutocompleteService,
+  getTrendingSearchesService,
+  getRecentSearchesService
+} from "../services/search/queryIntelligenceEngine.js";
 
 /* =========================================================
-   SEARCH CONTROLLER (SUPPORT ONLY - NO BUSINESS SEARCH LOGIC)
+   🚫 LEGACY SEARCH ENDPOINT (DEPRECATED SAFELY)
    ========================================================= */
-
-/**
- * 🚫 DEPRECATED MAIN SEARCH (DISABLED SAFELY)
- * Moved to: businessController.searchBusinesses
- */
 export const searchBusinesses = asyncHandler(async (req, res) => {
   return res.status(410).json({
-  success: false,
-  message: "Search endpoint deprecated. Use /business/search instead.",
-  meta: {
-    timestamp: new Date().toISOString(),
-  },
-});
+    success: false,
+    message: "Deprecated. Use /business/search instead.",
+    meta: {
+      deprecated: true
+    }
+  });
 });
 
 /* =========================================================
-   AUTOCOMPLETE
+   🔍 AUTOCOMPLETE (SERVICE DELEGATION)
    ========================================================= */
 export const getAutocompleteSuggestions = asyncHandler(async (req, res) => {
   const q = req.query.q || "";
 
-  if (!q.trim()) {
-  return res.json({
+  const suggestions = await getAutocompleteService(q);
+
+  res.json({
     success: true,
-    data: [],
+    data: suggestions,
     meta: {
-      total: 0,
-      type: "autocomplete",
-      timestamp: new Date().toISOString(),
-    },
+      total: suggestions.length,
+      type: "autocomplete"
+    }
   });
-}
-
-  const escapeRegex = (text) => {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-};
-
-  const safeQuery = escapeRegex(q);
-
-const suggestions = await Business.find({
-  name: { $regex: safeQuery, $options: "i" },
-  status: "approved"
-})
-    .select("_id name slug")
-    .limit(6)
-    .lean();
-
-  return res.json({
-  success: true,
-  data: suggestions,
-  meta: {
-    total: suggestions.length,
-    type: "autocomplete",
-    timestamp: new Date().toISOString(),
-  },
-});
 });
 
 /* =========================================================
-   TRENDING SEARCHES (KEEP - SIMPLE PLACEHOLDER SAFE)
+   📈 TRENDING SEARCHES
    ========================================================= */
 export const getTrendingSearches = asyncHandler(async (req, res) => {
-  // If you already have SearchTrend model logic elsewhere, plug it here
-  return res.json({
-  success: true,
-  data: [],
-  meta: {
-    total: 0,
-    type: "trending",
-    timestamp: new Date().toISOString(),
-  },
-});
+  const data = await getTrendingSearchesService();
+
+  res.json({
+    success: true,
+    data,
+    meta: {
+      total: data.length,
+      type: "trending"
+    }
+  });
 });
 
 /* =========================================================
-   RECENT SEARCHES (KEEP - SAFE VERSION)
+   🕘 RECENT SEARCHES
    ========================================================= */
 export const getRecentSearches = asyncHandler(async (req, res) => {
-  // If user system exists, you can later connect DB here
-  return res.json({
-  success: true,
-  data: [],
-  meta: {
-    total: 0,
-    type: "recent",
-    timestamp: new Date().toISOString(),
-  },
-});
+  const data = await getRecentSearchesService(req.user?._id);
+
+  res.json({
+    success: true,
+    data,
+    meta: {
+      total: data.length,
+      type: "recent"
+    }
+  });
 });

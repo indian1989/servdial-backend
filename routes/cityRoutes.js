@@ -1,17 +1,22 @@
-// backend/routes/cityRoutes.js
 import express from "express";
+
 import {
-  getCities,
-  getStates,
-  getDistrictsByState,
-  getCitiesByDistrict,
+  getAllCities,
+  getCityBySlug,
+  getTrendingCities,
 } from "../controllers/cityController.js";
 
 const router = express.Router();
 
-router.get("/", getCities);
-router.get("/states", getStates);
-router.get("/districts/:stateSlug", getDistrictsByState);
-router.get("/by-district/:districtSlug", getCitiesByDistrict);
+/* ================= PUBLIC ================= */
+
+// 🔥 Trending cities (must come first)
+router.get("/trending", getTrendingCities);
+
+// 🔥 All cities
+router.get("/", getAllCities);
+
+// 🔥 City by slug (SEO route)
+router.get("/:slug", getCityBySlug);
 
 export default router;

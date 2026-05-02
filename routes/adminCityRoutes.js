@@ -1,27 +1,43 @@
-// backend/routes/adminCityRoutes.js
 import express from "express";
+import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
+
 import {
   addCity,
+  getCities,
   updateCity,
   deleteCity,
-  markCityAsFeatured,
-  unmarkCityAsFeatured,
   bulkUploadCities,
+  getStates,
+  getDistrictsByState,
+  getCitiesByDistrict,
+  getFeaturedCities,
+  markCityAsFeatured,
+  unmarkCityAsFeatured
 } from "../controllers/cityController.js";
-
-import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+/* ================= SECURITY LOCK ================= */
 router.use(protect);
 router.use(authorizeRoles("admin", "superadmin"));
 
+/* ================= CORE CITY CRUD ================= */
 router.post("/", addCity);
-router.post("/bulk", bulkUploadCities);
+router.get("/", getCities);
 router.put("/:id", updateCity);
 router.delete("/:id", deleteCity);
 
-router.put("/:id/feature", markCityAsFeatured);
-router.put("/:id/unfeature", unmarkCityAsFeatured);
+/* ================= BULK OPERATIONS ================= */
+router.post("/bulk-upload", bulkUploadCities);
+
+/* ================= LOCATION STRUCTURE ================= */
+router.get("/states", getStates);
+router.get("/districts/:stateSlug", getDistrictsByState);
+router.get("/cities/:districtSlug", getCitiesByDistrict);
+
+/* ================= FEATURE SYSTEM ================= */
+router.get("/featured", getFeaturedCities);
+router.patch("/:id/feature", markCityAsFeatured);
+router.patch("/:id/unfeature", unmarkCityAsFeatured);
 
 export default router;

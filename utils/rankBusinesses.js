@@ -11,20 +11,17 @@ const normalize = (b) => ({
 });
 
 const computeScore = (s, context) => {
-  const {
-    intent = "default",
-    isNearby = false
-  } = context;
+  const intent = context?.intent?.sortBy || "default";
+  const isNearby = !!context?.intent?.isNearMe;
 
-  // 🎯 DYNAMIC WEIGHTS
   const weights = {
-    rating: intent === "quality" ? 0.35 : 0.25,
+    rating: intent === "rating" ? 0.35 : 0.25,
     views: 0.10,
     clicks: 0.15,
     distance: isNearby ? 0.25 : 0.10,
     trending: 0.15,
     vector: 0.10,
-    feature: 0.15
+    feature: 0.10
   };
 
   return (
@@ -41,6 +38,7 @@ const computeScore = (s, context) => {
 export const rankBusinesses = (businesses = [], context = {}) => {
   const enriched = businesses.map((b) => {
     const signals = normalize(b);
+
     const finalScore = computeScore(signals, context);
 
     return {
@@ -49,12 +47,10 @@ export const rankBusinesses = (businesses = [], context = {}) => {
     };
   });
 
-  // 🔥 FINAL SORT
   return enriched.sort((a, b) => {
     const diff = (b.finalScore || 0) - (a.finalScore || 0);
     if (diff !== 0) return diff;
 
-    // fallback tie-breaker
     return (b.views || 0) - (a.views || 0);
   });
 };

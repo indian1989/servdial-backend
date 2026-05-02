@@ -8,42 +8,38 @@ dotenv.config();
 
 const app = express();
 
-console.log("🔥 SERVER VERSION: homepage-fix-v2");
-
-// 🚨 CRITICAL: DISABLE ETAG (fix 304 issue)
+// ================= CORE CONFIG =================
 app.set("etag", false);
 
-// ================= Middleware =================
+// ================= MIDDLEWARE =================
 app.use(cors());
 app.use(express.json());
 
-// ================= GLOBAL NO CACHE (FINAL) =================
+// 🔥 GLOBAL CACHE CONTROL (single layer only)
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-  res.setHeader("Surrogate-Control", "no-store");
-  next();
-});
-
-app.use((req, res, next) => {
   res.removeHeader("ETag");
   next();
 });
 
-// ================= Routes =================
+// ================= ROUTES IMPORT =================
 import authRoutes from "./routes/authRoutes.js";
-import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
-import publicBusinessRoutes from "./routes/publicBusinessRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+
+import publicBusinessRoutes from "./routes/publicBusinessRoutes.js";
 import adminBusinessRoutes from "./routes/adminBusinessRoutes.js";
+
 import categoryRoutes from "./routes/categoryRoutes.js";
 import adminCategoryRoutes from "./routes/adminCategoryRoutes.js";
+
 import cityRoutes from "./routes/cityRoutes.js";
 import adminCityRoutes from "./routes/adminCityRoutes.js";
+
 import bannerRoutes from "./routes/bannerRoutes.js";
 import adminBannerRoutes from "./routes/adminBannerRoutes.js";
+
 import homepageRoutes from "./routes/homepageRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
 import leadRoutes from "./routes/leadRoutes.js";
@@ -53,48 +49,42 @@ import providerRoutes from "./routes/providerRoutes.js";
 import seoRoutes from "./routes/seoRoutes.js";
 import locationRoutes from "./routes/locationRoutes.js";
 import sitemapRoutes from "./routes/sitemapRoutes.js";
-
 import healthRoutes from "./routes/health.js";
 
-console.log("🚀 SERVER FILE LOADED");
+import adminRoutes from "./routes/adminRoutes.js";
 
-// ================= Health Check =================
+console.log("🔥 ServDial Server Booting...");
+
+// ================= ROOT =================
 app.get("/api", (req, res) => {
-  res.json({ message: "🚀 ServDial API Running..." });
+  res.json({ message: "🚀 ServDial API Running" });
 });
 
-// ================= API ROUTES =================
-
-// Auth & Users
+// ================= AUTH =================
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 
-// Business
+// ================= BUSINESS =================
 app.use("/api/businesses", publicBusinessRoutes);
-// Admin Core
-app.use("/api/admin", adminRoutes);
-
-// Admin Businesses (separate namespace)
 app.use("/api/admin/businesses", adminBusinessRoutes);
 
-// ============= BANNERS =============
-app.use("/api/banners", bannerRoutes);              // public + user
-app.use("/api/admin/banners", adminBannerRoutes);   // admin + superadmin
+// ================= ADMIN =================
+app.use("/api/admin", adminRoutes);
 
-// Categories
+// ================= CATEGORY =================
 app.use("/api/categories", categoryRoutes);
 app.use("/api/admin/categories", adminCategoryRoutes);
 
-// Public (read only)
+// ================= CITY =================
 app.use("/api/cities", cityRoutes);
-
-// Admin only
 app.use("/api/admin/cities", adminCityRoutes);
 
-// Others
+// ================= BANNER =================
+app.use("/api/banners", bannerRoutes);
+app.use("/api/admin/banners", adminBannerRoutes);
 
+// ================= CORE FEATURES =================
 app.use("/api/homepage", homepageRoutes);
-console.log("✅ Homepage route mounted");
 app.use("/api/search", searchRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/reviews", reviewRoutes);
@@ -102,19 +92,16 @@ app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/provider", providerRoutes);
 app.use("/api/location", locationRoutes);
 
+// ================= SEO + INFRA =================
+app.use("/api/seo", seoRoutes);
+app.use("/api/sitemap", sitemapRoutes);
 app.use("/api/health", healthRoutes);
 
-// Sitemap
-app.use("/api/sitemap", sitemapRoutes);
-
-// SEO PUBLIC ROUTES
-app.use("/api/seo", seoRoutes);
-
-// ================= MongoDB =================
+// ================= DB CONNECT =================
 const connectDB = async () => {
   try {
     if (!process.env.MONGO_URI) {
-      throw new Error("❌ MONGO_URI not defined");
+      throw new Error("MONGO_URI not defined");
     }
 
     const conn = await mongoose.connect(process.env.MONGO_URI, {
@@ -122,41 +109,34 @@ const connectDB = async () => {
       maxPoolSize: 20,
     });
 
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error("❌ MongoDB connection failed:", error.message);
+    console.log("✅ MongoDB Connected:", conn.connection.host);
+  } catch (err) {
+    console.error("❌ MongoDB Error:", err.message);
     process.exit(1);
   }
 };
 
-/* ================= 404 ================= */
-app.use(notFound);
+// ================= ERROR HANDLERS =================
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: "Route not found" });
+});
 
-/* ================= GLOBAL ERROR ================= */
-app.use(errorHandler);
+app.use((err, req, res, next) => {
+  console.error("❌ Global Error:", err.message);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || "Internal Server Error",
+  });
+});
 
-
-// ================= Start Server =================
+// ================= START SERVER =================
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   await connectDB();
 
-  const server = app.listen(PORT, () => {
-    console.log(
-      `🔥 Server running in ${
-        process.env.NODE_ENV || "development"
-      } mode on port ${PORT}`
-    );
-  });
-
-  // Graceful shutdown
-  process.on("SIGINT", () => {
-    console.log("⚡️ Shutting down...");
-    server.close(() => {
-      console.log("✅ Server closed");
-      process.exit(0);
-    });
+  app.listen(PORT, () => {
+    console.log(`🔥 Server running on port ${PORT}`);
   });
 };
 

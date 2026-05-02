@@ -3,7 +3,7 @@ import asyncHandler from "express-async-handler";
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
 import City from "../models/City.js";
-import { resolveCity } from "../services/cityResolver.js";
+import { resolveCity } from "../services/resolver/cityResolver.js";
 import { rankBusinesses } from "../utils/rankBusinesses.js";
 import { buildCategoryTree } from "../utils/buildCategoryTree.js";
 
@@ -16,22 +16,20 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   let cityFilter = {};
 
   if (city) {
-  cityDoc = await resolveCity({ citySlug: city });
+    cityDoc = await resolveCity({ citySlug: city });
 
-  // ✅ IMPORTANT FIX
-  if (!cityDoc && city === "india") {
-    cityDoc = null; // allow global data
-  } else if (!cityDoc) {
-    return res.status(404).json({
-      success: false,
-      message: "City not found",
-    });
-  }
+    // allow global scope for "india"
+    if (!cityDoc && city !== "india") {
+      return res.status(404).json({
+        success: false,
+        message: "City not found",
+      });
+    }
 
- if (cityDoc) {
-  cityFilter.cityId = new mongoose.Types.ObjectId(cityDoc._id);
+    if (cityDoc) {
+      cityFilter.cityId = cityDoc._id; // ✅ NO unnecessary ObjectId wrapping
+    }
   }
-}
 
   // ================= BASE FILTER =================
   const baseBusinessFilter = {
@@ -40,29 +38,33 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     ...cityFilter,
   };
 
-  // ================= COMMON SELECT =================
   const baseSelect =
     "name slug averageRating totalReviews views isFeatured featurePriority";
 
-  // ================= DATA FETCH =================
+  const safeLocation =
+    lat && lng ? { lat: Number(lat), lng: Number(lng) } : {};
+
+  const safeContext = { intent: "homepage" };
+
+  // ================= PARALLEL FETCH =================
   const [
     categories,
     featuredRaw,
     topRatedRaw,
     latestRaw,
     nearbyRaw,
-    recommendedBusinesses,
+    recommendedRaw,
     cities,
   ] = await Promise.all([
     // ================= CATEGORIES =================
     Category.find({
-  status: "active",
-  parentCategory: null, // ✅ ONLY PARENT
-})
-  .select("name slug icon order")
-  .sort({ order: 1, name: 1 })
-  .limit(20) // ✅ SHOW 20
-  .lean(),
+      status: "active",
+      parentCategory: null,
+    })
+      .select("name slug icon order")
+      .sort({ order: 1, name: 1 })
+      .limit(20)
+      .lean(),
 
     // ================= FEATURED =================
     Business.find(baseBusinessFilter)
@@ -90,86 +92,86 @@ export const getHomepageData = asyncHandler(async (req, res) => {
       ? Business.aggregate([
           {
             $geoNear: {
-  near: {
-    type: "Point",
-    coordinates: [Number(lng), Number(lat)],
-  },
-  distanceField: "distance",
-  spherical: true,
-  maxDistance: 5000,
-  key: "location", // 🔥 CRITICAL FIX
-},
+              near: {
+                type: "Point",
+                coordinates: [Number(lng), Number(lat)],
+              },
+              distanceField: "distance",
+              spherical: true,
+              maxDistance: 5000,
+              key: "location",
+            },
           },
           {
-            $match: {
-              status: "approved",
-              isDeleted: false,
-              ...(cityFilter.cityId && { cityId: cityFilter.cityId }),
-            },
+            $match: baseBusinessFilter,
           },
           { $limit: 20 },
         ])
       : [],
 
     // ================= RECOMMENDED =================
-    (async () => {
-      const businesses = await Business.find(baseBusinessFilter)
-        .select(baseSelect)
-        .limit(40)
-        .lean();
-
-      return await rankBusinesses(
-  businesses,
-  lat && lng ? { lat: Number(lat), lng: Number(lng) } : {}, // 🔥 NEVER null
-  "",
-  { recommendation: true },
-  req.user?._id || null,
-  cityDoc?._id || null
-);
-    })(),
+    Business.find(baseBusinessFilter)
+      .select(baseSelect)
+      .limit(40)
+      .lean(),
 
     // ================= POPULAR CITIES =================
-    City.find({ popular: true, status: "active" })
+    City.find({
+      popular: true,
+      status: "active",
+    })
       .sort({ name: 1 })
       .limit(8)
       .lean(),
   ]);
 
-  // ================= APPLY RANKING (CONSISTENCY FIX) =================
-  const safeLocation = lat && lng ? { lat: Number(lat), lng: Number(lng) } : {};
-const safeContext = { intent: "homepage" }; // 🔥 prevents crash
-
-const rankedFeatured = await rankBusinesses(
-  featuredRaw,
-  safeLocation,
-  "",
-  safeContext,
-  req.user?._id || null,
-  cityDoc?._id || null
-);
-
-  const rankedTopRated = await rankBusinesses(
-    topRatedRaw,
-    safeLocation,
-  "",
-  safeContext,
-    req.user?._id || null,
-    cityDoc?._id || null
-  );
-
-  const rankedLatest = await rankBusinesses(
-    latestRaw,
-    safeLocation,
-  "",
-  safeContext,
-    req.user?._id || null,
-    cityDoc?._id || null
-  );
+  // ================= RANKING =================
+  const [
+    rankedFeatured,
+    rankedTopRated,
+    rankedLatest,
+    rankedRecommended,
+  ] = await Promise.all([
+    rankBusinesses(
+      featuredRaw,
+      safeLocation,
+      "",
+      safeContext,
+      req.user?._id || null,
+      cityDoc?._id || null
+    ),
+    rankBusinesses(
+      topRatedRaw,
+      safeLocation,
+      "",
+      safeContext,
+      req.user?._id || null,
+      cityDoc?._id || null
+    ),
+    rankBusinesses(
+      latestRaw,
+      safeLocation,
+      "",
+      safeContext,
+      req.user?._id || null,
+      cityDoc?._id || null
+    ),
+    rankBusinesses(
+      recommendedRaw,
+      safeLocation,
+      "",
+      { recommendation: true },
+      req.user?._id || null,
+      cityDoc?._id || null
+    ),
+  ]);
 
   // ================= FORMAT NEARBY =================
   const formattedNearby = (nearbyRaw || []).map((b) => ({
     ...b,
-    distance: b.distance ? Number((b.distance / 1000).toFixed(1)) : null,
+    distance: b.distance
+      ? Number((b.distance / 1000).toFixed(1))
+      : null,
   }));
 
   // ================= RESPONSE =================
@@ -181,7 +183,7 @@ const rankedFeatured = await rankBusinesses(
       topRatedBusinesses: rankedTopRated.slice(0, 8),
       latestBusinesses: rankedLatest.slice(0, 8),
       nearbyBusinesses: formattedNearby.slice(0, 8),
-      recommendedBusinesses: recommendedBusinesses.slice(0, 8),
+      recommendedBusinesses: rankedRecommended.slice(0, 8),
       cities,
     },
     meta: {

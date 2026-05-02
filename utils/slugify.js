@@ -1,13 +1,20 @@
 const slugify = (text) => {
-  if (!text) return "";
-
   return text
     .toString()
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, "-")        // spaces → -
-    .replace(/[^\w-]+/g, "")     // remove special chars
-    .replace(/--+/g, "-");       // remove double -
+
+    // remove special chars
+    .replace(/[^\w\s-]/g, "")
+
+    // replace spaces with -
+    .replace(/\s+/g, "-")
+
+    // remove multiple -
+    .replace(/--+/g, "-")
+
+    // remove starting/ending -
+    .replace(/^-+|-+$/g, "");
 };
 
 export default slugify;

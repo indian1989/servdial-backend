@@ -1,50 +1,51 @@
-// backend/utils/memoryCache.js
-const cache = new Map();
-
-/* ================= SET CACHE ================= */
-export const setCache = (key, value, ttl = 60) => {
-  const expires = Date.now() + ttl * 1000;
-
-  cache.set(key, {
-    value,
-    expires,
-  });
-};
-
-/* ================= GET CACHE ================= */
-export const getCache = (key) => {
-  const data = cache.get(key);
-
-  if (!data) return null;
-
-  if (Date.now() > data.expires) {
-    cache.delete(key);
-    return null;
+class MemoryCache {
+  constructor() {
+    this.store = new Map();
   }
 
-  return data.value;
-};
+  set(key, value, ttl = 3600) {
+    const expiresAt = Date.now() + ttl * 1000;
 
-/* ================= CLEANUP ================= */
-setInterval(() => {
-  const now = Date.now();
+    this.store.set(key, {
+      value,
+      expiresAt,
+    });
+  }
 
-  for (const [key, data] of cache.entries()) {
-    if (now > data.expires) {
-      cache.delete(key);
+  get(key) {
+    const data = this.store.get(key);
+
+    if (!data) return null;
+
+    if (Date.now() > data.expiresAt) {
+      this.store.delete(key);
+      return null;
     }
+
+    return data.value;
   }
-}, 60000);
 
-export const deleteCache = (key) => {
-  if (!key) return;
-
-  if (cache.has(key)) {
-    cache.delete(key);
+  del(key) {
+    this.store.delete(key);
   }
-};
 
-/* ================= CLEAR CACHE ================= */
-export const clearCache = () => {
-  cache.clear();
-};
+  clear() {
+    this.store.clear();
+  }
+}
+
+const memoryCache = new MemoryCache();
+
+/* =========================================================
+   COMPATIBILITY LAYER (🔥 FIX YOUR ERRORS)
+   THIS FIXES:
+   - import { getCache }
+   - import { setCache }
+   ========================================================= */
+
+export const getCache = (key) => memoryCache.get(key);
+export const setCache = (key, value, ttl) =>
+  memoryCache.set(key, value, ttl);
+export const delCache = (key) => memoryCache.del(key);
+
+export default memoryCache;

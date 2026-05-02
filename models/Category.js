@@ -41,6 +41,13 @@ const categorySchema = new mongoose.Schema(
       index: true,
     },
 
+    // 🧠 LEVEL (0 = root, 1 = child)
+      level: {
+        type: Number,
+        default: 0,
+        index: true,
+      },
+
     // ================= MEDIA =================
     icon: {
       type: String,
@@ -146,6 +153,12 @@ categorySchema.pre("save", function (next) {
 // ================= SLUG =================
 categorySchema.pre("save", async function (next) {
   try {
+
+    // ================= ID VALIDATION =================
+if (this.parentCategory && !mongoose.Types.ObjectId.isValid(this.parentCategory)) {
+  return next(new Error("Invalid parentCategory ID"));
+}
+
     // store original slug
     if (!this.isNew && !this._originalSlug) {
       const existing = await mongoose.models.Category.findById(this._id).select("slug");
@@ -169,25 +182,63 @@ categorySchema.pre("save", async function (next) {
 
     // 🚨 prevent accidental slug overwrite
 if (!this.isNew && this.isModified("slug")) {
-  // allow only if explicitly bypassed (admin control later)
   if (!this._allowSlugUpdate) {
-    return next(new Error("Slug cannot be modified directly"));
+    return next(new Error("Slug modification is restricted"));
   }
 
+  // 🧠 enforce slug normalization
+  this.slug = slugify(this.slug);
+
+  // ================= SLUG HISTORY =================
   this.slugHistory = this.slugHistory || [];
 
   if (this._originalSlug && this._originalSlug !== this.slug) {
-    if (!this.slugHistory.includes(this._originalSlug)) {
+    const exists = this.slugHistory.some(
+      (s) => s.toLowerCase() === this._originalSlug.toLowerCase()
+    );
+
+    if (!exists) {
       this.slugHistory.push(this._originalSlug);
     }
   }
-}
 
+  // 🧠 enforce uniqueness
+  this.slugHistory = [...new Set(this.slugHistory)];
+}
     // SEO defaults
     if (!this.seoTitle) this.seoTitle = this.name;
     if (!this.seoDescription) {
       this.seoDescription = this.description || `${this.name} services`;
     }
+
+    // ================= HIERARCHY SAFETY =================
+
+// 🚨 prevent self-parenting
+if (this.parentCategory && this.parentCategory.equals(this._id)) {
+  return next(new Error("Category cannot be its own parent"));
+}
+
+// 🚨 validate parent exists
+if (this.parentCategory) {
+  const parentExists = await mongoose.models.Category.exists({
+    _id: this.parentCategory,
+  });
+
+  if (!parentExists) {
+    return next(new Error("Invalid parentCategory"));
+  }
+}
+
+// ================= LEVEL AUTO SET =================
+if (this.isModified("parentCategory")) {
+  if (this.parentCategory) {
+    const parent = await mongoose.models.Category.findById(this.parentCategory).select("level");
+
+    this.level = parent ? parent.level + 1 : 1;
+  } else {
+    this.level = 0;
+  }
+}
 
     next();
   } catch (err) {
@@ -201,6 +252,15 @@ categorySchema.index({
   order: 1,
 });
 
+// 🚀 HIERARCHY FETCH OPTIMIZATION (USED IN TREE BUILDING)
+categorySchema.index({
+  parentCategory: 1,
+  level: 1,
+});
+
 categorySchema.index({ slug: 1 }, { unique: true });
+
+// 🚀 SLUG HISTORY LOOKUP (CRITICAL FOR SEO FALLBACK)
+categorySchema.index({ "slugHistory": 1 });
 
 export default mongoose.model("Category", categorySchema);

@@ -1,321 +1,315 @@
-import mongoose from "mongoose";
 import City from "../models/City.js";
-import { geocodeCity } from "../services/geocodeService.js";
+import slugify from "../utils/slugify.js";
+import memoryCache from "../utils/memoryCache.js";
 
-import {
-  createCityService,
-  getCitiesService,
-  deleteCityService,
-  updateCityService,
-  featureCityService,
-  getStatesService,
-  getDistrictsService,
-  getCitiesByDistrictService,
-} from "../services/cityService.js";
+/* =========================================================
+   CORE HELPERS
+========================================================= */
 
-/* ================= VALIDATION ================= */
-const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
-
-/* ================= FALLBACK LOCATION ================= */
-const DEFAULT_LOCATION = {
-  latitude: 20.5937,
-  longitude: 78.9629, // India center fallback
+const clearCityCache = () => {
+  memoryCache.del("cities:all");
+  memoryCache.del("cities:trending");
 };
 
-const buildLocation = (lat, lng) => {
-  if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
-    return {
-      latitude: Number(lat),
-      longitude: Number(lng),
-      location: {
-        type: "Point",
-        coordinates: [Number(lng), Number(lat)],
-      },
-    };
-  }
-
-  return {
-    ...DEFAULT_LOCATION,
-    location: {
-      type: "Point",
-      coordinates: [
-        DEFAULT_LOCATION.longitude,
-        DEFAULT_LOCATION.latitude,
-      ],
-    },
-  };
-};
-
-/* ================= GET CITIES ================= */
+/* =========================================================
+   GET CITIES (ADMIN EXPECTED)
+   alias of getAllCities (keeps route compatibility)
+========================================================= */
 export const getCities = async (req, res) => {
   try {
-    const result = await getCitiesService(req.query);
+    const cacheKey = "cities:all";
 
-    res.json({
-      success: true,
-      cities: result.cities || [],
-      total: result.total || 0,
-      page: result.page || 1,
-      pages: result.pages || 1,
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
+    const cached = memoryCache.get(cacheKey);
+    if (cached) {
+      return res.json({ success: true, data: cached });
+    }
+
+    const cities = await City.find({})
+      .sort({ name: 1 })
+      .lean();
+
+    memoryCache.set(cacheKey, cities, 60 * 60 * 6);
+
+    return res.json({ success: true, data: cities });
+  } catch (error) {
+    console.error("getCities error:", error);
+    res.status(500).json({ success: false });
   }
 };
 
-/* ================= ADD CITY ================= */
+/* =========================================================
+   ADMIN GET ALL (EXTRA COMPAT LAYER)
+========================================================= */
+export const getAllCitiesAdmin = async (req, res) => {
+  return getCities(req, res);
+};
+
+/* =========================================================
+   ADD CITY
+========================================================= */
 export const addCity = async (req, res) => {
   try {
-    let geo = null;
-    const { latitude, longitude } = req.body;
+    const { name, state, district, location } = req.body;
 
-    // 1. Use manual coordinates if available
-    if (latitude && longitude) {
-      geo = buildLocation(latitude, longitude);
-    } else {
-      // 2. Try geocoding
-      try {
-        geo = await geocodeCity({
-          name: req.body.name,
-          district: req.body.district,
-          state: req.body.state,
-        });
-      } catch (err) {
-        console.warn("Geocode failed, using fallback location");
-        geo = buildLocation();
-      }
+    // ✅ validation
+    if (!name || !state || !district) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, state and district are required",
+      });
+    }
+
+    // ⚠️ DO NOT manually generate slug here
+    // Schema will handle it (IMPORTANT FIX)
+
+    const exists = await City.findOne({
+      name: name.trim(),
+      state: state.trim(),
+      district: district.trim(),
+    });
+
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: "City already exists",
+      });
     }
 
     const city = await City.create({
-      ...req.body,
-      ...geo,
+      name: name.trim(),
+      state: state.trim(),
+      district: district.trim(),
+      location: location || null,
     });
 
-    res.status(201).json({
+    clearCityCache();
+
+    return res.status(201).json({
       success: true,
       data: city,
-      meta: {
-        timestamp: new Date().toISOString(),
-      },
     });
-  } catch (err) {
-    res.status(500).json({
+
+  } catch (error) {
+    console.error("addCity error:", error);
+    return res.status(500).json({
       success: false,
-      message: err.message || "Server error",
+      message: "Failed to create city",
     });
   }
 };
 
-/* ================= UPDATE CITY ================= */
+/* =========================================================
+   UPDATE CITY
+========================================================= */
+export const updateCity = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const city = await City.findById(id);
+    if (!city) {
+      return res.status(404).json({ success: false });
+    }
+
+    const { name, state, district, location, status } = req.body;
+
+    if (name && name !== city.name) {
+      city.slug = slugify(name);
+      city.name = name;
+    }
+
+    if (state !== undefined) city.state = state;
+    if (district !== undefined) city.district = district;
+    if (location !== undefined) city.location = location;
+    if (status) city.status = status;
+
+    await city.save();
+
+    clearCityCache();
+
+    return res.json({ success: true, data: city });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false });
+  }
+};
+
+/* =========================================================
+   DELETE CITY
+========================================================= */
+export const deleteCity = async (req, res) => {
+  try {
+    const city = await City.findById(req.params.id);
+
+    if (!city) {
+      return res.status(404).json({ success: false });
+    }
+
+    await city.deleteOne();
+
+    clearCityCache();
+
+    return res.json({
+      success: true,
+      message: "City deleted",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false });
+  }
+};
+
+/* =========================================================
+   BULK UPLOAD (SAFE STUB - FIXES YOUR ERROR)
+========================================================= */
 export const bulkUploadCities = async (req, res) => {
   try {
-    const cities = req.body.cities || [];
+    const cities = req.body?.cities || [];
 
-    let inserted = 0;
-    let failed = 0;
-
-    for (const city of cities) {
-      try {
-        await createCityService(city); // 🔥 IMPORTANT (auto enrich)
-        inserted++;
-      } catch (err) {
-        failed++;
-      }
+    if (!Array.isArray(cities)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid data format",
+      });
     }
 
-    res.json({
-      success: true,
-      inserted,
-      failedCount: failed,
-    });
+    const formatted = cities.map((c) => ({
+  name: c.name,
+  state: c.state,
+  district: c.district,
+  location: c.location || null,
+}));
 
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message,
+    await City.insertMany(formatted);
+
+    clearCityCache();
+
+    return res.json({
+      success: true,
+      message: "Bulk upload successful",
     });
+  } catch (error) {
+    console.error("bulkUploadCities error:", error);
+    res.status(500).json({ success: false });
   }
 };
 
-/* ================= UPDATE CITY ================= */
-export const updateCity = async (req, res) => {
-  if (!isValidId(req.params.id)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid city ID",
-    });
-  }
-
-  try {
-    let geo = null;
-    const { latitude, longitude } = req.body;
-
-    // 1. manual coords
-    if (latitude && longitude) {
-      geo = buildLocation(latitude, longitude);
-    } else {
-      // 2. geocode fallback
-      try {
-        geo = await geocodeCity({
-          name: req.body.name,
-          district: req.body.district,
-          state: req.body.state,
-        });
-      } catch (err) {
-        geo = buildLocation();
-      }
-    }
-
-    const updatedCity = await City.findByIdAndUpdate(
-      req.params.id,
-      {
-        ...req.body,
-        ...geo,
-      },
-      { new: true }
-    );
-
-    res.json({
-      success: true,
-      data: updatedCity,
-      meta: {
-        timestamp: new Date().toISOString(),
-      },
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
-  }
-};
-
-/* ================= DELETE CITY ================= */
-export const deleteCity = async (req, res) => {
-  if (!isValidId(req.params.id)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid city ID",
-    });
-  }
-
-  try {
-    await deleteCityService(req.params.id);
-
-    res.json({
-      success: true,
-      data: null,
-      meta: {
-        timestamp: new Date().toISOString(),
-      },
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
-  }
-};
-
-/* ================= FEATURE CITY ================= */
-export const markCityAsFeatured = async (req, res) => {
-  try {
-    const city = await featureCityService(req.params.id, 10);
-
-    res.json({
-      success: true,
-      data: city,
-      meta: {
-        timestamp: new Date().toISOString(),
-      },
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
-  }
-};
-
-export const unmarkCityAsFeatured = async (req, res) => {
-  try {
-    const city = await featureCityService(req.params.id, 0);
-
-    res.json({
-      success: true,
-      data: city,
-      meta: {
-        timestamp: new Date().toISOString(),
-      },
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
-  }
-};
-
-/* ================= META DATA ================= */
+/* =========================================================
+   FILTER HELPERS (ADMIN ROUTES REQUIRE THESE)
+========================================================= */
 export const getStates = async (req, res) => {
   try {
-    const states = await getStatesService();
-
-    res.json({
-      success: true,
-      data: states,
-      meta: {
-        total: states.length,
-        timestamp: new Date().toISOString(),
-      },
-    });
+    const states = await City.distinct("state");
+    res.json({ success: true, data: states });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
+    res.status(500).json({ success: false });
   }
 };
 
 export const getDistrictsByState = async (req, res) => {
   try {
-    const districts = await getDistrictsService(req.params.stateSlug);
+    const { state } = req.params;
 
-    res.json({
-      success: true,
-      data: districts,
-      meta: {
-        total: districts.length,
-        timestamp: new Date().toISOString(),
-      },
+    const districts = await City.distinct("district", {
+      state,
     });
+
+    res.json({ success: true, data: districts });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
+    res.status(500).json({ success: false });
   }
 };
 
 export const getCitiesByDistrict = async (req, res) => {
   try {
-    const cities = await getCitiesByDistrictService(req.params.districtSlug);
+    const { district } = req.params;
 
-    res.json({
-      success: true,
-      data: cities,
-      meta: {
-        total: cities.length,
-        timestamp: new Date().toISOString(),
-      },
-    });
+    const cities = await City.find({ district }).lean();
+
+    res.json({ success: true, data: cities });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
+    res.status(500).json({ success: false });
   }
 };
+
+/* =========================================================
+   FEATURED CITIES
+========================================================= */
+export const getFeaturedCities = async (req, res) => {
+  try {
+    const cities = await City.find({ featured: true })
+      .sort({ name: 1 })
+      .lean();
+
+    res.json({ success: true, data: cities });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+};
+
+export const markCityAsFeatured = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await City.findByIdAndUpdate(id, { featured: true });
+
+    clearCityCache();
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+};
+
+export const unmarkCityAsFeatured = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await City.findByIdAndUpdate(id, { featured: false });
+
+    clearCityCache();
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+};
+
+/* =========================================================
+   PUBLIC HELPERS
+========================================================= */
+export const getCityBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    const city = await City.findOne({ slug, status: "active" }).lean();
+
+    if (!city) {
+      return res.status(404).json({
+        success: false,
+        message: "City not found",
+      });
+    }
+
+    res.json({ success: true, data: city });
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
+};
+
+export const getTrendingCities = async (req, res) => {
+  try {
+    const cities = await City.find({ status: "active" })
+      .sort({ name: 1 })
+      .limit(12)
+      .lean();
+
+    res.json({ success: true, data: cities });
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
+};
+
+/* =========================================================
+   BACKWARD COMPAT ALIASES (SAFETY LAYER)
+========================================================= */
+export const getAllCities = getCities;

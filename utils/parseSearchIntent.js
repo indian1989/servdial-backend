@@ -1,9 +1,15 @@
+// backend/utils/parseSearchIntent.js
+
 export const parseSearchIntent = (keyword = "") => {
   if (!keyword) return {};
 
-  const query = keyword.toLowerCase();
+  const query = keyword
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  let intent = {
+  const intent = {
     sortBy: null,
     minRating: null,
     pricePreference: null,
@@ -12,37 +18,42 @@ export const parseSearchIntent = (keyword = "") => {
     isEmergency: false,
   };
 
+  const has = (words) =>
+    words.some((w) => query.includes(w));
+
   /* ================= RATING INTENT ================= */
-  if (query.includes("best") || query.includes("top")) {
+  if (has(["best", "top", "recommended"])) {
     intent.sortBy = "rating";
     intent.minRating = 4;
   }
 
   /* ================= PRICE INTENT ================= */
-  if (query.includes("cheap") || query.includes("low price")) {
+  if (has(["cheap", "low price", "budget", "affordable"])) {
     intent.pricePreference = "low";
   }
 
-  if (query.includes("premium") || query.includes("luxury")) {
+  if (has(["premium", "luxury", "expensive", "high end"])) {
     intent.pricePreference = "high";
   }
 
   /* ================= OPEN NOW ================= */
   if (
-    query.includes("open now") ||
-    query.includes("24 hour") ||
-    query.includes("24x7")
+    has(["open now", "24 hour", "24x7", "open 24", "always open"])
   ) {
     intent.openNow = true;
   }
 
   /* ================= NEAR ME ================= */
-  if (query.includes("near me") || query.includes("nearby")) {
+  if (
+    has(["near me", "nearby", "near by", "closest", "nearest"])
+  ) {
     intent.isNearMe = true;
   }
 
   /* ================= EMERGENCY ================= */
-  if (query.includes("emergency") || query.includes("urgent")) {
+  if (
+    has(["emergency", "urgent", "immediate", "asap"])
+  ) {
     intent.isEmergency = true;
   }
 

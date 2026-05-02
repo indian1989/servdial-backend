@@ -11,38 +11,31 @@ import {
 
 import {
   createBusiness,
-  updateBusiness
+  updateBusiness,
 } from "../controllers/businessController.js";
 
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// 🔐 Admin protection
+/* ================= AUTH LOCK ================= */
 router.use(protect);
 router.use(authorizeRoles("admin", "superadmin"));
 
-// ================= CRUD (SOURCE OF TRUTH) =================
-
-// CREATE → from businessController
+/* ================= CRUD (SSOT) ================= */
 router.post("/", createBusiness);
-
-// UPDATE → from businessController
 router.put("/:id", updateBusiness);
 
-// DELETE → admin-controlled
-router.delete("/:id", deleteBusinessAdmin);
-
-// ================= ADMIN ACTIONS =================
-
+/* ================= ADMIN ACTIONS ================= */
 router.get("/", getAllBusinessesAdmin);
 
 router.put("/:id/approve", approveBusiness);
 router.put("/:id/reject", rejectBusiness);
 router.put("/:id/feature", toggleFeatured);
 
-// ================= STATS =================
+router.delete("/:id", deleteBusinessAdmin);
 
+/* ================= STATS ================= */
 router.get("/business-stats", getBusinessStats);
 
 export default router;
