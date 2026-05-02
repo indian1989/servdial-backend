@@ -5,6 +5,7 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  getAllCategories,   // 👈 ADD THIS
 } from "../controllers/categoryController.js";
 
 const router = express.Router();
@@ -13,7 +14,12 @@ const router = express.Router();
 router.use(protect);
 router.use(authorizeRoles("admin", "superadmin"));
 
-// admin operations ONLY
+/* ================= ADMIN CATEGORY ROUTES ================= */
+
+// 🔥 THIS WAS MISSING (causing 404)
+router.get("/", getAllCategories);
+
+// CRUD
 router.post("/", createCategory);
 router.put("/:id", updateCategory);
 router.delete("/:id", deleteCategory);
