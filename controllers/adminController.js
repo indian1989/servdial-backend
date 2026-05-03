@@ -118,7 +118,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: {
+    stats: {
       users,
       admins,
       cities,

@@ -1,6 +1,11 @@
 import City from "../models/City.js";
-import slugify from "../utils/slugify.js";
 import memoryCache from "../utils/memoryCache.js";
+
+import {
+  normalizeCity,
+  validateCity,
+  fetchCoordinates,
+} from "../utils/cityUtils.js";
 
 /* =========================================================
    CORE HELPERS
@@ -45,27 +50,44 @@ export const getAllCitiesAdmin = async (req, res) => {
 };
 
 /* =========================================================
-   ADD CITY
+   ADD CITY (STRICT + GEO SAFE)
 ========================================================= */
 export const addCity = async (req, res) => {
   try {
-    const { name, state, district, location } = req.body;
+    let city = normalizeCity(req.body);
 
-    // ✅ validation
-    if (!name || !state || !district) {
+    // ✅ STRICT VALIDATION (NO PARTIAL DATA)
+    if (
+      !city.name ||
+      !city.district ||
+      !city.state ||
+      isNaN(city.latitude) ||
+      isNaN(city.longitude)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Name, state and district are required",
+        message: "All fields including latitude & longitude are required",
       });
     }
 
-    // ⚠️ DO NOT manually generate slug here
-    // Schema will handle it (IMPORTANT FIX)
+    validateCity(city);
 
+    // ✅ OPTIONAL FALLBACK (if frontend ever fails)
+    city = await fetchCoordinates(city);
+
+    // ❌ STILL INVALID → HARD FAIL
+    if (isNaN(city.latitude) || isNaN(city.longitude)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid coordinates required",
+      });
+    }
+
+    // ✅ PREVENT DUPLICATE
     const exists = await City.findOne({
-      name: name.trim(),
-      state: state.trim(),
-      district: district.trim(),
+      name: city.name,
+      state: city.state,
+      district: city.district,
     });
 
     if (exists) {
@@ -75,25 +97,26 @@ export const addCity = async (req, res) => {
       });
     }
 
-    const city = await City.create({
-      name: name.trim(),
-      state: state.trim(),
-      district: district.trim(),
-      location: location || null,
-    });
+    // ✅ GEO SYNC (IMPORTANT)
+    city.location = {
+      type: "Point",
+      coordinates: [city.longitude, city.latitude],
+    };
+
+    const created = await City.create(city);
 
     clearCityCache();
 
     return res.status(201).json({
       success: true,
-      data: city,
+      data: created,
     });
 
   } catch (error) {
     console.error("addCity error:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to create city",
+      message: error.message || "Failed to create city",
     });
   }
 };
@@ -105,31 +128,62 @@ export const updateCity = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const city = await City.findById(id);
-    if (!city) {
+    let city = normalizeCity(req.body);
+
+    // ✅ STRICT VALIDATION
+    if (
+      !city.name ||
+      !city.district ||
+      !city.state ||
+      isNaN(city.latitude) ||
+      isNaN(city.longitude)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields including latitude & longitude are required",
+      });
+    }
+
+    // ✅ OPTIONAL: still allow auto-fetch fallback
+    city = await fetchCoordinates(city);
+
+    // ❌ still invalid → reject
+    if (isNaN(city.latitude) || isNaN(city.longitude)) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid coordinates required",
+      });
+    }
+
+    // ✅ SYNC LOCATION (IMPORTANT - no pre-save here)
+    city.location = {
+      type: "Point",
+      coordinates: [city.longitude, city.latitude],
+    };
+
+    const updated = await City.findByIdAndUpdate(
+      id,
+      city,
+      { new: true }
+    );
+
+    if (!updated) {
       return res.status(404).json({ success: false });
     }
 
-    const { name, state, district, location, status } = req.body;
-
-    if (name && name !== city.name) {
-      city.slug = slugify(name);
-      city.name = name;
-    }
-
-    if (state !== undefined) city.state = state;
-    if (district !== undefined) city.district = district;
-    if (location !== undefined) city.location = location;
-    if (status) city.status = status;
-
-    await city.save();
-
     clearCityCache();
 
-    return res.json({ success: true, data: city });
+    return res.json({
+      success: true,
+      data: updated,
+    });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false });
+    console.error("updateCity error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Update failed",
+    });
   }
 };
 
@@ -159,7 +213,7 @@ export const deleteCity = async (req, res) => {
 };
 
 /* =========================================================
-   BULK UPLOAD (SAFE STUB - FIXES YOUR ERROR)
+   BULK UPLOAD (STRICT + GEO SAFE)
 ========================================================= */
 export const bulkUploadCities = async (req, res) => {
   try {
@@ -172,24 +226,83 @@ export const bulkUploadCities = async (req, res) => {
       });
     }
 
-    const formatted = cities.map((c) => ({
-  name: c.name,
-  state: c.state,
-  district: c.district,
-  location: c.location || null,
-}));
+    const processed = [];
+    const skipped = [];
 
-    await City.insertMany(formatted);
+    for (let raw of cities) {
+      try {
+        let city = normalizeCity(raw);
+
+        // ✅ STRICT VALIDATION
+        if (
+          !city.name ||
+          !city.district ||
+          !city.state ||
+          isNaN(city.latitude) ||
+          isNaN(city.longitude)
+        ) {
+          // try auto-fetch fallback
+          city = await fetchCoordinates(city);
+        }
+
+        // ❌ STILL INVALID → SKIP
+        if (
+          !city.name ||
+          !city.district ||
+          !city.state ||
+          isNaN(city.latitude) ||
+          isNaN(city.longitude)
+        ) {
+          skipped.push(raw?.name || "unknown");
+          continue;
+        }
+
+        validateCity(city);
+
+        // ✅ GEO SYNC (IMPORTANT)
+        city.location = {
+          type: "Point",
+          coordinates: [city.longitude, city.latitude],
+        };
+
+        processed.push(city);
+
+      } catch (err) {
+        skipped.push(raw?.name || "unknown");
+        console.warn("Skipped:", raw?.name);
+      }
+    }
+
+    let insertedCount = 0;
+
+    try {
+      const result = await City.insertMany(processed, {
+        ordered: false, // ✅ continues even if duplicates exist
+      });
+
+      insertedCount = result.length;
+    } catch (err) {
+      // ✅ Ignore duplicate errors but count valid inserts
+      if (err?.insertedDocs) {
+        insertedCount = err.insertedDocs.length;
+      }
+      console.warn("Partial insert (duplicates skipped)");
+    }
 
     clearCityCache();
 
     return res.json({
       success: true,
-      message: "Bulk upload successful",
+      inserted: insertedCount,
+      skipped: skipped.length,
     });
+
   } catch (error) {
     console.error("bulkUploadCities error:", error);
-    res.status(500).json({ success: false });
+    res.status(500).json({
+      success: false,
+      message: "Bulk upload failed",
+    });
   }
 };
 

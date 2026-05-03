@@ -84,7 +84,9 @@ app.use("/api/banners", bannerRoutes);
 app.use("/api/admin/banners", adminBannerRoutes);
 
 // ================= CORE FEATURES =================
+console.log("🔵 Mounting homepageRoutes...");
 app.use("/api/homepage", homepageRoutes);
+console.log("🟢 homepageRoutes mounted successfully");
 app.use("/api/search", searchRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/reviews", reviewRoutes);
