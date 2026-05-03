@@ -9,46 +9,33 @@ import memoryCache from "../../utils/memoryCache.js";
 export const resolveCityBySlug = async (slug) => {
   const cacheKey = `city:slug:${slug}`;
 
-  // ✅ 1. Check cache
   const cached = memoryCache.get(cacheKey);
   if (cached) return cached;
 
-  // =============================
-  // 2. Find by current slug
-  // =============================
   let city = await City.findOne({ slug }).lean();
 
-  // =============================
-  // 3. Fallback → slugHistory
-  // =============================
   if (!city) {
     city = await City.findOne({
-      "slugHistory.slug": slug,
+      slugHistory: slug,
     }).lean();
   }
 
   if (!city) return null;
 
-  // =============================
-  // 4. Cache result
-  // =============================
-  memoryCache.set(cacheKey, city, 60 * 60 * 6); // 6 hours
+  memoryCache.set(cacheKey, city, 60 * 60 * 6);
 
   return city;
 };
 
-export const resolveCity = async (city, CityModel) => {
+export const resolveCity = async (city) => {
   if (!city) return null;
 
   try {
-    return await CityModel.findOne({
-      $or: [
-        { slug: city },
-        { name: city },
-        { cityName: city },
-      ],
+    return await City.findOne({
+      slug: city,
       status: "active",
-    }).select("_id name slug citySlug");
+    }).select("_id name slug");
+
   } catch (err) {
     console.error("resolveCity error:", err);
     return null;

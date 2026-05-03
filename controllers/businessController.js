@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Business from "../models/Business.js";
 import City from "../models/City.js";
 import Category from "../models/Category.js";
+import { normalizeBusinessHours } from "../utils/normalizeBusinessHours.js";
 
 import slugify from "../utils/slugify.js";
 
@@ -23,10 +24,16 @@ const requireField = (field, name) => {
    SLUG GENERATOR (CONTROLLED)
 ========================= */
 
-const generateBusinessSlug = (name) => {
+const generateBusinessSlug = async (name) => {
   const base = slugify(name);
-  const unique = Date.now().toString(36);
-  return `${base}-${unique}`;
+  let slug = base;
+  let counter = 1;
+
+  while (await Business.findOne({ slug })) {
+    slug = `${base}-${counter++}`;
+  }
+
+  return slug;
 };
 
 /* =========================
@@ -100,12 +107,15 @@ export const createBusiness = asyncHandler(async (req, res) => {
         Number(location.coordinates[1]),
       ],
     };
-  } else if (city.latitude && city.longitude) {
-    safeLocation = {
-      type: "Point",
-      coordinates: [city.longitude, city.latitude],
-    };
-  }
+  } else if (
+  typeof city.latitude === "number" &&
+  typeof city.longitude === "number"
+) {
+  safeLocation = {
+    type: "Point",
+    coordinates: [city.longitude, city.latitude],
+  };
+}
 
   /* ================= BUSINESS CREATION ================= */
 
@@ -131,7 +141,7 @@ export const createBusiness = asyncHandler(async (req, res) => {
     logo: logo || "",
     images: Array.isArray(images) ? images : [],
 
-    businessHours: businessHours || {},
+    businessHours: normalizeBusinessHours(businessHours),
 
     status: "pending",
   });
@@ -174,10 +184,10 @@ export const updateBusinessHours = asyncHandler(async (req, res) => {
   }
 
   // basic safe merge (no schema break risk)
-  business.businessHours = {
-    ...business.businessHours,
-    ...businessHours,
-  };
+  business.businessHours = normalizeBusinessHours({
+  ...business.businessHours,
+  ...businessHours,
+});
 
   await business.save();
 
@@ -362,3 +372,4 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
 
   res.json({ success: true, message: "Business media updated", images: business.images });
 });
+
