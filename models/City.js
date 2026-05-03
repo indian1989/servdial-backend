@@ -8,7 +8,6 @@ const citySchema = new mongoose.Schema(
     type: String,
     required: true,
     trim: true,
-    index: true
   },
 
   slug: {
@@ -17,7 +16,6 @@ const citySchema = new mongoose.Schema(
     lowercase: true,
     trim: true,
     match: /^[a-z0-9-]+$/,
-    index: true
   },
 
   slugHistory: [
@@ -32,14 +30,12 @@ const citySchema = new mongoose.Schema(
     type: String,
     required: true,
     trim: true,
-    index: true
   },
 
   district: {
     type: String,
     required: true,
     trim: true,
-    index: true
   },
 
   // ================= NEW STRUCTURE =================
