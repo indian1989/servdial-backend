@@ -397,3 +397,16 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
     images: business.images,
   });
 });
+
+// ================= GET BY SLUG =================
+export const getBusinessBySlug = asyncHandler(async (req, res) => {
+  const business = await Business.findOne({ slug: req.params.slug })
+    .populate("categoryId", "name")
+    .lean();
+
+  if (!business) {
+    return res.status(404).json({ success: false });
+  }
+
+  res.json({ success: true, data: business, });
+});

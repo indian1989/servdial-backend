@@ -2,7 +2,7 @@ import express from "express";
 
 import {
   getBusinesses,
-  getBusinessById,
+  getBusinessBySlug,
 } from "../controllers/businessController.js";
 
 const router = express.Router();
@@ -15,6 +15,6 @@ const router = express.Router();
 router.get("/", getBusinesses);
 
 // GET single business details
-router.get("/:id", getBusinessById);
+router.get("/:slug", getBusinessBySlug);
 
 export default router;
