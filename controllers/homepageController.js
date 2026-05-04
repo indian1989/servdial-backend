@@ -74,24 +74,27 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
 
     // ================= FEATURED =================
     Business.find(baseBusinessFilter)
-      .select(baseSelect)
-      .sort({ featurePriority: -1, averageRating: -1 })
-      .limit(20)
-      .lean(),
+  .select(baseSelect)
+  .populate("cityId", "name slug")
+  .sort({ featurePriority: -1, averageRating: -1 })
+  .limit(20)
+  .lean(),
 
     // ================= TOP RATED =================
     Business.find(baseBusinessFilter)
-      .select(baseSelect)
-      .sort({ averageRating: -1, totalReviews: -1 })
-      .limit(20)
-      .lean(),
+  .select(baseSelect)
+  .populate("cityId", "name slug")
+  .sort({ averageRating: -1, totalReviews: -1 })
+  .limit(20)
+  .lean(),
 
     // ================= LATEST =================
     Business.find(baseBusinessFilter)
-      .select(baseSelect)
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .lean(),
+  .select(baseSelect)
+  .populate("cityId", "name slug")
+  .sort({ createdAt: -1 })
+  .limit(20)
+  .lean(),
 
     // ================= NEARBY =================
     lat && lng
@@ -117,9 +120,10 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
 
     // ================= RECOMMENDED =================
     Business.find(baseBusinessFilter)
-      .select(baseSelect)
-      .limit(40)
-      .lean(),
+  .select(baseSelect)
+  .populate("cityId", "name slug")
+  .limit(40)
+  .lean(),
 
     // ================= POPULAR CITIES =================
     City.find({
