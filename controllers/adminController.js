@@ -13,11 +13,14 @@ import User from "../models/User.js";
    GET ADMIN BUSINESSES
 ================================ */
 export const getAdminBusinesses = asyncHandler(async (req, res) => {
+
+  console.log("ADMIN QUERY PARAMS:", req.query);
+
   const { status, city, category, search, page = 1, limit = 20 } = req.query;
 
   const query = {};
 
-  if (status) query.status = status;
+  // if (status) query.status = status;
   if (city) query.cityId = city;
   if (category) query.categoryId = category;
 
@@ -25,12 +28,14 @@ export const getAdminBusinesses = asyncHandler(async (req, res) => {
     query.name = { $regex: search, $options: "i" };
   }
 
-  const businesses = await Business.find(query)
-    .populate("owner", "name email role")
-    .populate("categoryId", "name")
-    .sort({ createdAt: -1 })
-    .skip((page - 1) * limit)
-    .limit(Number(limit));
+  const businesses = await Business.find(query, null, {
+  includeAll: true,
+})
+  .populate("owner", "name email role")
+  .populate("categoryId", "name")
+  .sort({ createdAt: -1 })
+  .skip((page - 1) * limit)
+  .limit(Number(limit));
 
   const total = await Business.countDocuments(query);
 
