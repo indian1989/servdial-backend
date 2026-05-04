@@ -73,7 +73,11 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
       .lean(),
 
     // ================= FEATURED =================
-    Business.find(baseBusinessFilter)
+    Business.find({
+  ...baseBusinessFilter,
+  isFeatured: true,
+  featuredUntil: { $gte: new Date() },
+})
   .select(baseSelect)
   .populate("cityId", "name slug")
   .sort({ featurePriority: -1, averageRating: -1 })
@@ -98,25 +102,29 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
 
     // ================= NEARBY =================
     lat && lng
-      ? Business.aggregate([
-          {
-            $geoNear: {
-              near: {
-                type: "Point",
-                coordinates: [Number(lng), Number(lat)],
-              },
-              distanceField: "distance",
-              spherical: true,
-              maxDistance: 5000,
-              key: "location",
-            },
+  ? Business.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [Number(lng), Number(lat)],
           },
-          {
-            $match: baseBusinessFilter,
+          distanceField: "distance",
+          spherical: true,
+          maxDistance: 5000,
+          key: "location",
+
+          // 🔥 MOVE FILTER HERE (IMPORTANT FIX)
+          query: {
+            status: "approved",
+            isDeleted: false,
+            ...cityFilter,
           },
-          { $limit: 20 },
-        ])
-      : [],
+        },
+      },
+      { $limit: 20 },
+    ])
+  : [],
 
     // ================= RECOMMENDED =================
     Business.find(baseBusinessFilter)
