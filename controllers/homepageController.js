@@ -16,7 +16,7 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   let cityFilter = {};
 
   if (city) {
-    cityDoc = await resolveCity({ citySlug: city });
+    cityDoc = await resolveCity(city);
 
     // allow global scope for "india"
     if (!cityDoc && city !== "india") {
