@@ -342,7 +342,6 @@ businessSchema.pre(/^find/, function (next) {
   if (!isAdminQuery) {
     this.where({
       isDeleted: { $ne: true },
-      status: "approved",
     });
   }
 
