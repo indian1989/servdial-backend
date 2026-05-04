@@ -333,11 +333,11 @@ if (this.featuredUntil && this.featuredUntil < new Date()) {
 
 // ================= GLOBAL QUERY FILTER =================
 businessSchema.pre(/^find/, function (next) {
-  const query = this.getQuery();
+  const options = this.getOptions?.() || {};
 
   const isAdminQuery =
-    this.options?.includeAll === true ||
-    query._includeAll === true;
+    options.includeAll === true ||
+    this.options?.includeAll === true;
 
   if (!isAdminQuery) {
     this.where({

@@ -3,7 +3,9 @@ import Business from "../models/Business.js";
 
 /* ================= GET ALL (ADMIN) ================= */
 export const getAllBusinessesAdmin = asyncHandler(async (req, res) => {
-  const businesses = await Business.find()
+  const businesses = await Business.find().setOptions({
+  includeAll: true,
+})
     .populate("cityId", "name slug")
     .populate("categoryId", "name slug")
     .sort({ createdAt: -1 });
