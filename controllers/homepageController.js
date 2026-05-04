@@ -76,7 +76,6 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
     Business.find({
   ...baseBusinessFilter,
   isFeatured: true,
-  featuredUntil: { $gte: new Date() },
 })
   .select(baseSelect)
   .populate("cityId", "name slug")
