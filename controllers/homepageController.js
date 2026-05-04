@@ -132,9 +132,9 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   .limit(40)
   .lean(),
 
-    // ================= POPULAR CITIES =================
+    // ================= FEATURED CITIES =================
     City.find({
-      popular: true,
+      isFeatured: true,
       status: "active",
     })
       .sort({ name: 1 })
