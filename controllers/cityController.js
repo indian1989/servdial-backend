@@ -128,44 +128,34 @@ export const updateCity = async (req, res) => {
   try {
     const { id } = req.params;
 
-    let city = normalizeCity(req.body);
+// allow partial update
+const updateData = { ...req.body };
 
-    // ✅ STRICT VALIDATION
-    if (
-      !city.name ||
-      !city.district ||
-      !city.state ||
-      isNaN(city.latitude) ||
-      isNaN(city.longitude)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "All fields including latitude & longitude are required",
-      });
-    }
+// only validate if fields exist
+if (
+  ("latitude" in updateData && isNaN(updateData.latitude)) ||
+  ("longitude" in updateData && isNaN(updateData.longitude))
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid coordinates",
+  });
+}
 
-    // ✅ OPTIONAL: still allow auto-fetch fallback
-    city = await fetchCoordinates(city);
+// if lat/lng provided → update geo
+if (
+  updateData.latitude !== undefined &&
+  updateData.longitude !== undefined
+) {
+  updateData.location = {
+    type: "Point",
+    coordinates: [updateData.longitude, updateData.latitude],
+  };
+}
 
-    // ❌ still invalid → reject
-    if (isNaN(city.latitude) || isNaN(city.longitude)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid coordinates required",
-      });
-    }
-
-    // ✅ SYNC LOCATION (IMPORTANT - no pre-save here)
-    city.location = {
-      type: "Point",
-      coordinates: [city.longitude, city.latitude],
-    };
-
-    const updated = await City.findByIdAndUpdate(
-      id,
-      city,
-      { new: true }
-    );
+const updated = await City.findByIdAndUpdate(id, updateData, {
+  new: true,
+});
 
     if (!updated) {
       return res.status(404).json({ success: false });
@@ -349,7 +339,7 @@ export const getCitiesByDistrict = async (req, res) => {
 ========================================================= */
 export const getFeaturedCities = async (req, res) => {
   try {
-    const cities = await City.find({ featured: true })
+    const cities = await City.find({ isFeatured: true })
       .sort({ name: 1 })
       .lean();
 
@@ -363,7 +353,7 @@ export const markCityAsFeatured = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await City.findByIdAndUpdate(id, { featured: true });
+    await City.findByIdAndUpdate(id, { isFeatured: true });
 
     clearCityCache();
 
@@ -377,7 +367,7 @@ export const unmarkCityAsFeatured = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await City.findByIdAndUpdate(id, { featured: false });
+    await City.findByIdAndUpdate(id, { isFeatured: false });
 
     clearCityCache();
 
