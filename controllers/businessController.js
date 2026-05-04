@@ -118,6 +118,7 @@ export const createBusiness = asyncHandler(async (req, res) => {
 }
 
   /* ================= BUSINESS CREATION ================= */
+const slug = await generateBusinessSlug(name);
 
   const business = await Business.create({
     name: name.trim(),
@@ -128,7 +129,7 @@ export const createBusiness = asyncHandler(async (req, res) => {
     citySlug: city.slug,
     categorySlug: category.slug,
 
-    slug: generateBusinessSlug(name),
+    slug,
 
     address: address?.trim() || "",
     phone: cleanPhone,
