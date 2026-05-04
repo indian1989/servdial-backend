@@ -31,8 +31,6 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     }
   }
 
-  console.log("🔥 BASE FILTER:", baseBusinessFilter);
-
   // ================= BASE FILTER =================
   const baseBusinessFilter = {
   status: "approved",
