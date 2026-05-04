@@ -31,12 +31,20 @@ export const getHomepageData = asyncHandler(async (req, res) => {
     }
   }
 
+  console.log("🔥 BASE FILTER:", baseBusinessFilter);
+
   // ================= BASE FILTER =================
   const baseBusinessFilter = {
-    status: "approved",
-    isDeleted: false,
-    ...cityFilter,
-  };
+  status: "approved",
+  isDeleted: false,
+  ...cityFilter,
+};
+
+console.log("🔥 BASE FILTER:", baseBusinessFilter);
+
+// 👇 ADD THIS NEXT
+const testCount = await Business.countDocuments(baseBusinessFilter);
+console.log("🔥 MATCHING BUSINESSES:", testCount);
 
   const baseSelect =
     "name slug averageRating totalReviews views isFeatured featurePriority";
