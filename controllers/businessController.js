@@ -92,22 +92,22 @@ export const createBusiness = asyncHandler(async (req, res) => {
 
   /* ================= LOCATION SAFETY ================= */
 
-  let safeLocation = null;
+let safeLocation = null;
 
-  if (
-    location &&
-    location.type === "Point" &&
-    Array.isArray(location.coordinates) &&
-    location.coordinates.length === 2
-  ) {
-    safeLocation = {
-      type: "Point",
-      coordinates: [
-        Number(location.coordinates[0]),
-        Number(location.coordinates[1]),
-      ],
-    };
-  } else if (
+if (
+  location &&
+  location.type === "Point" &&
+  Array.isArray(location.coordinates) &&
+  location.coordinates.length === 2
+) {
+  safeLocation = {
+    type: "Point",
+    coordinates: [
+      Number(location.coordinates[0]),
+      Number(location.coordinates[1]),
+    ],
+  };
+} else if (
   typeof city.latitude === "number" &&
   typeof city.longitude === "number"
 ) {
@@ -117,40 +117,57 @@ export const createBusiness = asyncHandler(async (req, res) => {
   };
 }
 
+// ✅ validate AFTER assignment
+if (!safeLocation) {
+  return res.status(400).json({
+    message: "Valid location required",
+  });
+}
+
   /* ================= BUSINESS CREATION ================= */
+
+// ✅ generate slug
 const slug = await generateBusinessSlug(name);
 
-  const business = await Business.create({
-    name: name.trim(),
+// ✅ role-based status
+const status =
+  req.user?.role === "admin" || req.user?.role === "superadmin"
+    ? "approved"
+    : "pending";
 
-    categoryId,
-    cityId,
+// ✅ create business
+const business = await Business.create({
+  name: name.trim(),
 
-    citySlug: city.slug,
-    categorySlug: category.slug,
+  categoryId,
+  cityId,
 
-    slug,
+  citySlug: city.slug,
+  categorySlug: category.slug,
 
-    address: address?.trim() || "",
-    phone: cleanPhone,
-    whatsapp: whatsapp || "",
-    website: website || "",
-    description: description || "",
+  slug,
 
-    location: safeLocation,
+  address: address?.trim() || "",
+  phone: cleanPhone,
+  whatsapp: whatsapp || "",
+  website: website || "",
+  description: description || "",
 
-    logo: logo || "",
-    images: Array.isArray(images) ? images : [],
+  location: safeLocation,
 
-    businessHours: normalizeBusinessHours(businessHours),
+  logo: logo || "",
+  images: Array.isArray(images) ? images : [],
 
-    status: "pending",
-  });
+  businessHours: normalizeBusinessHours(businessHours || {}),
 
-  res.status(201).json({
-    success: true,
-    data: business,
-  });
+  status,
+});
+
+// ✅ response
+res.status(201).json({
+  success: true,
+  data: business,
+});
 });
 
 /* =========================================================
@@ -364,13 +381,19 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
 // MANAGE BUSINESS MEDIA
 // ================================
 export const updateBusinessMedia = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id)
-  .setOptions({ includeAll: true });
-  if (!business) { res.status(404); throw new Error("Business not found"); }
+  const business = await Business.findById(req.params.id);
+
+  if (!business) {
+    res.status(404);
+    throw new Error("Business not found");
+  }
 
   business.images = req.body.images || business.images;
   await business.save();
 
-  res.json({ success: true, message: "Business media updated", images: business.images });
+  res.json({
+    success: true,
+    message: "Business media updated",
+    images: business.images,
+  });
 });
-

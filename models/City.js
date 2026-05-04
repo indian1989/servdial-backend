@@ -42,13 +42,11 @@ const citySchema = new mongoose.Schema(
   stateSlug: {
     type: String,
     lowercase: true,
-    index: true
   },
 
   districtSlug: {
     type: String,
     lowercase: true,
-    index: true
   },
 
   country: {
@@ -101,7 +99,6 @@ const citySchema = new mongoose.Schema(
     type: String,
     enum: ["active","inactive"],
     default: "active",
-    index: true
   }
 
 },

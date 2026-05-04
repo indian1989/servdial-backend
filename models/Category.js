@@ -2,9 +2,17 @@
 import mongoose from "mongoose";
 import slugify from "../utils/slugify.js";
 
+const slugHistorySchema = new mongoose.Schema(
+  {
+    slug: { type: String, lowercase: true, trim: true },
+    changedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const categorySchema = new mongoose.Schema(
   {
-    // ================= BASIC =================
+    /* ================= BASIC ================= */
     name: {
       type: String,
       required: true,
@@ -13,19 +21,14 @@ const categorySchema = new mongoose.Schema(
     },
 
     slug: {
-  type: String,
-  lowercase: true,
-  required: true,
-  unique: true,
-},
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
 
-    slugHistory: [
-  {
-    type: String,
-    lowercase: true,
-    trim: true,
-  },
-],
+    slugHistory: [slugHistorySchema],
 
     description: {
       type: String,
@@ -33,7 +36,7 @@ const categorySchema = new mongoose.Schema(
       trim: true,
     },
 
-    // ================= HIERARCHY (🔥 IMPORTANT) =================
+    /* ================= HIERARCHY ================= */
     parentCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
@@ -41,25 +44,18 @@ const categorySchema = new mongoose.Schema(
       index: true,
     },
 
-    // 🧠 LEVEL (0 = root, 1 = child)
-      level: {
-        type: Number,
-        default: 0,
-        index: true,
-      },
-
-    // ================= MEDIA =================
-    icon: {
-      type: String,
-      default: "",
+    level: {
+      type: Number,
+      enum: [0, 1], // 0 = parent, 1 = leaf
+      default: 0,
+      index: true,
     },
 
-    image: {
-      type: String,
-      default: "",
-    },
+    /* ================= MEDIA ================= */
+    icon: { type: String, default: "" },
+    image: { type: String, default: "" },
 
-    // ================= SEO =================
+    /* ================= SEO ================= */
     seoTitle: String,
     seoDescription: String,
 
@@ -71,7 +67,7 @@ const categorySchema = new mongoose.Schema(
       },
     ],
 
-    // ================= STATUS =================
+    /* ================= STATUS ================= */
     status: {
       type: String,
       enum: ["active", "inactive"],
@@ -90,12 +86,7 @@ const categorySchema = new mongoose.Schema(
       default: false,
     },
 
-    meta: {
-      title: String,
-      description: String,
-    },
-
-    // ================= ANALYTICS =================
+    /* ================= ANALYTICS ================= */
     searchCount: {
       type: Number,
       default: 0,
@@ -106,20 +97,7 @@ const categorySchema = new mongoose.Schema(
   }
 );
 
-categorySchema.pre("init", function () {
-  this._originalSlug = this.slug;
-});
-
-// ================= UNIQUE =================
-categorySchema.index(
-  { name: 1 },
-  {
-    unique: true,
-    collation: { locale: "en", strength: 2 },
-  }
-);
-
-// ================= TEXT SEARCH =================
+/* ================= TEXT SEARCH ================= */
 categorySchema.index(
   {
     name: "text",
@@ -135,44 +113,35 @@ categorySchema.index(
   }
 );
 
-// ================= NORMALIZE =================
-categorySchema.pre("save", function (next) {
-  if (this.name) {
-    this.name = this.name.trim().replace(/\s+/g, " ");
-  }
+/* ================= COMPOUND INDEXES ================= */
+categorySchema.index({ parentCategory: 1, status: 1, order: 1 });
+categorySchema.index({ parentCategory: 1, level: 1 });
 
-  if (this.keywords?.length) {
-    this.keywords = this.keywords.map((k) =>
-      k.toLowerCase().trim()
-    );
-  }
+/* ================= UNIQUE INDEX ================= */
+categorySchema.index(
+  { slug: 1 },
+  { unique: true }
+);
 
-  next();
-});
-
-// ================= SLUG =================
+/* ================= PRE SAVE ================= */
 categorySchema.pre("save", async function (next) {
   try {
+    this.name = this.name?.trim().replace(/\s+/g, " ");
 
-    // ================= ID VALIDATION =================
-if (this.parentCategory && !mongoose.Types.ObjectId.isValid(this.parentCategory)) {
-  return next(new Error("Invalid parentCategory ID"));
-}
-
-    // store original slug
-    if (!this.isNew && !this._originalSlug) {
-      const existing = await mongoose.models.Category.findById(this._id).select("slug");
-      this._originalSlug = existing?.slug;
+    if (this.keywords?.length) {
+      this.keywords = this.keywords.map((k) =>
+        k.toLowerCase().trim()
+      );
     }
 
-    // generate slug ONLY if new
+    // slug generate only on create
     if (this.isNew && this.name) {
       let baseSlug = slugify(this.name);
       let slug = baseSlug;
       let counter = 1;
 
       while (
-        await mongoose.models.Category.exists({ slug })
+        await mongoose.models.Category.findOne({ slug })
       ) {
         slug = `${baseSlug}-${counter++}`;
       }
@@ -180,87 +149,30 @@ if (this.parentCategory && !mongoose.Types.ObjectId.isValid(this.parentCategory)
       this.slug = slug;
     }
 
-    // 🚨 prevent accidental slug overwrite
-if (!this.isNew && this.isModified("slug")) {
-  if (!this._allowSlugUpdate) {
-    return next(new Error("Slug modification is restricted"));
-  }
+    // slug history (safe tracking)
+    if (!this.isNew && this.isModified("slug")) {
+      const old = await mongoose.models.Category.findById(this._id);
 
-  // 🧠 enforce slug normalization
-  this.slug = slugify(this.slug);
+      if (old?.slug && old.slug !== this.slug) {
+        this.slugHistory = this.slugHistory || [];
 
-  // ================= SLUG HISTORY =================
-  this.slugHistory = this.slugHistory || [];
-
-  if (this._originalSlug && this._originalSlug !== this.slug) {
-    const exists = this.slugHistory.some(
-      (s) => s.toLowerCase() === this._originalSlug.toLowerCase()
-    );
-
-    if (!exists) {
-      this.slugHistory.push(this._originalSlug);
+        this.slugHistory.push({
+          slug: old.slug,
+          changedAt: new Date(),
+        });
+      }
     }
-  }
 
-  // 🧠 enforce uniqueness
-  this.slugHistory = [...new Set(this.slugHistory)];
-}
     // SEO defaults
     if (!this.seoTitle) this.seoTitle = this.name;
     if (!this.seoDescription) {
       this.seoDescription = this.description || `${this.name} services`;
     }
 
-    // ================= HIERARCHY SAFETY =================
-
-// 🚨 prevent self-parenting
-if (this.parentCategory && this.parentCategory.equals(this._id)) {
-  return next(new Error("Category cannot be its own parent"));
-}
-
-// 🚨 validate parent exists
-if (this.parentCategory) {
-  const parentExists = await mongoose.models.Category.exists({
-    _id: this.parentCategory,
-  });
-
-  if (!parentExists) {
-    return next(new Error("Invalid parentCategory"));
-  }
-}
-
-// ================= LEVEL AUTO SET =================
-if (this.isModified("parentCategory")) {
-  if (this.parentCategory) {
-    const parent = await mongoose.models.Category.findById(this.parentCategory).select("level");
-
-    this.level = parent ? parent.level + 1 : 1;
-  } else {
-    this.level = 0;
-  }
-}
-
     next();
   } catch (err) {
     next(err);
   }
 });
-
-categorySchema.index({
-  parentCategory: 1,
-  status: 1,
-  order: 1,
-});
-
-// 🚀 HIERARCHY FETCH OPTIMIZATION (USED IN TREE BUILDING)
-categorySchema.index({
-  parentCategory: 1,
-  level: 1,
-});
-
-categorySchema.index({ slug: 1 }, { unique: true });
-
-// 🚀 SLUG HISTORY LOOKUP (CRITICAL FOR SEO FALLBACK)
-categorySchema.index({ "slugHistory": 1 });
 
 export default mongoose.model("Category", categorySchema);
