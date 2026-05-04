@@ -399,14 +399,42 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
 });
 
 // ================= GET BY SLUG =================
+// ================= GET BUSINESS BY SLUG =================
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
-  const business = await Business.findOne({ slug: req.params.slug })
-    .populate("categoryId", "name")
+  const { slug } = req.params;
+
+  if (!slug) {
+    return res.status(400).json({
+      success: false,
+      message: "Slug is required",
+    });
+  }
+
+  const business = await Business.findOne({
+    slug,
+    status: "approved",
+    isDeleted: false,
+  })
+    .populate("cityId", "name slug")
+    .populate("categoryId", "name slug")
     .lean();
 
   if (!business) {
-    return res.status(404).json({ success: false });
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
   }
 
-  res.json({ success: true, data: business, });
+  // 🔥 OPTIONAL: fetch reviews here if needed
+  const reviews = await Review.find({ businessId: business._id })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean();
+
+  res.json({
+    success: true,
+    business,
+    reviews,
+  });
 });
