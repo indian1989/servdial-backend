@@ -26,7 +26,10 @@ export const getCities = async (req, res) => {
 
     const cached = memoryCache.get(cacheKey);
     if (cached) {
-      return res.json({ success: true, data: cached });
+      return res.json({
+        success: true,
+        data: { cities: cached },
+      });
     }
 
     const cities = await City.find({})
@@ -35,10 +38,16 @@ export const getCities = async (req, res) => {
 
     memoryCache.set(cacheKey, cities, 60 * 60 * 6);
 
-    return res.json({ success: true, data: cities });
+    return res.json({
+      success: true,
+      data: { cities },
+    });
   } catch (error) {
     console.error("getCities error:", error);
-    res.status(500).json({ success: false });
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
