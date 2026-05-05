@@ -14,19 +14,19 @@ const router = express.Router();
    PUBLIC BUSINESS ROUTES
 ================================ */
 
-// GET all businesses
-router.get("/", getBusinesses);
+// ✅ COUNT (must be before dynamic routes)
+router.get("/count/all", getBusinessCount);
 
-// GET single business
-router.get("/:slug", getBusinessBySlug);
-
-// ✅ SIMILAR (FIXED PATH)
-router.get("/:id/similar", getSimilarBusinesses);
+// ✅ SIMILAR (use clear path, no conflict)
+router.get("/similar/:id", getSimilarBusinesses);
 
 // ✅ TRACK VIEW
 router.post("/:id/view", trackBusinessView);
 
-// ✅ COUNT
-router.get("/count/all", getBusinessCount);
+// ✅ GET ALL
+router.get("/", getBusinesses);
+
+// ✅ SINGLE (KEEP LAST — VERY IMPORTANT)
+router.get("/:slug", getBusinessBySlug);
 
 export default router;
