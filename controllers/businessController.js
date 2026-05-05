@@ -399,7 +399,6 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
   });
 });
 
-// ================= GET BY SLUG =================
 // ================= GET BUSINESS BY SLUG =================
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
   const { slug } = req.params;
@@ -438,4 +437,62 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     business,
     reviews,
   });
+});
+
+// ================= GET BUSINESS COUNT =================
+export const getBusinessCount = asyncHandler(async (req, res) => {
+  const { categoryId, cityId } = req.query;
+
+  const filter = {
+    status: "approved",
+    isDeleted: false,
+  };
+
+  if (categoryId) filter.categoryId = categoryId;
+  if (cityId) filter.cityId = cityId;
+
+  const count = await Business.countDocuments(filter);
+
+  res.json({
+    success: true,
+    data: { count },
+  });
+});
+
+// ================= GET SIMILAR BUSINESS =================
+export const getSimilarBusinesses = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const base = await Business.findById(id).lean();
+  if (!base) {
+    return res.status(404).json({ success: false, message: "Not found" });
+  }
+
+  const raw = await Business.find({
+    _id: { $ne: id },
+    cityId: base.cityId,
+    categoryId: base.categoryId,
+    status: "approved",
+    isDeleted: false,
+  })
+    .limit(20)
+    .lean();
+
+  const ranked = await rankBusinesses(raw, {}, "", {}, null, base.cityId);
+
+  res.json({
+    success: true,
+    data: ranked.slice(0, 8),
+  });
+});
+
+// ================= Track BUSINESS VIEW =================
+export const trackBusinessView = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  await Business.findByIdAndUpdate(id, {
+    $inc: { views: 1 }
+  });
+
+  res.json({ success: true });
 });
