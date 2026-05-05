@@ -6,6 +6,7 @@ import City from "../models/City.js";
 import Category from "../models/Category.js";
 import Review from "../models/Review.js";
 import { normalizeBusinessHours } from "../utils/normalizeBusinessHours.js";
+import { rankBusinesses } from "../services/ranking/unifiedRankingEngine.js";
 
 import slugify from "../utils/slugify.js";
 
