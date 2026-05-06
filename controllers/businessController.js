@@ -47,6 +47,7 @@ export const createBusiness = asyncHandler(async (req, res) => {
     name,
     categoryId,
     cityId,
+    pincode,
     address,
     phone,
     whatsapp,
@@ -60,36 +61,68 @@ export const createBusiness = asyncHandler(async (req, res) => {
 
   /* ================= VALIDATION ================= */
 
+  try {
   requireField(name, "Business name");
   requireField(categoryId, "Category");
   requireField(cityId, "City");
+  requireField(pincode, "Pincode");
   requireField(phone, "Phone");
+} catch (err) {
+  return res.status(400).json({
+    success: false,
+    message: err.message,
+  });
+}
 
   if (!isValidObjectId(categoryId)) {
-    return res.status(400).json({ message: "Invalid categoryId" });
+    return res.status(400).json({
+  success: false,
+  message: "Invalid categoryId",
+});
   }
 
   if (!isValidObjectId(cityId)) {
-    return res.status(400).json({ message: "Invalid cityId" });
+    return res.status(400).json({
+  success: false,
+  message: "Invalid cityId",
+});
   }
+
+  const cleanPincode = String(pincode).replace(/\D/g, "");
+
+if (cleanPincode.length !== 6) {
+  return res.status(400).json({
+    success: false,
+    message: "Pincode must be 6 digits",
+  });
+}
 
   const cleanPhone = String(phone).replace(/\D/g, "");
   if (cleanPhone.length !== 10) {
-    return res.status(400).json({ message: "Phone must be 10 digits" });
+    return res.status(400).json({
+  success: false,
+  message: "Phone must be 10 digits",
+});
   }
 
   /* ================= RESOLVE CITY ================= */
 
   const city = await City.findById(cityId);
   if (!city) {
-    return res.status(404).json({ message: "City not found" });
+    return res.status(404).json({
+  success: false,
+  message: "City not found",
+});
   }
 
   /* ================= RESOLVE CATEGORY ================= */
 
   const category = await Category.findById(categoryId);
   if (!category) {
-    return res.status(404).json({ message: "Category not found" });
+    return res.status(404).json({
+  success: false,
+  message: "Category not found",
+});
   }
 
   /* ================= LOCATION SAFETY ================= */
@@ -102,26 +135,49 @@ if (
   Array.isArray(location.coordinates) &&
   location.coordinates.length === 2
 ) {
-  safeLocation = {
-    type: "Point",
-    coordinates: [
-      Number(location.coordinates[0]),
-      Number(location.coordinates[1]),
-    ],
-  };
-} else if (
-  typeof city.latitude === "number" &&
-  typeof city.longitude === "number"
-) {
-  safeLocation = {
-    type: "Point",
-    coordinates: [city.longitude, city.latitude],
-  };
+  const lng = Number(location.coordinates[0]);
+  const lat = Number(location.coordinates[1]);
+
+  // ✅ strict NaN + range validation
+  if (
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  ) {
+    safeLocation = {
+      type: "Point",
+      coordinates: [lng, lat],
+    };
+  }
 }
 
-// ✅ validate AFTER assignment
+/* ===== FALLBACK TO CITY ===== */
+if (!safeLocation) {
+  const cityLat = Number(city.latitude);
+  const cityLng = Number(city.longitude);
+
+  if (
+    !isNaN(cityLat) &&
+    !isNaN(cityLng) &&
+    cityLat >= -90 &&
+    cityLat <= 90 &&
+    cityLng >= -180 &&
+    cityLng <= 180
+  ) {
+    safeLocation = {
+      type: "Point",
+      coordinates: [cityLng, cityLat],
+    };
+  }
+}
+
+/* ===== FINAL VALIDATION ===== */
 if (!safeLocation) {
   return res.status(400).json({
+    success: false,
     message: "Valid location required",
   });
 }
@@ -150,6 +206,7 @@ const business = await Business.create({
   slug,
 
   address: address?.trim() || "",
+  pincode: cleanPincode,
   phone: cleanPhone,
   whatsapp: whatsapp || "",
   website: website || "",
@@ -241,7 +298,10 @@ export const getBusinessById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   if (!isValidObjectId(id)) {
-    return res.status(400).json({ message: "Invalid business id" });
+    return res.status(400).json({
+  success: false,
+  message: "Invalid business id",
+});
   }
 
   const business = await Business.findById(id)
@@ -249,7 +309,10 @@ export const getBusinessById = asyncHandler(async (req, res) => {
     .populate("categoryId");
 
   if (!business) {
-    return res.status(404).json({ message: "Business not found" });
+    return res.status(404).json({
+  success: false,
+  message: "Business not found",
+});
   }
 
   res.json({
@@ -311,12 +374,18 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   if (!isValidObjectId(id)) {
-    return res.status(400).json({ message: "Invalid business id" });
+    return res.status(400).json({
+  success: false,
+  message: "Invalid business id",
+});
   }
 
   const business = await Business.findById(id);
   if (!business) {
-    return res.status(404).json({ message: "Business not found" });
+    return res.status(404).json({
+  success: false,
+  message: "Business not found",
+});
   }
 
   const updates = { ...req.body };
@@ -327,11 +396,26 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   delete updates.categorySlug;
   delete updates.status; // controlled by system
 
+  /* 🚫 PINCODE NORMALIZATION */
+  if (updates.pincode) {
+  updates.pincode = String(updates.pincode).replace(/\D/g, "");
+
+  if (updates.pincode.length !== 6) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid pincode",
+    });
+  }
+}
+
   /* 🚫 PHONE NORMALIZATION */
   if (updates.phone) {
     updates.phone = String(updates.phone).replace(/\D/g, "");
     if (updates.phone.length !== 10) {
-      return res.status(400).json({ message: "Invalid phone number" });
+      return res.status(400).json({
+    success: false,
+    message: "Invalid phone number",
+  });
     }
   }
 
@@ -367,15 +451,27 @@ export const updateBusiness = asyncHandler(async (req, res) => {
 export const deleteBusiness = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
+  // ✅ Validate ID
   if (!isValidObjectId(id)) {
-    return res.status(400).json({ message: "Invalid business id" });
+    return res.status(400).json({
+      success: false,
+      message: "Invalid business id",
+    });
   }
 
-  await Business.findByIdAndDelete(id);
+  const deleted = await Business.findByIdAndDelete(id);
+
+  if (!deleted) {
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
+  }
 
   res.json({
     success: true,
     message: "Business deleted successfully",
+    data: null,
   });
 });
 
@@ -386,18 +482,20 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
   if (!business) {
-    res.status(404);
-    throw new Error("Business not found");
+    return res.status(404).json({
+  success: false,
+  message: "Business not found",
+});
   }
 
   business.images = req.body.images || business.images;
   await business.save();
 
   res.json({
-    success: true,
-    message: "Business media updated",
-    images: business.images,
-  });
+  success: true,
+  message: "Business media updated",
+  data: business.images,
+});
 });
 
 // ================= GET BUSINESS BY SLUG =================
@@ -434,10 +532,12 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     .lean();
 
   res.json({
-    success: true,
+  success: true,
+  data: {
     business,
     reviews,
-  });
+  },
+});
 });
 
 // ================= GET BUSINESS COUNT =================
@@ -464,11 +564,25 @@ export const getBusinessCount = asyncHandler(async (req, res) => {
 export const getSimilarBusinesses = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const base = await Business.findById(id).lean();
-  if (!base) {
-    return res.status(404).json({ success: false, message: "Not found" });
+  // ✅ Validate ID
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid business id",
+    });
   }
 
+  // ✅ Get base business
+  const base = await Business.findById(id).lean();
+
+  if (!base) {
+    return res.status(404).json({
+      success: false,
+      message: "Base business not found",
+    });
+  }
+
+  // ✅ Find similar businesses
   const raw = await Business.find({
     _id: { $ne: id },
     cityId: base.cityId,
@@ -479,8 +593,17 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
     .limit(20)
     .lean();
 
-  const ranked = await rankBusinesses(raw, {}, "", {}, null, base.cityId);
+  // ✅ Ranking layer
+  const ranked = await rankBusinesses(
+    raw,
+    {},
+    "",
+    {},
+    null,
+    base.cityId
+  );
 
+  // ✅ Final response
   res.json({
     success: true,
     data: ranked.slice(0, 8),
@@ -491,9 +614,29 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
 export const trackBusinessView = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  await Business.findByIdAndUpdate(id, {
-    $inc: { views: 1 }
-  });
+  // ✅ Validate ID
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid business id",
+    });
+  }
 
-  res.json({ success: true });
+  const updated = await Business.findByIdAndUpdate(
+    id,
+    { $inc: { views: 1 } },
+    { new: true }
+  );
+
+  if (!updated) {
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
+  }
+
+  res.json({
+    success: true,
+    data: null,
+  });
 });
