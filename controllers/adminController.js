@@ -8,6 +8,7 @@ import Business from "../models/Business.js";
 import Category from "../models/Category.js";
 import City from "../models/City.js";
 import User from "../models/User.js";
+import Lead from "../models/Lead.js";
 
 /* ================================
    GET ADMIN BUSINESSES
@@ -198,7 +199,8 @@ export const getReports = async (req, res) => {
   try {
     // Example: return all businesses with metrics
     const businesses = await Business.find().populate("categoryId")
-.populate("cityId", "name slug");
+.populate("cityId", "name slug")
+.populate("categoryId", "name slug")
     res.json({ businesses });
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch reports", error: err.message });

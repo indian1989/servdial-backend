@@ -79,6 +79,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
 })
   .select(baseSelect)
   .populate("cityId", "name slug")
+.populate("categoryId", "name slug")
   .sort({ featurePriority: -1, averageRating: -1 })
   .limit(20)
   .lean(),
@@ -87,6 +88,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
     Business.find(baseBusinessFilter)
   .select(baseSelect)
   .populate("cityId", "name slug")
+.populate("categoryId", "name slug")
   .sort({ averageRating: -1, totalReviews: -1 })
   .limit(20)
   .lean(),
@@ -95,6 +97,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
     Business.find(baseBusinessFilter)
   .select(baseSelect)
   .populate("cityId", "name slug")
+.populate("categoryId", "name slug")
   .sort({ createdAt: -1 })
   .limit(20)
   .lean(),
@@ -129,6 +132,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
     Business.find(baseBusinessFilter)
   .select(baseSelect)
   .populate("cityId", "name slug")
+.populate("categoryId", "name slug")
   .limit(40)
   .lean(),
 

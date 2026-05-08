@@ -1,6 +1,12 @@
 // backend/routes/providerRoutes.js
+
 import express from "express";
-import { protect } from "../middleware/authMiddleware.js"; // assuming you have auth middleware
+
+import {
+  protect,
+  authorizeRoles,
+} from "../middleware/authMiddleware.js";
+
 import {
   getProviderDashboardStats,
   getProviderBusinesses,
@@ -26,37 +32,41 @@ import {
 
 const router = express.Router();
 
-// ================= PROVIDER DASHBOARD =================
-router.get("/dashboard", protect, getProviderDashboardStats);
+/* ================= SECURITY ================= */
+router.use(protect);
+router.use(authorizeRoles("provider"));
 
-// ================= BUSINESSES =================
-router.get("/businesses", protect, getProviderBusinesses);
-router.post("/businesses", protect, createBusiness);
-router.put("/businesses/:id", protect, updateBusiness);
-router.post("/businesses/claim", protect, claimBusiness);
-router.put("/businesses/:id/hours", protect, updateBusinessHours);
-router.put("/businesses/:id/media", protect, updateBusinessMedia);
+/* ================= PROVIDER DASHBOARD ================= */
+router.get("/dashboard", getProviderDashboardStats);
 
-// ================= LEADS & REVIEWS =================
-router.get("/leads", protect, getProviderLeads);
-router.get("/reviews", protect, getProviderReviews);
+/* ================= BUSINESSES ================= */
+router.get("/businesses", getProviderBusinesses);
+router.post("/businesses", createBusiness);
+router.put("/businesses/:id", updateBusiness);
+router.post("/businesses/claim", claimBusiness);
+router.put("/businesses/:id/hours", updateBusinessHours);
+router.put("/businesses/:id/media", updateBusinessMedia);
 
-// ================= ANALYTICS =================
-router.get("/analytics", protect, getProviderAnalytics);
+/* ================= LEADS & REVIEWS ================= */
+router.get("/leads", getProviderLeads);
+router.get("/reviews", getProviderReviews);
 
-// ================= SETTINGS / PROFILE =================
-router.get("/settings", protect, getProviderSettings);
-router.get("/profile", protect, getProviderProfile);
+/* ================= ANALYTICS ================= */
+router.get("/analytics", getProviderAnalytics);
 
-// ================= MESSAGES / NOTIFICATIONS / OFFERS =================
-router.get("/messages", protect, getProviderMessages);
-router.get("/notifications", protect, getProviderNotifications);
-router.get("/offers", protect, getProviderOffers);
+/* ================= SETTINGS / PROFILE ================= */
+router.get("/settings", getProviderSettings);
+router.get("/profile", getProviderProfile);
 
-// ================= SUBSCRIPTION =================
-router.get("/subscription", protect, getProviderSubscription);
+/* ================= MESSAGES / NOTIFICATIONS / OFFERS ================= */
+router.get("/messages", getProviderMessages);
+router.get("/notifications", getProviderNotifications);
+router.get("/offers", getProviderOffers);
 
-// ================= TRACK BUSINESS VIEWS =================
-router.post("/businesses/:id/track-view", protect, trackBusinessView);
+/* ================= SUBSCRIPTION ================= */
+router.get("/subscription", getProviderSubscription);
+
+/* ================= TRACK BUSINESS VIEWS ================= */
+router.post("/businesses/:id/track-view", trackBusinessView);
 
 export default router;
