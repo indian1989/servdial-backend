@@ -103,7 +103,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   .lean(),
 
     // ================= NEARBY =================
-    lat && lng
+lat && lng
   ? Business.aggregate([
       {
         $geoNear: {
@@ -116,7 +116,6 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
           maxDistance: 5000,
           key: "location",
 
-          // 🔥 MOVE FILTER HERE (IMPORTANT FIX)
           query: {
             status: "approved",
             isDeleted: false,
@@ -124,6 +123,38 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
           },
         },
       },
+
+      // IMPORTANT: bring full data needed for frontend
+      {
+        $lookup: {
+          from: "categories",
+          localField: "categoryId",
+          foreignField: "_id",
+          as: "categoryId",
+        },
+      },
+      {
+        $unwind: {
+          path: "$categoryId",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $lookup: {
+          from: "cities",
+          localField: "cityId",
+          foreignField: "_id",
+          as: "cityId",
+        },
+      },
+      {
+        $unwind: {
+          path: "$cityId",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
       { $limit: 20 },
     ])
   : [],
