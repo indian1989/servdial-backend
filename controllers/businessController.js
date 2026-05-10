@@ -223,9 +223,15 @@ const business = await Business.create({
 });
 
 // ✅ response
+const populatedBusiness = await Business.findById(
+  business._id
+)
+  .populate("cityId", "name slug")
+  .populate("categoryId", "name slug");
+
 res.status(201).json({
   success: true,
-  data: business,
+  data: populatedBusiness,
 });
 });
 
@@ -375,68 +381,126 @@ export const updateBusiness = asyncHandler(async (req, res) => {
 
   if (!isValidObjectId(id)) {
     return res.status(400).json({
-  success: false,
-  message: "Invalid business id",
-});
+      success: false,
+      message: "Invalid business id",
+    });
   }
 
   const business = await Business.findById(id);
+
   if (!business) {
     return res.status(404).json({
-  success: false,
-  message: "Business not found",
-});
+      success: false,
+      message: "Business not found",
+    });
   }
 
   const updates = { ...req.body };
 
-  /* 🚫 HARD PROTECTION LAYER */
+  /* ================= HARD PROTECTION ================= */
+
   delete updates.slug;
   delete updates.citySlug;
   delete updates.categorySlug;
-  delete updates.status; // controlled by system
+  delete updates.status;
 
-  /* 🚫 PINCODE NORMALIZATION */
+  /* ================= PINCODE ================= */
+
   if (updates.pincode) {
-  updates.pincode = String(updates.pincode).replace(/\D/g, "");
+    updates.pincode = String(updates.pincode)
+      .replace(/\D/g, "");
 
-  if (updates.pincode.length !== 6) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid pincode",
-    });
+    if (updates.pincode.length !== 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pincode",
+      });
+    }
   }
-}
 
-  /* 🚫 PHONE NORMALIZATION */
+  /* ================= PHONE ================= */
+
   if (updates.phone) {
-    updates.phone = String(updates.phone).replace(/\D/g, "");
+    updates.phone = String(updates.phone)
+      .replace(/\D/g, "");
+
     if (updates.phone.length !== 10) {
       return res.status(400).json({
-    success: false,
-    message: "Invalid phone number",
-  });
+        success: false,
+        message: "Invalid phone number",
+      });
     }
   }
 
-  /* 🚫 OPTIONAL RE-RESOLVE CITY/CATEGORY */
-  if (updates.cityId && isValidObjectId(updates.cityId)) {
+  /* ================= CITY RESOLVE ================= */
+
+  if (updates.cityId) {
+    if (!isValidObjectId(updates.cityId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid cityId",
+      });
+    }
+
     const city = await City.findById(updates.cityId);
-    if (city) {
-      updates.citySlug = city.slug;
+
+    if (!city) {
+      return res.status(404).json({
+        success: false,
+        message: "City not found",
+      });
     }
+
+    updates.citySlug = city.slug;
   }
 
-  if (updates.categoryId && isValidObjectId(updates.categoryId)) {
-    const category = await Category.findById(updates.categoryId);
-    if (category) {
-      updates.categorySlug = category.slug;
+  /* ================= CATEGORY RESOLVE ================= */
+
+  if (updates.categoryId) {
+    if (!isValidObjectId(updates.categoryId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid categoryId",
+      });
     }
+
+    const category = await Category.findById(
+      updates.categoryId
+    );
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    updates.categorySlug = category.slug;
   }
 
-  const updated = await Business.findByIdAndUpdate(id, updates, {
-    new: true,
-  });
+  /* ================= HOURS NORMALIZATION ================= */
+
+  if (updates.businessHours) {
+    updates.businessHours =
+      normalizeBusinessHours(
+        updates.businessHours
+      );
+  }
+
+  /* ================= UPDATE ================= */
+
+  const updated = await Business.findByIdAndUpdate(
+    id,
+    updates,
+    {
+      new: true,
+      runValidators: true,
+    }
+  )
+    .populate("cityId", "name slug")
+    .populate("categoryId", "name slug");
+
+  /* ================= RESPONSE ================= */
 
   res.json({
     success: true,
