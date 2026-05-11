@@ -44,9 +44,24 @@ console.log("🔥 BASE FILTER:", baseBusinessFilter);
 const testCount = await Business.countDocuments(baseBusinessFilter);
 console.log("🔥 MATCHING BUSINESSES:", testCount);
 
-  const baseSelect =
-    "name slug averageRating totalReviews views isFeatured featurePriority";
-
+  const baseSelect = `
+  name
+  slug
+  logo
+  images
+  averageRating
+  totalReviews
+  views
+  phoneClicks
+  whatsappClicks
+  phone
+  whatsapp
+  isFeatured
+  featurePriority
+  isVerified
+  citySlug
+  categorySlug
+`;
   const safeLocation =
     lat && lng ? { lat: Number(lat), lng: Number(lng) } : {};
 
@@ -154,6 +169,30 @@ lat && lng
           preserveNullAndEmptyArrays: true,
         },
       },
+
+      {
+  $project: {
+    name: 1,
+    slug: 1,
+    logo: 1,
+    images: 1,
+    averageRating: 1,
+    totalReviews: 1,
+    views: 1,
+    phoneClicks: 1,
+    whatsappClicks: 1,
+    phone: 1,
+    whatsapp: 1,
+    isFeatured: 1,
+    featurePriority: 1,
+    isVerified: 1,
+    citySlug: 1,
+    categorySlug: 1,
+    cityId: 1,
+    categoryId: 1,
+    distance: 1,
+  },
+},
 
       { $limit: 20 },
     ])
