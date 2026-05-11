@@ -6,7 +6,8 @@ import {
   getSimilarBusinesses,
   trackBusinessView,
   getBusinessCount,
-  getLatestBusinesses, // ✅ ADD
+  getLatestBusinesses,
+  searchBusinesses,
 } from "../controllers/businessController.js";
 
 const router = express.Router();
@@ -20,6 +21,9 @@ router.get("/count/all", getBusinessCount);
 
 // ✅ LATEST
 router.get("/latest", getLatestBusinesses);
+
+// ✅ SEARCH
+router.get("/search", searchBusinesses);
 
 // ✅ SIMILAR
 router.get("/similar/:id", getSimilarBusinesses);
