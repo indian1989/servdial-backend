@@ -704,3 +704,51 @@ export const trackBusinessView = asyncHandler(async (req, res) => {
     data: null,
   });
 });
+
+/* =========================
+   GET LATEST BUSINESSES
+========================= */
+
+export const getLatestBusinesses = asyncHandler(async (req, res) => {
+  const { city, limit = 12 } = req.query;
+
+  const filter = {
+    status: "approved",
+    isDeleted: false,
+  };
+
+  // ================= CITY RESOLVE =================
+  if (city) {
+    const cityDoc = await City.findOne({
+      slug: city,
+    }).select("_id");
+
+    if (cityDoc) {
+      filter.cityId = cityDoc._id;
+    }
+  }
+
+  // ================= FETCH =================
+  const rawBusinesses = await Business.find(filter)
+    .populate("cityId", "name slug")
+    .populate("categoryId", "name slug")
+    .sort({ createdAt: -1 })
+    .limit(Number(limit))
+    .lean();
+
+  // ================= RANK =================
+  const ranked = await rankBusinesses(
+    rawBusinesses,
+    {},
+    "",
+    { intent: "latest" },
+    req.user?._id || null,
+    filter.cityId || null
+  );
+
+  // ================= RESPONSE =================
+  res.json({
+    success: true,
+    data: ranked,
+  });
+});
