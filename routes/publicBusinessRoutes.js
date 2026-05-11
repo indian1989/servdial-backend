@@ -6,6 +6,7 @@ import {
   getSimilarBusinesses,
   trackBusinessView,
   getBusinessCount,
+  getLatestBusinesses, // ✅ ADD
 } from "../controllers/businessController.js";
 
 const router = express.Router();
@@ -14,10 +15,13 @@ const router = express.Router();
    PUBLIC BUSINESS ROUTES
 ================================ */
 
-// ✅ COUNT (must be before dynamic routes)
+// ✅ COUNT
 router.get("/count/all", getBusinessCount);
 
-// ✅ SIMILAR (use clear path, no conflict)
+// ✅ LATEST
+router.get("/latest", getLatestBusinesses);
+
+// ✅ SIMILAR
 router.get("/similar/:id", getSimilarBusinesses);
 
 // ✅ TRACK VIEW
@@ -26,7 +30,7 @@ router.post("/:id/view", trackBusinessView);
 // ✅ GET ALL
 router.get("/", getBusinesses);
 
-// ✅ SINGLE (KEEP LAST — VERY IMPORTANT)
+// ✅ SINGLE (KEEP LAST)
 router.get("/:slug", getBusinessBySlug);
 
 export default router;
