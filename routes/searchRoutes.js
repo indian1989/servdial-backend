@@ -1,17 +1,30 @@
-// backend/routes/searchRoutes.js
 import express from "express";
-// import { searchBusinesses } from "../controllers/searchController.js";
-import { getAutocompleteSuggestions } from "../controllers/autocompleteController.js";
-import { getTrendingSearches } from "../controllers/trendingController.js";
-import { getRecentSearches } from "../controllers/recentSearchController.js";
 
+import { unifiedSearch } from "../controllers/unifiedSearchController.js";
+
+import {
+  getAutocompleteSuggestions,
+  getTrendingSearches,
+  getRecentSearches,
+} from "../controllers/searchController.js";
 
 const router = express.Router();
 
-// Search businesses
-// router.get("/", searchBusinesses);
+/* =========================
+   🔥 MAIN SEARCH ENGINE
+========================= */
+router.get("/businesses", unifiedSearch);
+
+/* =========================
+   AUTOCOMPLETE
+========================= */
 router.get("/autocomplete", getAutocompleteSuggestions);
 router.get("/suggestions", getAutocompleteSuggestions);
+
+/* =========================
+   INTELLIGENCE
+========================= */
 router.get("/trending", getTrendingSearches);
 router.get("/recent", getRecentSearches);
+
 export default router;

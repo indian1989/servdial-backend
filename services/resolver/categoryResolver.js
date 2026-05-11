@@ -68,3 +68,19 @@ export const getLeafCategoryIds = async (parentId) => {
 
   return leafIds;
 };
+
+export const resolveCategoryContext = async (slug) => {
+  const category = await resolveCategoryBySlug(slug);
+
+  if (!category) {
+    return null;
+  }
+
+  const leafCategoryIds = await getLeafCategoryIds(category._id);
+
+  return {
+    primaryCategoryId: category._id,
+    leafCategoryIds,
+    category,
+  };
+};

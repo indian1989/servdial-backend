@@ -1,74 +1,73 @@
-import { resolveCity } from "../resolvers/cityResolver.js";
-import { resolveCategoryContext } from "../resolvers/categoryResolver.js";
-import { detectIntent } from "../../utils/intentDetector.js";
-import { parseSearchIntent } from "../../utils/parseSearchIntent.js";
+import Business from "../../models/Business.js";
+import { rankBusinesses } from "../../utils/rankBusinesses.js";
 
 /**
- * UNIFIED SEARCH ENGINE
- * Converts raw query → structured search object
+ * UNIFIED SEARCH ENGINE (EXECUTION LAYER)
+ * ONLY responsibility:
+ * → take searchContext
+ * → fetch raw businesses
  */
 
-export const buildSearchContext = async (query = "", filters = {}) => {
-  if (!query && Object.keys(filters).length === 0) {
-    return {
-      query: "",
-      cityId: null,
-      categoryIds: [],
-      intent: "UNKNOWN",
-      textSearch: "",
-      filters: {},
+export const unifiedSearchEngine = async (searchContext = {}) => {
+  const {
+    cityId,
+    categoryId,
+    categoryIds,
+    textSearch,
+    filters = {},
+  } = searchContext;
+
+  // ================= BASE QUERY =================
+  const query = {
+    status: "approved",
+    isDeleted: false,
+  };
+
+  // ================= CITY FILTER =================
+  if (cityId) {
+    query.cityId = cityId;
+  }
+
+  // ================= CATEGORY FILTER =================
+  if (categoryId) {
+    query.categoryId = categoryId;
+  } else if (categoryIds?.length) {
+    query.categoryId = { $in: categoryIds };
+  }
+
+  // ================= TEXT SEARCH =================
+  if (textSearch) {
+    query.$or = [
+      { name: { $regex: textSearch, $options: "i" } },
+      { description: { $regex: textSearch, $options: "i" } },
+    ];
+  }
+
+  // ================= GEO FILTER (FUTURE SAFE) =================
+  if (filters?.lat && filters?.lng) {
+    query.location = {
+      $near: {
+        $geometry: {
+          type: "Point",
+          coordinates: [filters.lng, filters.lat],
+        },
+        $maxDistance: (filters.distance || 10) * 1000,
+      },
     };
   }
 
-  // ================= INTENT ANALYSIS =================
-  const intent = detectIntent(query);
+  // ================= FETCH =================
+  const businesses = await Business.find(query)
+    .populate("cityId", "name slug")
+    .populate("categoryId", "name slug")
+    .limit(50)
+    .lean();
 
-  const parsed = parseSearchIntent(query);
+  // ================= RANK =================
+  const ranked = await rankBusinesses(
+    businesses,
+    searchContext
+  );
 
-  const {
-    citySlug,
-    categorySlug,
-    textSearch
-  } = parsed;
-
-  // ================= RESOLVE CITY =================
-  let city = null;
-
-  if (citySlug) {
-    city = await resolveCity(citySlug);
-  }
-
-  // ================= RESOLVE CATEGORY =================
-  let categoryContext = null;
-
-  if (categorySlug) {
-    categoryContext = await resolveCategoryContext(categorySlug);
-  }
-
-  // ================= BUILD FINAL CONTEXT =================
-  const searchContext = {
-    rawQuery: query,
-
-    // resolved IDs
-    cityId: city ? city._id : null,
-    categoryIds: categoryContext ? categoryContext.categoryIds : [],
-
-    // metadata
-    intent,
-    textSearch,
-
-    // filters (future expansion)
-    filters: {
-      ...filters,
-    },
-
-    // debug context (VERY IMPORTANT for tuning ranking later)
-    debug: {
-      hasCity: !!city,
-      hasCategory: !!categoryContext,
-      parsed,
-    },
-  };
-
-  return searchContext;
+  return ranked;
 };

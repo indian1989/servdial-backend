@@ -1,50 +1,72 @@
-import { normalizeText } from "../utils/normalizeBusiness.js";
+import { resolveCity } from "../resolver/cityResolver.js";
+import { resolveCategoryContext } from "../resolver/categoryResolver.js";
 
-/* =========================================================
-   🧠 QUERY UNDERSTANDING LAYER
-   ========================================================= */
-export function classifyQuery(query = "") {
-  const raw = normalizeText(query).toLowerCase().trim();
+import { detectIntent } from "../../utils/intentDetector.js";
+import { parseSearchIntent } from "../../utils/parseSearchIntent.js";
 
-  const tokens = raw
-    .split(/\s+/)
-    .filter(Boolean)
-    .filter(t => t.length > 1);
+/**
+ * =========================================================
+ * 🧠 BUILD SEARCH CONTEXT (SSOT)
+ * =========================================================
+ * Uses your existing utils folder ONLY
+ * =========================================================
+ */
 
-  return {
-    raw,
-    tokens,
-    isSingleWord: tokens.length === 1,
-    length: tokens.length
-  };
-}
+export const buildSearchContext = async (query = "", filters = {}) => {
+  const cleanQuery = (query || "").trim();
 
-/* =========================================================
-   🧠 MATCHING ENGINE (CORE LOGIC)
-   ========================================================= */
-export function assignBucket(business, queryData) {
-  const { raw, tokens } = queryData;
-
-  const name = (business.name || "").toLowerCase();
-  const tags = (business.tags || []).join(" ").toLowerCase();
-  const category = (business.categoryName || "").toLowerCase();
-
-  // 🥇 EXACT MATCH (HIGHEST PRIORITY)
-  if (name === raw) return 1;
-
-  // 🥈 NAME START MATCH (BETTER UX MATCH)
-  if (name.startsWith(raw)) return 2;
-
-  // 🥉 PARTIAL NAME MATCH
-  if (name.includes(raw)) return 3;
-
-  // 🪵 TOKEN MATCH (NAME + TAGS + CATEGORY)
-  for (const token of tokens) {
-    if (name.includes(token)) return 4;
-    if (tags.includes(token)) return 4;
-    if (category.includes(token)) return 4;
+  // ================= EMPTY SAFETY =================
+  if (!cleanQuery && Object.keys(filters).length === 0) {
+    return {
+      rawQuery: "",
+      cityId: null,
+      categoryId: null,
+      categoryIds: [],
+      intent: "UNKNOWN",
+      textSearch: "",
+      filters: {},
+      debug: { empty: true },
+    };
   }
 
-  // 🌐 WEAK MATCH (FALLBACK)
-  return 5;
-}
+  // ================= INTENT =================
+  const intent = detectIntent(cleanQuery);
+  const parsed = parseSearchIntent(cleanQuery);
+
+  const { citySlug, categorySlug, textSearch } = parsed;
+
+  // ================= CITY RESOLVE =================
+  let city = null;
+  if (citySlug) {
+    city = await resolveCity(citySlug);
+  }
+
+  // ================= CATEGORY RESOLVE =================
+  let categoryContext = null;
+  if (categorySlug) {
+    categoryContext = await resolveCategoryContext(categorySlug);
+  }
+
+  // ================= NORMALIZED OUTPUT =================
+  const categoryId = categoryContext?.primaryCategoryId || null;
+  const categoryIds = categoryContext?.leafCategoryIds || [];
+
+  return {
+    rawQuery: cleanQuery,
+
+    cityId: city?._id || null,
+    categoryId,
+    categoryIds,
+
+    intent,
+    textSearch: textSearch || cleanQuery,
+
+    filters: { ...filters },
+
+    debug: {
+      hasCity: !!city,
+      hasCategory: !!categoryContext,
+      parsed,
+    },
+  };
+};
