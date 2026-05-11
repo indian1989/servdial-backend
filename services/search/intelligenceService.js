@@ -1,6 +1,6 @@
 import Business from "../../models/Business.js";
 import RecentSearch from "../../models/RecentSearch.js";
-import searchTrend from "../../models/searchTrend.js";
+import SearchTrend from "../../models/SearchTrend.js";
 
 /* =========================================================
    🔍 AUTOCOMPLETE SERVICE
@@ -29,7 +29,7 @@ export const getAutocompleteService = async (q = "") => {
    📈 TRENDING SEARCHES
 ========================================================= */
 export const getTrendingSearchesService = async () => {
-  const trends = await searchTrend
+  const trends = await SearchTrend
     .find({})
     .sort({ count: -1 })
     .limit(10)
