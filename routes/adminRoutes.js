@@ -12,33 +12,56 @@ import {
   getUsers,
 } from "../controllers/adminController.js";
 
-import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
+import {
+  protect,
+  authorizeRoles,
+} from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-/* ================= SECURITY ================= */
+/* ======================================================
+   SECURITY LAYER
+====================================================== */
 router.use(protect);
 router.use(authorizeRoles("admin", "superadmin"));
 
-/* ================= DASHBOARD ================= */
+/* ======================================================
+   DASHBOARD
+====================================================== */
 router.get("/dashboard", getDashboardStats);
 
-/* ================= ADMIN USERS (SUPERADMIN ONLY) ================= */
-router.get("/admins", authorizeRoles("superadmin"), getAdmins);
-
-router.get(
-  "/users", getUsers);
-
-/* ================= ACCOUNT ================= */
-router.put("/change-password", changePassword);
-
-/* ================= ANALYTICS ================= */
+/* ======================================================
+   ANALYTICS
+====================================================== */
 router.get("/analytics", getAnalytics);
 
-/* ================= SYSTEM ================= */
+/* ======================================================
+   USERS (ADMIN + SUPERADMIN)
+====================================================== */
+router.get("/users", getUsers);
+
+/* ======================================================
+   ADMINS (SUPERADMIN ONLY)
+====================================================== */
+router.get(
+  "/admins",
+  authorizeRoles("superadmin"),
+  getAdmins
+);
+
+/* ======================================================
+   ACCOUNT MANAGEMENT
+====================================================== */
+router.put("/change-password", changePassword);
+
+/* ======================================================
+   SYSTEM SETTINGS
+====================================================== */
 router.get("/system-settings", getSystemSettings);
 
-/* ================= LOGS ================= */
+/* ======================================================
+   ACTIVITY LOGS
+====================================================== */
 router.get("/activity-logs", getActivityLogs);
 
 export default router;

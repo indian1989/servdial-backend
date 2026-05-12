@@ -1,13 +1,19 @@
+// backend/controllers/adminBusinessController.js
 import asyncHandler from "express-async-handler";
 import Business from "../models/Business.js";
 
-/* ================= GET ALL (ADMIN) ================= */
+/* ======================================================
+   GET ALL BUSINESSES (ADMIN)
+   - Full admin listing with relations
+====================================================== */
 export const getAllBusinessesAdmin = asyncHandler(async (req, res) => {
-  const businesses = await Business.find().setOptions({
-  includeAll: true,
-})
+  const businesses = await Business.find()
+    .setOptions({
+      includeAll: true,
+    })
     .populate("cityId", "name slug")
     .populate("categoryId", "name slug")
+    .populate("owner", "name email role")
     .sort({ createdAt: -1 });
 
   res.json({
@@ -16,7 +22,9 @@ export const getAllBusinessesAdmin = asyncHandler(async (req, res) => {
   });
 });
 
-/* ================= APPROVE ================= */
+/* ======================================================
+   APPROVE BUSINESS
+====================================================== */
 export const approveBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
@@ -36,7 +44,9 @@ export const approveBusiness = asyncHandler(async (req, res) => {
   });
 });
 
-/* ================= REJECT ================= */
+/* ======================================================
+   REJECT BUSINESS
+====================================================== */
 export const rejectBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
@@ -56,7 +66,9 @@ export const rejectBusiness = asyncHandler(async (req, res) => {
   });
 });
 
-/* ================= DELETE ================= */
+/* ======================================================
+   DELETE BUSINESS
+====================================================== */
 export const deleteBusinessAdmin = asyncHandler(async (req, res) => {
   const business = await Business.findByIdAndDelete(req.params.id);
 
@@ -73,7 +85,9 @@ export const deleteBusinessAdmin = asyncHandler(async (req, res) => {
   });
 });
 
-/* ================= FEATURE TOGGLE ================= */
+/* ======================================================
+   FEATURE TOGGLE (FIXED + CONSISTENT)
+====================================================== */
 export const toggleFeatured = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
 
@@ -84,7 +98,12 @@ export const toggleFeatured = asyncHandler(async (req, res) => {
     });
   }
 
+  // toggle
   business.isFeatured = !business.isFeatured;
+
+  // ranking support (important for search/order systems)
+  business.featurePriority = business.isFeatured ? 10 : 0;
+
   await business.save();
 
   res.json({
@@ -93,7 +112,32 @@ export const toggleFeatured = asyncHandler(async (req, res) => {
   });
 });
 
-/* ================= STATS ================= */
+/* ======================================================
+   VERIFIED TOGGLE
+====================================================== */
+export const toggleVerifiedBusiness = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id);
+
+  if (!business) {
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
+  }
+
+  business.isVerified = !business.isVerified;
+
+  await business.save();
+
+  res.json({
+    success: true,
+    data: business,
+  });
+});
+
+/* ======================================================
+   BUSINESS STATS
+====================================================== */
 export const getBusinessStats = asyncHandler(async (req, res) => {
   const total = await Business.countDocuments();
   const approved = await Business.countDocuments({ status: "approved" });

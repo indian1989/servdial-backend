@@ -1,4 +1,3 @@
-// backend/controllers/adminController.js
 import asyncHandler from "express-async-handler";
 import bcrypt from "bcryptjs";
 
@@ -10,18 +9,23 @@ import City from "../models/City.js";
 import User from "../models/User.js";
 import Lead from "../models/Lead.js";
 
-/* ================================
-   GET ADMIN BUSINESSES
-================================ */
+/* ======================================================
+   GET ADMIN BUSINESSES (OPTIONAL LIST VIEW ONLY)
+   - READ ONLY (NO STATUS LOGIC HERE)
+====================================================== */
 export const getAdminBusinesses = asyncHandler(async (req, res) => {
-
   console.log("ADMIN QUERY PARAMS:", req.query);
 
-  const { status, city, category, search, page = 1, limit = 20 } = req.query;
+  const {
+    city,
+    category,
+    search,
+    page = 1,
+    limit = 20,
+  } = req.query;
 
   const query = {};
 
-  // if (status) query.status = status;
   if (city) query.cityId = city;
   if (category) query.categoryId = category;
 
@@ -30,92 +34,36 @@ export const getAdminBusinesses = asyncHandler(async (req, res) => {
   }
 
   const businesses = await Business.find(query, null, {
-  includeAll: true,
-})
-  .populate("owner", "name email role")
-  .populate("categoryId", "name")
-  .sort({ createdAt: -1 })
-  .skip((page - 1) * limit)
-  .limit(Number(limit));
+    includeAll: true,
+  })
+    .populate("owner", "name email role")
+    .populate("categoryId", "name")
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * Number(limit))
+    .limit(Number(limit));
 
   const total = await Business.countDocuments(query);
 
   res.json({
     success: true,
     data: businesses,
-    meta: { total, page: Number(page) }
+    meta: {
+      total,
+      page: Number(page),
+    },
   });
 });
 
-/* ================================
-   APPROVE BUSINESS
-================================ */
-export const approveBusiness = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndUpdate(
-    req.params.id,
-    { status: "approved" },
-    { new: true }
-  );
-
-  res.json({ success: true, data: business });
-});
-
-/* ================================
-   REJECT BUSINESS
-================================ */
-export const rejectBusiness = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndUpdate(
-    req.params.id,
-    { status: "rejected" },
-    { new: true }
-  );
-
-  res.json({ success: true, data: business });
-});
-
-/* ================================
-   DELETE BUSINESS
-================================ */
-export const deleteBusiness = asyncHandler(async (req, res) => {
-  await Business.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
-});
-
-
-/* ================================
-   TOGGLE FEATURED
-================================ */
-export const toggleFeatured = asyncHandler(async (req, res) => {
-  const business = await Business.findById(req.params.id);
-
-  if (!business) {
-    return res.status(404).json({
-      success: false,
-      message: "Business not found",
-    });
-  }
-
-  business.isFeatured = !business.isFeatured;
-  business.featurePriority = business.isFeatured ? 10 : 0;
-
-  await business.save();
-
-  res.json({
-    success: true,
-    data: business,
-  });
-});
-
-/* ================================
+/* ======================================================
    DASHBOARD STATS
-================================ */
+====================================================== */
 export const getDashboardStats = asyncHandler(async (req, res) => {
   const users = await User.countDocuments({
-    role: { $in: ["user", "provider"] }
+    role: { $in: ["user", "provider"] },
   });
 
   const admins = await User.countDocuments({
-    role: { $in: ["admin", "superadmin"] }
+    role: { $in: ["admin", "superadmin"] },
   });
 
   const cities = await City.countDocuments();
@@ -129,56 +77,14 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       admins,
       cities,
       categories,
-      businesses
-    }
+      businesses,
+    },
   });
 });
 
-/* ================================
-   BUSINESS STATS
-================================ */
-export const getBusinessStats = asyncHandler(async (req, res) => {
-  const total = await Business.countDocuments();
-  const pending = await Business.countDocuments({ status: "pending" });
-  const approved = await Business.countDocuments({ status: "approved" });
-  const featured = await Business.countDocuments({ isFeatured: true });
-
-  res.json({
-    success: true,
-    data: {
-      total,
-      pending,
-      approved,
-      featured
-    }
-  });
-});
-
-/* ================================
-   CATEGORY
-================================ */
-export const createCategory = asyncHandler(async (req, res) => {
-  const { name } = req.body;
-
-  const existing = await Category.findOne({ name });
-  if (existing) {
-    return res.status(400).json({
-      success: false,
-      message: "Category already exists"
-    });
-  }
-
-  const category = await Category.create({
-    name
-  });
-
-  res.status(201).json({
-    success: true,
-    data: category
-  });
-});
-
-// Analytics
+/* ======================================================
+   ANALYTICS
+====================================================== */
 export const getAnalytics = asyncHandler(async (req, res) => {
   const totalUsers = await User.countDocuments();
   const totalBusinesses = await Business.countDocuments();
@@ -194,43 +100,68 @@ export const getAnalytics = asyncHandler(async (req, res) => {
   });
 });
 
-// Reports
+/* ======================================================
+   REPORTS
+====================================================== */
 export const getReports = async (req, res) => {
   try {
-    // Example: return all businesses with metrics
-    const businesses = await Business.find().populate("categoryId")
-.populate("cityId", "name slug")
-.populate("categoryId", "name slug")
-    res.json({ businesses });
+    const businesses = await Business.find()
+      .populate("cityId", "name slug")
+      .populate("categoryId", "name slug");
+
+    res.json({
+      success: true,
+      data: businesses,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch reports", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch reports",
+      error: err.message,
+    });
   }
 };
 
-// System Settings
+/* ======================================================
+   SYSTEM SETTINGS
+====================================================== */
 export const getSystemSettings = asyncHandler(async (req, res) => {
   const settings = await SystemSettings.find();
-  res.json({ success: true, data: settings });
+
+  res.json({
+    success: true,
+    data: settings,
+  });
 });
 
+/* ======================================================
+   ACTIVITY LOGS
+====================================================== */
 export const getActivityLogs = asyncHandler(async (req, res) => {
   const logs = await ActivityLogs.find()
     .sort({ createdAt: -1 })
     .limit(100);
 
-  res.json({ success: true, data: logs });
+  res.json({
+    success: true,
+    data: logs,
+  });
 });
 
+/* ======================================================
+   PASSWORD CHANGE
+====================================================== */
 export const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 
   const user = await User.findById(req.user._id).select("+password");
 
   const match = await bcrypt.compare(currentPassword, user.password);
+
   if (!match) {
     return res.status(400).json({
       success: false,
-      message: "Current password incorrect"
+      message: "Current password incorrect",
     });
   }
 
@@ -239,18 +170,32 @@ export const changePassword = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: "Password updated"
+    message: "Password updated",
   });
 });
 
+/* ======================================================
+   USERS
+====================================================== */
+export const getUsers = asyncHandler(async (req, res) => {
+  const users = await User.find().select("-password");
+
+  res.json({
+    success: true,
+    data: users,
+  });
+});
+
+/* ======================================================
+   ADMINS
+====================================================== */
 export const getAdmins = asyncHandler(async (req, res) => {
   const { role } = req.query;
 
   const query = {
-    role: { $in: ["admin", "superadmin"] }
+    role: { $in: ["admin", "superadmin"] },
   };
 
-  // optional filter
   if (role) {
     query.role = role;
   }
@@ -261,16 +206,29 @@ export const getAdmins = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    users: admins
+    data: admins,
   });
 });
 
+/* ======================================================
+   CATEGORY
+====================================================== */
+export const createCategory = asyncHandler(async (req, res) => {
+  const { name } = req.body;
 
-export const getUsers = asyncHandler(async (req, res) => {
-  const users = await User.find().select("-password");
+  const existing = await Category.findOne({ name });
 
-  res.json({
+  if (existing) {
+    return res.status(400).json({
+      success: false,
+      message: "Category already exists",
+    });
+  }
+
+  const category = await Category.create({ name });
+
+  res.status(201).json({
     success: true,
-    data: users,
+    data: category,
   });
 });
