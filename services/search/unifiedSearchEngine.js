@@ -38,15 +38,23 @@ export const unifiedSearchEngine = async (searchContext = {}) => {
   }
 
   // ================= TEXT SEARCH (FIXED SAFETY) =================
-  if (textSearch && textSearch.trim()) {
-    const regex = new RegExp(textSearch.trim(), "i");
+  if (textSearch) {
+  const tokens = textSearch
+    .split(" ")
+    .filter(Boolean);
 
-    query.$or = [
-      { name: regex },
-      { description: regex },
-      { tags: regex }, // 🔥 IMPORTANT (you had this missing)
-    ];
-  }
+  query.$or = [
+    { name: { $regex: textSearch, $options: "i" } },
+    { description: { $regex: textSearch, $options: "i" } },
+    { categorySlug: { $regex: textSearch, $options: "i" } },
+    { citySlug: { $regex: textSearch, $options: "i" } },
+
+    // token-level fallback (VERY IMPORTANT)
+    ...tokens.map(t => ({
+      name: { $regex: t, $options: "i" }
+    }))
+  ];
+}
 
   // ================= GEO FILTER =================
   if (filters?.lat && filters?.lng) {

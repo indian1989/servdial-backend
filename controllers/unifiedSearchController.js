@@ -27,12 +27,12 @@ export const unifiedSearch = asyncHandler(async (req, res) => {
 
   // ================= CONTEXT BUILD =================
   const context = await buildSearchContext(q, {
-    city,
-    categorySlug,
-    lat: lat ? Number(lat) : null,
-    lng: lng ? Number(lng) : null,
-    distance: Number(distance),
-  });
+  citySlug: city || null,
+  categorySlug: categorySlug || null,
+  lat: lat ? Number(lat) : null,
+  lng: lng ? Number(lng) : null,
+  distance: Number(distance),
+});
 
   // ================= EXECUTION ENGINE =================
   const results = await unifiedSearchEngine({
