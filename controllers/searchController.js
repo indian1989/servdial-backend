@@ -1,88 +1,112 @@
+// backend/controllers/searchController.js
+
 import asyncHandler from "express-async-handler";
 
 import {
   getAutocompleteService,
   getTrendingSearchesService,
-  getRecentSearchesService
+  getRecentSearchesService,
 } from "../services/search/intelligenceService.js";
 
 /* =========================================================
-   🚫 LEGACY SEARCH ENDPOINT (SAFE DEPRECATION)
+   🚫 LEGACY SEARCH ENDPOINT
 ========================================================= */
-export const searchBusinesses = asyncHandler(async (req, res) => {
-  return res.status(410).json({
-    success: false,
-    message:
-      "Deprecated. Use /businesses/search (unifiedSearchEngine) instead.",
-    meta: {
-      deprecated: true,
-      replacement: "/businesses/search",
-    },
-  });
-});
+export const searchBusinesses = asyncHandler(
+  async (req, res) => {
+    return res.status(410).json({
+      success: false,
+
+      message:
+        "Deprecated endpoint. Use /api/businesses/search instead.",
+
+      data: [],
+
+      meta: {
+        deprecated: true,
+        replacement:
+          "/api/businesses/search",
+      },
+    });
+  }
+);
 
 /* =========================================================
-   🔍 AUTOCOMPLETE (INTELLIGENCE LAYER)
+   🔍 AUTOCOMPLETE
 ========================================================= */
-export const getAutocompleteSuggestions = asyncHandler(async (req, res) => {
-  const q = (req.query.q || "").trim();
+export const getAutocompleteSuggestions =
+  asyncHandler(async (req, res) => {
+    const q = (
+      req.query.q || ""
+    ).trim();
 
-  if (!q) {
+    if (!q) {
+      return res.json({
+        success: true,
+        data: [],
+
+        meta: {
+          total: 0,
+          type: "autocomplete",
+          query: "",
+        },
+      });
+    }
+
+    const data =
+      await getAutocompleteService(q);
+
     return res.json({
       success: true,
-      data: [],
+      data,
+
       meta: {
-        total: 0,
+        total: data.length,
         type: "autocomplete",
         query: q,
       },
     });
-  }
-
-  const data = await getAutocompleteService(q);
-
-  return res.json({
-    success: true,
-    data,
-    meta: {
-      total: data.length,
-      type: "autocomplete",
-      query: q,
-    },
   });
-});
 
 /* =========================================================
-   📈 TRENDING SEARCHES (GLOBAL ANALYTICS)
+   📈 TRENDING SEARCHES
 ========================================================= */
-export const getTrendingSearches = asyncHandler(async (req, res) => {
-  const data = await getTrendingSearchesService();
+export const getTrendingSearches =
+  asyncHandler(async (req, res) => {
+    const data =
+      await getTrendingSearchesService();
 
-  return res.json({
-    success: true,
-    data,
-    meta: {
-      total: data.length,
-      type: "trending",
-    },
+    return res.json({
+      success: true,
+      data,
+
+      meta: {
+        total: data.length,
+        type: "trending",
+      },
+    });
   });
-});
 
 /* =========================================================
-   🕘 RECENT SEARCHES (USER CONTEXT AWARE)
+   🕘 RECENT SEARCHES
 ========================================================= */
-export const getRecentSearches = asyncHandler(async (req, res) => {
-  const userId = req.user?._id || null;
+export const getRecentSearches =
+  asyncHandler(async (req, res) => {
+    const userId =
+      req.user?._id || null;
 
-  const data = await getRecentSearchesService(userId);
+    const data =
+      await getRecentSearchesService(
+        userId
+      );
 
-  return res.json({
-    success: true,
-    data,
-    meta: {
-      total: data.length,
-      type: "recent",
-      userScoped: !!userId,
-    },
+    return res.json({
+      success: true,
+      data,
+
+      meta: {
+        total: data.length,
+        type: "recent",
+        userScoped: !!userId,
+      },
+    });
   });
-});

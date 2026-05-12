@@ -1,61 +1,206 @@
 // backend/utils/parseSearchIntent.js
 
-export const parseSearchIntent = (keyword = "") => {
-  if (!keyword) return {};
+/**
+ * =========================================================
+ * 🧠 PARSE SEARCH INTENT
+ * =========================================================
+ * RESPONSIBILITY:
+ * - extract behavioral filters
+ * - clean search query
+ * - generate normalized tokens
+ *
+ * MUST NOT:
+ * - resolve DB entities
+ * - resolve category
+ * - resolve city
+ * - perform semantic mapping
+ * =========================================================
+ */
 
-  const query = keyword
+const STOP_WORDS = [
+  "near",
+  "nearby",
+  "near me",
+  "closest",
+  "nearest",
+  "best",
+  "top",
+  "cheap",
+  "budget",
+  "affordable",
+  "premium",
+  "luxury",
+  "open",
+  "open now",
+  "24x7",
+  "24 hour",
+  "in",
+  "at",
+  "around",
+  "me",
+];
+
+/* =========================================================
+   NORMALIZE
+========================================================= */
+const normalizeQuery = (query = "") =>
+  query
     .toLowerCase()
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-  const intent = {
-    sortBy: null,
-    minRating: null,
-    pricePreference: null,
-    openNow: false,
-    isNearMe: false,
-    isEmergency: false,
-  };
+/* =========================================================
+   REMOVE NOISE WORDS
+========================================================= */
+const cleanSearchText = (query = "") => {
+  let cleaned = normalizeQuery(query);
 
-  const has = (words) =>
+  STOP_WORDS.forEach((word) => {
+    const regex = new RegExp(`\\b${word}\\b`, "gi");
+
+    cleaned = cleaned.replace(regex, " ");
+  });
+
+  return cleaned
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+/* =========================================================
+   MAIN PARSER
+========================================================= */
+export const parseSearchIntent = (
+  keyword = ""
+) => {
+  if (!keyword) {
+    return {
+      rawQuery: "",
+      cleanedQuery: "",
+      tokens: [],
+      sortBy: null,
+      minRating: null,
+      pricePreference: null,
+      openNow: false,
+      isNearMe: false,
+      isEmergency: false,
+    };
+  }
+
+  const query = normalizeQuery(keyword);
+
+  const has = (words = []) =>
     words.some((w) => query.includes(w));
 
-  /* ================= RATING INTENT ================= */
-  if (has(["best", "top", "recommended"])) {
-    intent.sortBy = "rating";
-    intent.minRating = 4;
-  }
+  /* =====================================================
+     FLAGS
+  ===================================================== */
 
-  /* ================= PRICE INTENT ================= */
-  if (has(["cheap", "low price", "budget", "affordable"])) {
-    intent.pricePreference = "low";
-  }
+  const openNow = has([
+    "open now",
+    "24 hour",
+    "24x7",
+    "always open",
+  ]);
 
-  if (has(["premium", "luxury", "expensive", "high end"])) {
-    intent.pricePreference = "high";
-  }
+  const isNearMe = has([
+    "near me",
+    "nearby",
+    "closest",
+    "nearest",
+    "around me",
+  ]);
 
-  /* ================= OPEN NOW ================= */
+  const isEmergency = has([
+    "emergency",
+    "urgent",
+    "immediate",
+    "asap",
+  ]);
+
+  /* =====================================================
+     SORTING
+  ===================================================== */
+
+  let sortBy = null;
+
   if (
-    has(["open now", "24 hour", "24x7", "open 24", "always open"])
+    has(["best", "top", "recommended"])
   ) {
-    intent.openNow = true;
+    sortBy = "rating";
   }
 
-  /* ================= NEAR ME ================= */
   if (
-    has(["near me", "nearby", "near by", "closest", "nearest"])
+    has(["popular", "trending"])
   ) {
-    intent.isNearMe = true;
+    sortBy = "popular";
   }
 
-  /* ================= EMERGENCY ================= */
+  /* =====================================================
+     RATING
+  ===================================================== */
+
+  let minRating = null;
+
   if (
-    has(["emergency", "urgent", "immediate", "asap"])
+    has(["best", "top", "high rated"])
   ) {
-    intent.isEmergency = true;
+    minRating = 4;
   }
 
-  return intent;
+  /* =====================================================
+     PRICE
+  ===================================================== */
+
+  let pricePreference = null;
+
+  if (
+    has([
+      "cheap",
+      "budget",
+      "affordable",
+      "low price",
+    ])
+  ) {
+    pricePreference = "low";
+  }
+
+  if (
+    has([
+      "premium",
+      "luxury",
+      "high end",
+      "expensive",
+    ])
+  ) {
+    pricePreference = "high";
+  }
+
+  /* =====================================================
+     CLEANED QUERY
+  ===================================================== */
+
+  const cleanedQuery = cleanSearchText(query);
+
+  const tokens = cleanedQuery
+    .split(" ")
+    .filter(Boolean);
+
+  /* =====================================================
+     FINAL
+  ===================================================== */
+
+  return {
+    rawQuery: query,
+    cleanedQuery,
+    tokens,
+
+    sortBy,
+    minRating,
+    pricePreference,
+
+    openNow,
+    isNearMe,
+    isEmergency,
+  };
 };

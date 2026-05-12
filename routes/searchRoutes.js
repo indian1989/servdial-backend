@@ -1,6 +1,6 @@
-import express from "express";
+// backend/routes/searchRoutes.js
 
-import { unifiedSearch } from "../controllers/unifiedSearchController.js";
+import express from "express";
 
 import {
   getAutocompleteSuggestions,
@@ -10,21 +10,40 @@ import {
 
 const router = express.Router();
 
-/* =========================
-   🔥 MAIN SEARCH ENGINE
-========================= */
-router.get("/businesses", unifiedSearch);
+/* =========================================================
+   🔍 AUTOCOMPLETE
+========================================================= */
 
-/* =========================
-   AUTOCOMPLETE
-========================= */
-router.get("/autocomplete", getAutocompleteSuggestions);
-router.get("/suggestions", getAutocompleteSuggestions);
+router.get(
+  "/autocomplete",
+  getAutocompleteSuggestions
+);
 
-/* =========================
-   INTELLIGENCE
-========================= */
-router.get("/trending", getTrendingSearches);
-router.get("/recent", getRecentSearches);
+/* =========================================================
+   🔍 SUGGESTIONS
+========================================================= */
+
+router.get(
+  "/suggestions",
+  getAutocompleteSuggestions
+);
+
+/* =========================================================
+   📈 TRENDING SEARCHES
+========================================================= */
+
+router.get(
+  "/trending",
+  getTrendingSearches
+);
+
+/* =========================================================
+   🕘 RECENT SEARCHES
+========================================================= */
+
+router.get(
+  "/recent",
+  getRecentSearches
+);
 
 export default router;

@@ -1,3 +1,5 @@
+// backend/routes/publicBusinessRoutes.js
+
 import express from "express";
 
 import {
@@ -7,34 +9,73 @@ import {
   trackBusinessView,
   getBusinessCount,
   getLatestBusinesses,
-  searchBusinesses,
 } from "../controllers/businessController.js";
+
+import {
+  unifiedSearch,
+} from "../controllers/unifiedSearchController.js";
 
 const router = express.Router();
 
-/* ================================
-   PUBLIC BUSINESS ROUTES
-================================ */
+/* =========================================================
+   🟢 PUBLIC BUSINESS ROUTES
+========================================================= */
 
-// ✅ COUNT
-router.get("/count/all", getBusinessCount);
+/* =========================
+   📊 COUNT
+========================= */
+router.get(
+  "/count/all",
+  getBusinessCount
+);
 
-// ✅ LATEST
-router.get("/latest", getLatestBusinesses);
+/* =========================
+   🆕 LATEST
+========================= */
+router.get(
+  "/latest",
+  getLatestBusinesses
+);
 
-// ✅ SEARCH
-router.get("/search", searchBusinesses);
+/* =========================
+   🔎 UNIFIED SEARCH
+========================= */
+router.get(
+  "/search",
+  unifiedSearch
+);
 
-// ✅ SIMILAR
-router.get("/similar/:id", getSimilarBusinesses);
+/* =========================
+   🔗 SIMILAR BUSINESSES
+========================= */
+router.get(
+  "/similar/:id",
+  getSimilarBusinesses
+);
 
-// ✅ TRACK VIEW
-router.post("/:id/view", trackBusinessView);
+/* =========================
+   👁 TRACK VIEW
+========================= */
+router.post(
+  "/:id/view",
+  trackBusinessView
+);
 
-// ✅ GET ALL
-router.get("/", getBusinesses);
+/* =========================
+   📋 GET ALL
+========================= */
+router.get(
+  "/",
+  getBusinesses
+);
 
-// ✅ SINGLE (KEEP LAST)
-router.get("/:slug", getBusinessBySlug);
+/* =========================
+   📄 SINGLE BUSINESS
+   KEEP LAST
+========================= */
+router.get(
+  "/:slug",
+  getBusinessBySlug
+);
 
 export default router;

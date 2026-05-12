@@ -604,49 +604,6 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 });
 });
 
-export const searchBusinesses = asyncHandler(async (req, res) => {
-  const {
-    q = "",
-    citySlug,
-    categorySlug,
-    lat,
-    lng,
-  } = req.query;
-
-  const filter = {
-    status: "approved",
-    isDeleted: false,
-  };
-
-  // name search
-  if (q) {
-    filter.name = { $regex: q, $options: "i" };
-  }
-
-  // city filter
-  if (citySlug) {
-    const city = await City.findOne({ slug: citySlug });
-    if (city) filter.cityId = city._id;
-  }
-
-  // category filter
-  if (categorySlug) {
-    const category = await Category.findOne({ slug: categorySlug });
-    if (category) filter.categoryId = category._id;
-  }
-
-  const businesses = await Business.find(filter)
-    .populate("cityId", "name slug")
-    .populate("categoryId", "name slug")
-    .limit(50)
-    .lean();
-
-  res.json({
-    success: true,
-    data: businesses,
-  });
-});
-
 // ================= GET BUSINESS COUNT =================
 export const getBusinessCount = asyncHandler(async (req, res) => {
   const { categoryId, cityId } = req.query;

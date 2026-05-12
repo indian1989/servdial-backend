@@ -1,49 +1,153 @@
 import asyncHandler from "express-async-handler";
+
 import Review from "../models/Review.js";
 import Business from "../models/Business.js";
 
-// ================= ADD REVIEW =================
+// ======================================================
+// CREATE REVIEW
+// ======================================================
 export const createReview = asyncHandler(async (req, res) => {
+  const {
+    businessId,
+    rating,
+    comment = "",
+    name,
+    fingerprint,
+  } = req.body;
 
-  const { businessId, rating, comment, name } = req.body;
+  // ================= VALIDATION =================
+  if (!businessId || !rating || !name) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required review fields",
+    });
+  }
 
+  // ================= BUSINESS EXISTS =================
+  const business = await Business.findById(businessId);
+
+  if (!business) {
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
+  }
+
+  // ================= USER =================
+  const userId = req.user?._id || null;
+
+  // ================= DUPLICATE CHECK (USER) =================
+  if (userId) {
+    const existingUserReview = await Review.findOne({
+      businessId,
+      userId,
+      isDeleted: false,
+    });
+
+    if (existingUserReview) {
+      return res.status(400).json({
+        success: false,
+        message: "You already reviewed this business",
+      });
+    }
+  }
+
+  // ================= DUPLICATE CHECK (FINGERPRINT) =================
+  if (fingerprint) {
+    const existingFingerprintReview = await Review.findOne({
+      businessId,
+      fingerprint,
+      createdDay: new Date().toISOString().split("T")[0],
+      isDeleted: false,
+    });
+
+    if (existingFingerprintReview) {
+      return res.status(400).json({
+        success: false,
+        message: "Duplicate review detected",
+      });
+    }
+  }
+
+  // ================= CREATE REVIEW =================
   const review = await Review.create({
-    business: businessId,
+    businessId,
+    userId,
+    name,
     rating,
     comment,
-    name,
+
+    fingerprint,
+
+    ipAddress:
+      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.socket?.remoteAddress ||
+      req.ip,
+
+    userAgent: req.headers["user-agent"] || "",
+
+    isVerified: !!userId,
+    isApproved: true, // 👈 consistent moderation system
   });
 
-  // Update business rating
-  const reviews = await Review.find({ business: businessId });
+  // ======================================================
+  // RECALCULATE BUSINESS RATINGS
+  // ======================================================
+  const stats = await Review.aggregate([
+    {
+      $match: {
+        businessId: business._id,
+        isApproved: true,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: "$businessId",
+        averageRating: { $avg: "$rating" },
+        totalReviews: { $sum: 1 },
+      },
+    },
+  ]);
 
-  const avg =
-    reviews.reduce((acc, item) => item.rating + acc, 0) /
-    reviews.length;
+  const averageRating = Number(
+    (stats[0]?.averageRating || 0).toFixed(1)
+  );
 
+  const totalReviews = stats[0]?.totalReviews || 0;
+
+  // ================= UPDATE BUSINESS =================
   await Business.findByIdAndUpdate(businessId, {
-    rating: avg.toFixed(1),
-    reviewCount: reviews.length,
+    averageRating,
+    totalReviews,
   });
 
-  res.status(201).json({
+  // ================= RESPONSE =================
+  return res.status(201).json({
     success: true,
-    review,
+    data: review,
   });
-
 });
 
-// ================= GET BUSINESS REVIEWS =================
+// ======================================================
+// GET BUSINESS REVIEWS
+// ======================================================
 export const getBusinessReviews = asyncHandler(async (req, res) => {
+  const { businessId } = req.params;
 
   const reviews = await Review.find({
-    business: req.params.businessId,
+    businessId,
     isApproved: true,
-  }).sort({ createdAt: -1 });
+    isDeleted: false,
+  })
+    .sort({ createdAt: -1 })
+    .lean();
 
-  res.json({
+  return res.json({
     success: true,
-    reviews,
+    data: reviews,
+    meta: {
+      total: reviews.length,
+    },
   });
-
 });

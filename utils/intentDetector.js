@@ -1,89 +1,133 @@
-export const detectIntent = (query = "") => {
-  const q = query.toLowerCase().trim();
+// backend/utils/intentDetector.js
 
-  const intents = {
+/**
+ * =========================================================
+ * 🧠 INTENT DETECTOR
+ * =========================================================
+ * RESPONSIBILITY:
+ * ONLY classify user intent category
+ *
+ * MUST NOT:
+ * - clean query
+ * - parse filters
+ * - parse categories
+ * - parse city
+ * =========================================================
+ */
+
+export const detectIntent = (
+  query = ""
+) => {
+  const q = query
+    .toLowerCase()
+    .trim();
+
+  const scores = {
     local: 0,
     informational: 0,
     transactional: 0,
     navigational: 0,
     emergency: 0,
-    quality: 0, // 🔥 NEW
+    quality: 0,
   };
 
-  /* ================= LOCAL INTENT ================= */
+  /* =====================================================
+     LOCAL
+  ===================================================== */
+
   if (
     q.includes("near me") ||
     q.includes("nearby") ||
-    q.includes("in my city") ||
-    q.includes("around me")
+    q.includes("around me") ||
+    q.includes("closest") ||
+    q.includes("nearest")
   ) {
-    intents.local += 80;
+    scores.local += 80;
   }
 
-  /* ================= TRANSACTIONAL ================= */
+  /* =====================================================
+     TRANSACTIONAL
+  ===================================================== */
+
   if (
     q.includes("buy") ||
-    q.includes("price") ||
+    q.includes("book") ||
+    q.includes("hire") ||
     q.includes("cheap") ||
-    q.includes("best deal") ||
-    q.includes("book")
+    q.includes("price")
   ) {
-    intents.transactional += 70;
+    scores.transactional += 70;
   }
 
-  /* ================= INFORMATIONAL ================= */
+  /* =====================================================
+     INFORMATIONAL
+  ===================================================== */
+
   if (
     q.includes("what is") ||
     q.includes("how to") ||
     q.includes("why") ||
-    q.includes("meaning")
+    q.includes("guide")
   ) {
-    intents.informational += 60;
+    scores.informational += 60;
   }
 
-  /* ================= NAVIGATIONAL ================= */
+  /* =====================================================
+     NAVIGATIONAL
+  ===================================================== */
+
   if (
     q.includes("contact") ||
     q.includes("phone") ||
-    q.includes("address") ||
-    q.includes("website")
+    q.includes("website") ||
+    q.includes("address")
   ) {
-    intents.navigational += 60;
+    scores.navigational += 60;
   }
 
-  /* ================= EMERGENCY ================= */
+  /* =====================================================
+     EMERGENCY
+  ===================================================== */
+
   if (
     q.includes("emergency") ||
     q.includes("urgent") ||
-    q.includes("hospital") ||
-    q.includes("help")
+    q.includes("immediate") ||
+    q.includes("asap")
   ) {
-    intents.emergency += 100;
+    scores.emergency += 100;
   }
 
-  /* ================= QUALITY INTENT (NEW) ================= */
+  /* =====================================================
+     QUALITY
+  ===================================================== */
+
   if (
     q.includes("best") ||
     q.includes("top") ||
     q.includes("rating") ||
     q.includes("review")
   ) {
-    intents.quality += 75;
+    scores.quality += 75;
   }
 
-  /* ================= FINAL INTENT PICK ================= */
-  let finalType = "default";
-  let maxScore = 0;
+  /* =====================================================
+     FINAL PICK
+  ===================================================== */
 
-  for (const key in intents) {
-    if (intents[key] > maxScore) {
-      maxScore = intents[key];
-      finalType = key;
+  let type = "default";
+  let highest = 0;
+
+  for (const key in scores) {
+    if (scores[key] > highest) {
+      highest = scores[key];
+      type = key;
     }
   }
 
   return {
-    type: maxScore > 0 ? finalType : "default",
-    scores: intents,
+    type,
+    score: highest,
+    scores,
   };
 };

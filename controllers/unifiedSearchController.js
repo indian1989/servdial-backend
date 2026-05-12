@@ -7,11 +7,6 @@ import { unifiedSearchEngine } from "../services/search/unifiedSearchEngine.js";
  * =========================================================
  * 🔎 UNIFIED SEARCH CONTROLLER (FINAL SSOT)
  * =========================================================
- * Flow:
- * 1. Build search context (intent + city + category + text)
- * 2. Execute search engine (DB + ranking)
- * 3. Return normalized response
- * =========================================================
  */
 
 export const unifiedSearch = asyncHandler(async (req, res) => {
@@ -25,14 +20,20 @@ export const unifiedSearch = asyncHandler(async (req, res) => {
     limit = 20,
   } = req.query;
 
+  // ================= CLEAN QUERY =================
+  // Prevent duplicate city interpretation
+  const cleanedQuery = city
+    ? q.replace(new RegExp(city, "i"), "").trim()
+    : q.trim();
+
   // ================= CONTEXT BUILD =================
-  const context = await buildSearchContext(q, {
-  citySlug: city || null,
-  categorySlug: categorySlug || null,
-  lat: lat ? Number(lat) : null,
-  lng: lng ? Number(lng) : null,
-  distance: Number(distance),
-});
+  const context = await buildSearchContext(cleanedQuery, {
+    citySlug: city || null,
+    categorySlug: categorySlug || null,
+    lat: lat ? Number(lat) : null,
+    lng: lng ? Number(lng) : null,
+    distance: Number(distance),
+  });
 
   // ================= EXECUTION ENGINE =================
   const results = await unifiedSearchEngine({

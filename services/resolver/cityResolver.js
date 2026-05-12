@@ -1,90 +1,94 @@
+// backend/services/resolver/cityResolver.js
+
 import City from "../../models/City.js";
 import memoryCache from "../../utils/memoryCache.js";
 
-// =============================
-// 🧠 NORMALIZE INPUT
-// =============================
-const normalize = (str) =>
+/* =========================================================
+   🧠 NORMALIZE
+========================================================= */
+const normalize = (str = "") =>
   str
-    ?.toString()
+    .toString()
     .toLowerCase()
     .trim()
     .replace(/\s+/g, "-");
 
-// =============================
-// 🧠 RESOLVE CITY BY SLUG (ROBUST)
-// =============================
+/* =========================================================
+   🧠 RESOLVE CITY BY SLUG
+   SSOT:
+   slug → city object
+========================================================= */
 export const resolveCityBySlug = async (slug) => {
   if (!slug) return null;
 
   const cleanSlug = normalize(slug);
+
   const cacheKey = `city:slug:${cleanSlug}`;
 
+  // ================= CACHE =================
   const cached = memoryCache.get(cacheKey);
-  if (cached) return cached;
 
-  // 1️⃣ exact match (NEW SYSTEM)
+  if (cached) {
+    return cached;
+  }
+
+  // ================= EXACT SLUG =================
   let city = await City.findOne({
     slug: cleanSlug,
     status: "active",
   }).lean();
 
-  // 2️⃣ fallback: old slug system (IMPORTANT FIX)
+  // ================= SLUG HISTORY FALLBACK =================
   if (!city) {
     city = await City.findOne({
-      slugHistory: cleanSlug,
+      "slugHistory.slug": cleanSlug,
       status: "active",
     }).lean();
   }
 
-  // 3️⃣ fallback: name match (ULTRA SAFETY)
+  // ================= NAME FALLBACK =================
+  // ultra-safe migration fallback only
   if (!city) {
     city = await City.findOne({
-      name: new RegExp(`^${cleanSlug}$`, "i"),
+      name: new RegExp(`^${cleanSlug.replace(/-/g, " ")}$`, "i"),
       status: "active",
     }).lean();
   }
 
-  if (!city) return null;
+  if (!city) {
+    return null;
+  }
 
+  // ================= CACHE STORE =================
   memoryCache.set(cacheKey, city, 60 * 60 * 6);
+
   return city;
 };
 
-// =============================
-// 🧠 MAIN RESOLVER (FIXED)
-// =============================
-export const resolveCity = async (city) => {
-  if (!city) return null;
-
-  const clean = normalize(city);
+/* =========================================================
+   🧠 MAIN CITY RESOLVER
+   Returns lightweight normalized object
+========================================================= */
+export const resolveCity = async (cityInput) => {
+  if (!cityInput) return null;
 
   try {
-    // 1️⃣ direct slug match
-    let result = await City.findOne({
-      slug: clean,
-      status: "active",
-    }).select("_id name slug");
+    const city = await resolveCityBySlug(cityInput);
 
-    // 2️⃣ fallback: slugHistory (OLD SYSTEM FIX)
-    if (!result) {
-      result = await City.findOne({
-        slugHistory: clean,
-        status: "active",
-      }).select("_id name slug");
+    if (!city) {
+      return null;
     }
 
-    // 3️⃣ fallback: name match
-    if (!result) {
-      result = await City.findOne({
-        name: new RegExp(`^${clean}$`, "i"),
-        status: "active",
-      }).select("_id name slug");
-    }
+    return {
+      _id: city._id,
+      name: city.name,
+      slug: city.slug,
+      district: city.district || null,
+      state: city.state || null,
+    };
+  } catch (error) {
+    console.error("resolveCity error:", error);
 
-    return result || null;
-  } catch (err) {
-    console.error("resolveCity error:", err);
     return null;
   }
 };

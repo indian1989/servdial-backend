@@ -1,92 +1,149 @@
-// backend/models/Review.js
-
 import mongoose from "mongoose";
 
 const reviewSchema = new mongoose.Schema(
-{
-  business: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Business",
-    required: true,
-    index: true
+  {
+    // ================= RELATIONS =================
+    businessId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Business",
+      required: true,
+      index: true,
+    },
+
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
+    // ================= REVIEW DATA =================
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
+
+    rating: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
+      index: true,
+    },
+
+    comment: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 2000,
+    },
+
+    // ================= ANTI-SPAM =================
+    ipAddress: {
+      type: String,
+      index: true,
+    },
+
+    userAgent: {
+      type: String,
+      default: "",
+    },
+
+    fingerprint: {
+      type: String,
+      index: true,
+    },
+
+    createdDay: {
+      type: String,
+      index: true,
+    },
+
+    // ================= MODERATION =================
+    isApproved: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    // ================= COMMUNITY SIGNALS =================
+    helpfulCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
+  {
+    timestamps: true,
+  }
+);
 
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    index: true
-  },
-
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-
-  rating: {
-    type: Number,
-    required: true,
-    min: 1,
-    max: 5,
-    index: true
-  },
-
-  comment: {
-    type: String,
-    default: "",
-    trim: true
-  },
-
-  ipAddress: {
-  type: String,
-  index: true
-},
-
-userAgent: {
-  type: String
-},
-
-fingerprint: {
-  type: String,
-  index: true
-},
-
-createdDay: {
-  type: String,
-  index: true
-},
-
-  // moderation
-  isApproved: {
-    type: Boolean,
-    default: true,
-    index: true
-  },
-
-  // optional helpful votes
-  helpfulCount: {
-    type: Number,
-    default: 0
+// ======================================================
+// AUTO DAY PARTITION
+// ======================================================
+reviewSchema.pre("save", function (next) {
+  if (!this.createdDay) {
+    this.createdDay = new Date().toISOString().split("T")[0];
   }
 
-},
-{
-  timestamps: true
-}
-);
+  next();
+});
 
+// ======================================================
+// INDEXES
+// ======================================================
 
-// ================= INDEXES =================
+// Fast business review loading
+reviewSchema.index({
+  businessId: 1,
+  createdAt: -1,
+});
 
-// Fast business reviews loading
-reviewSchema.index({ business: 1, createdAt: -1 });
-
-// Prevent duplicate review from same user
+// Prevent duplicate review from same logged-in user
 reviewSchema.index(
-  { business: 1, user: 1 },
-  { unique: true, partialFilterExpression: { user: { $ne: null } } }
+  {
+    businessId: 1,
+    userId: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      userId: { $exists: true, $ne: null },
+    },
+  }
 );
 
-reviewSchema.index({ business: 1, fingerprint: 1 });
+// Fingerprint anti-spam
+reviewSchema.index({
+  businessId: 1,
+  fingerprint: 1,
+});
+
+// Moderation queries
+reviewSchema.index({
+  businessId: 1,
+  isApproved: 1,
+  isDeleted: 1,
+});
+
+// Rating analytics
+reviewSchema.index({
+  businessId: 1,
+  rating: 1,
+});
 
 export default mongoose.model("Review", reviewSchema);
