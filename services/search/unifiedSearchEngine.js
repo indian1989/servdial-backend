@@ -2,10 +2,7 @@ import Business from "../../models/Business.js";
 import { rankBusinesses } from "../../utils/rankBusinesses.js";
 
 /**
- * UNIFIED SEARCH ENGINE (EXECUTION LAYER)
- * ONLY responsibility:
- * → take searchContext
- * → fetch raw businesses
+ * UNIFIED SEARCH ENGINE (EXECUTION LAYER - FIXED)
  */
 
 export const unifiedSearchEngine = async (searchContext = {}) => {
@@ -15,6 +12,7 @@ export const unifiedSearchEngine = async (searchContext = {}) => {
     categoryIds,
     textSearch,
     filters = {},
+    limit = 20,
   } = searchContext;
 
   // ================= BASE QUERY =================
@@ -28,22 +26,29 @@ export const unifiedSearchEngine = async (searchContext = {}) => {
     query.cityId = cityId;
   }
 
-  // ================= CATEGORY FILTER =================
+  // ================= CATEGORY FILTER (FIXED LOGIC) =================
+  // 🔥 PRIORITY ORDER:
+  // 1. categoryId (primary)
+  // 2. categoryIds (fallback tree match)
+
   if (categoryId) {
     query.categoryId = categoryId;
   } else if (categoryIds?.length) {
     query.categoryId = { $in: categoryIds };
   }
 
-  // ================= TEXT SEARCH =================
-  if (textSearch) {
+  // ================= TEXT SEARCH (FIXED SAFETY) =================
+  if (textSearch && textSearch.trim()) {
+    const regex = new RegExp(textSearch.trim(), "i");
+
     query.$or = [
-      { name: { $regex: textSearch, $options: "i" } },
-      { description: { $regex: textSearch, $options: "i" } },
+      { name: regex },
+      { description: regex },
+      { tags: regex }, // 🔥 IMPORTANT (you had this missing)
     ];
   }
 
-  // ================= GEO FILTER (FUTURE SAFE) =================
+  // ================= GEO FILTER =================
   if (filters?.lat && filters?.lng) {
     query.location = {
       $near: {
@@ -60,14 +65,15 @@ export const unifiedSearchEngine = async (searchContext = {}) => {
   const businesses = await Business.find(query)
     .populate("cityId", "name slug")
     .populate("categoryId", "name slug")
-    .limit(50)
+    .limit(Number(limit) || 20)
     .lean();
 
+  // ================= DEBUG (TEMP - IMPORTANT) =================
+  console.log("🔥 SEARCH QUERY:", JSON.stringify(query, null, 2));
+  console.log("🔥 FOUND BUSINESSES:", businesses.length);
+
   // ================= RANK =================
-  const ranked = await rankBusinesses(
-    businesses,
-    searchContext
-  );
+  const ranked = await rankBusinesses(businesses, searchContext);
 
   return ranked;
 };
