@@ -95,7 +95,7 @@ app.use("/api/location", locationRoutes);
 
 // ================= SEO + INFRA =================
 app.use("/api/seo", seoRoutes);
-app.use("/api/sitemap", sitemapRoutes);
+app.use("/", sitemapRoutes);
 app.use("/api/health", healthRoutes);
 
 // ================= DB CONNECT =================
