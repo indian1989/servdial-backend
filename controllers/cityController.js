@@ -1,5 +1,6 @@
 import City from "../models/City.js";
 import memoryCache from "../utils/memoryCache.js";
+import { pingSearchEngines } from "../services/seo/pingSearchEngines.js";
 
 import {
   normalizeCity,
@@ -115,6 +116,7 @@ export const addCity = async (req, res) => {
     const created = await City.create(city);
 
     clearCityCache();
+    await pingSearchEngines();
 
     return res.status(201).json({
       success: true,
@@ -171,6 +173,7 @@ const updated = await City.findByIdAndUpdate(id, updateData, {
     }
 
     clearCityCache();
+    await pingSearchEngines();
 
     return res.json({
       success: true,
@@ -200,6 +203,7 @@ export const deleteCity = async (req, res) => {
     await city.deleteOne();
 
     clearCityCache();
+    await pingSearchEngines();
 
     return res.json({
       success: true,
@@ -289,6 +293,9 @@ export const bulkUploadCities = async (req, res) => {
     }
 
     clearCityCache();
+    if (insertedCount > 0) {
+  await pingSearchEngines();
+}
 
     return res.json({
       success: true,

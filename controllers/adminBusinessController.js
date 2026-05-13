@@ -1,16 +1,13 @@
-// backend/controllers/adminBusinessController.js
 import asyncHandler from "express-async-handler";
 import Business from "../models/Business.js";
+import { pingSearchEngines } from "../services/seo/pingSearchEngines.js";
 
 /* ======================================================
    GET ALL BUSINESSES (ADMIN)
-   - Full admin listing with relations
 ====================================================== */
 export const getAllBusinessesAdmin = asyncHandler(async (req, res) => {
   const businesses = await Business.find()
-    .setOptions({
-      includeAll: true,
-    })
+    .setOptions({ includeAll: true })
     .populate("cityId", "name slug")
     .populate("categoryId", "name slug")
     .populate("owner", "name email role")
@@ -24,6 +21,7 @@ export const getAllBusinessesAdmin = asyncHandler(async (req, res) => {
 
 /* ======================================================
    APPROVE BUSINESS
+   - SEO ping only on first approval
 ====================================================== */
 export const approveBusiness = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
@@ -35,11 +33,40 @@ export const approveBusiness = asyncHandler(async (req, res) => {
     });
   }
 
+  // already approved
+  if (business.status === "approved") {
+    return res.json({
+      success: true,
+      message: "Business already approved",
+      data: business,
+    });
+  }
+
   business.status = "approved";
+
+  // refresh updatedAt for sitemap freshness
+  business.updatedAt = new Date();
+
   await business.save();
+
+  // SEO ping (non-blocking safe)
+  try {
+    if (business.slug) {
+      await pingSearchEngines();
+      console.log(
+        `✅ SEO ping triggered for business: ${business.slug}`
+      );
+    }
+  } catch (err) {
+    console.error(
+      "⚠️ SEO ping failed:",
+      err.message
+    );
+  }
 
   res.json({
     success: true,
+    message: "Business approved",
     data: business,
   });
 });
@@ -58,10 +85,13 @@ export const rejectBusiness = asyncHandler(async (req, res) => {
   }
 
   business.status = "rejected";
+  business.updatedAt = new Date();
+
   await business.save();
 
   res.json({
     success: true,
+    message: "Business rejected",
     data: business,
   });
 });
@@ -70,7 +100,9 @@ export const rejectBusiness = asyncHandler(async (req, res) => {
    DELETE BUSINESS
 ====================================================== */
 export const deleteBusinessAdmin = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndDelete(req.params.id);
+  const business = await Business.findByIdAndDelete(
+    req.params.id
+  );
 
   if (!business) {
     return res.status(404).json({
@@ -86,7 +118,7 @@ export const deleteBusinessAdmin = asyncHandler(async (req, res) => {
 });
 
 /* ======================================================
-   FEATURE TOGGLE (FIXED + CONSISTENT)
+   FEATURE TOGGLE
 ====================================================== */
 export const toggleFeatured = asyncHandler(async (req, res) => {
   const business = await Business.findById(req.params.id);
@@ -98,11 +130,9 @@ export const toggleFeatured = asyncHandler(async (req, res) => {
     });
   }
 
-  // toggle
   business.isFeatured = !business.isFeatured;
-
-  // ranking support (important for search/order systems)
   business.featurePriority = business.isFeatured ? 10 : 0;
+  business.updatedAt = new Date();
 
   await business.save();
 
@@ -126,6 +156,7 @@ export const toggleVerifiedBusiness = asyncHandler(async (req, res) => {
   }
 
   business.isVerified = !business.isVerified;
+  business.updatedAt = new Date();
 
   await business.save();
 
@@ -139,11 +170,19 @@ export const toggleVerifiedBusiness = asyncHandler(async (req, res) => {
    BUSINESS STATS
 ====================================================== */
 export const getBusinessStats = asyncHandler(async (req, res) => {
-  const total = await Business.countDocuments();
-  const approved = await Business.countDocuments({ status: "approved" });
-  const pending = await Business.countDocuments({ status: "pending" });
-  const rejected = await Business.countDocuments({ status: "rejected" });
-  const featured = await Business.countDocuments({ isFeatured: true });
+  const [
+    total,
+    approved,
+    pending,
+    rejected,
+    featured,
+  ] = await Promise.all([
+    Business.countDocuments(),
+    Business.countDocuments({ status: "approved" }),
+    Business.countDocuments({ status: "pending" }),
+    Business.countDocuments({ status: "rejected" }),
+    Business.countDocuments({ isFeatured: true }),
+  ]);
 
   res.json({
     success: true,

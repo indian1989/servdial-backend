@@ -7,6 +7,7 @@ import Category from "../models/Category.js";
 import Review from "../models/Review.js";
 import { normalizeBusinessHours } from "../utils/normalizeBusinessHours.js";
 import { rankBusinesses } from "../services/ranking/unifiedRankingEngine.js";
+import { pingGoogleSitemap } from "../utils/pingSitemap.js";
 
 import slugify from "../utils/slugify.js";
 
@@ -228,6 +229,8 @@ const populatedBusiness = await Business.findById(
 )
   .populate("cityId", "name slug")
   .populate("categoryId", "name slug");
+
+await pingGoogleSitemap();
 
 res.status(201).json({
   success: true,
@@ -490,22 +493,22 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   /* ================= UPDATE ================= */
 
   const updated = await Business.findByIdAndUpdate(
-    id,
-    updates,
-    {
-      new: true,
-      runValidators: true,
-    }
-  )
-    .populate("cityId", "name slug")
-    .populate("categoryId", "name slug");
+  id,
+  updates,
+  {
+    new: true,
+    runValidators: true,
+  }
+)
+  .populate("cityId", "name slug")
+  .populate("categoryId", "name slug");
 
-  /* ================= RESPONSE ================= */
+await pingGoogleSitemap();
 
-  res.json({
-    success: true,
-    data: updated,
-  });
+res.json({
+  success: true,
+  data: updated,
+});
 });
 
 /* =========================
@@ -531,6 +534,8 @@ export const deleteBusiness = asyncHandler(async (req, res) => {
       message: "Business not found",
     });
   }
+
+  await pingGoogleSitemap();
 
   res.json({
     success: true,

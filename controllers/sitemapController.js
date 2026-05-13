@@ -2,44 +2,76 @@ import Business from "../models/Business.js";
 import City from "../models/City.js";
 import Category from "../models/Category.js";
 
-const baseUrl = "https://servdial.com";
+/* =========================
+   CONFIG (IMPORTANT FIX)
+========================= */
 
-const today = new Date().toISOString();
+// Frontend domain (SEO indexing target)
+const FRONTEND_URL =
+  process.env.FRONTEND_URL || "https://servdial.com";
+
+// API domain (optional use)
+const API_URL =
+  process.env.API_URL || "https://api.servdial.com";
+
+const getLastMod = (date) =>
+  new Date(date || Date.now()).toISOString();
+
+/* =========================
+   HELPERS
+========================= */
+
+const xmlHeader = `<?xml version="1.0" encoding="UTF-8"?>`;
 
 /* =========================
    SITEMAP INDEX
 ========================= */
 
-export const sitemapIndex = (req, res) => {
+export const sitemapIndex = async (req, res) => {
+  const PAGE_SIZE = 5000;
 
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+  const businessCount = await Business.countDocuments({
+    status: "approved",
+  });
+
+  const totalPages = Math.ceil(
+    businessCount / PAGE_SIZE
+  );
+
+  const businessSitemaps = Array.from(
+    { length: totalPages },
+    (_, i) => `
+<sitemap>
+<loc>${API_URL}/sitemap-businesses-${i + 1}.xml</loc>
+</sitemap>`
+  ).join("");
+
+  const sitemap = `
+${xmlHeader}
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
 <sitemap>
-<loc>${baseUrl}/sitemap-static.xml</loc>
+<loc>${API_URL}/sitemap-static.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${baseUrl}/sitemap-cities.xml</loc>
+<loc>${API_URL}/sitemap-cities.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${baseUrl}/sitemap-categories.xml</loc>
+<loc>${API_URL}/sitemap-categories.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${baseUrl}/sitemap-services.xml</loc>
+<loc>${API_URL}/sitemap-services.xml</loc>
 </sitemap>
 
-<sitemap>
-<loc>${baseUrl}/sitemap-businesses.xml</loc>
-</sitemap>
+${businessSitemaps}
 
 </sitemapindex>`;
 
-res.header("Content-Type", "application/xml");
-res.send(sitemap);
-
+  res.header("Content-Type", "application/xml");
+  res.send(sitemap.trim());
 };
 
 /* =========================
@@ -47,34 +79,36 @@ res.send(sitemap);
 ========================= */
 
 export const staticSitemap = (req, res) => {
+  const pages = [
+    "",
+    "/about",
+    "/contact",
+    "/privacy-policy",
+    "/terms",
+    "/disclaimer",
+    "/advertise",
+  ];
 
-const pages = [
-"",
-"/about",
-"/contact",
-"/privacy-policy",
-"/terms",
-"/disclaimer",
-"/advertise"
-];
-
-const urls = pages.map(page => `
+  const urls = pages
+    .map(
+      (page) => `
 <url>
-<loc>${baseUrl}${page}</loc>
-<lastmod>${today}</lastmod>
+<loc>${FRONTEND_URL}${page}</loc>
+<lastmod>${getLastMod()}</lastmod>
 <changefreq>monthly</changefreq>
 <priority>0.8</priority>
-</url>
-`).join("");
+</url>`
+    )
+    .join("");
 
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+  const sitemap = `
+${xmlHeader}
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls}
 </urlset>`;
 
-res.header("Content-Type", "application/xml");
-res.send(sitemap);
-
+  res.header("Content-Type", "application/xml");
+  res.send(sitemap.trim());
 };
 
 /* =========================
@@ -82,26 +116,28 @@ res.send(sitemap);
 ========================= */
 
 export const citySitemap = async (req, res) => {
+  const cities = await City.find().select("slug updatedAt");
 
-const cities = await City.find().select("slug");
-
-const urls = cities.map(city => `
+  const urls = cities
+    .map(
+      (city) => `
 <url>
-<loc>${baseUrl}/city/${city.slug}</loc>
-<lastmod>${today}</lastmod>
+<loc>${FRONTEND_URL}/city/${city.slug}</loc>
+<lastmod>${getLastMod(city.updatedAt)}</lastmod>
 <changefreq>weekly</changefreq>
 <priority>0.8</priority>
-</url>
-`).join("");
+</url>`
+    )
+    .join("");
 
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+  const sitemap = `
+${xmlHeader}
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls}
 </urlset>`;
 
-res.header("Content-Type", "application/xml");
-res.send(sitemap);
-
+  res.header("Content-Type", "application/xml");
+  res.send(sitemap.trim());
 };
 
 /* =========================
@@ -109,64 +145,62 @@ res.send(sitemap);
 ========================= */
 
 export const categorySitemap = async (req, res) => {
+  const categories = await Category.find().select("slug updatedAt");
 
-const categories = await Category.find().select("slug");
-
-const urls = categories.map(cat => `
+  const urls = categories
+    .map(
+      (cat) => `
 <url>
-<loc>${baseUrl}/category/${cat.slug}</loc>
-<lastmod>${today}</lastmod>
+<loc>${FRONTEND_URL}/category/${cat.slug}</loc>
+<lastmod>${getLastMod(cat.updatedAt)}</lastmod>
 <changefreq>weekly</changefreq>
 <priority>0.8</priority>
-</url>
-`).join("");
+</url>`
+    )
+    .join("");
 
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+  const sitemap = `
+${xmlHeader}
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls}
 </urlset>`;
 
-res.header("Content-Type", "application/xml");
-res.send(sitemap);
-
+  res.header("Content-Type", "application/xml");
+  res.send(sitemap.trim());
 };
 
 /* =========================
-   SERVICE + CITY SEO PAGES
+   CITY + CATEGORY SEO PAGES
 ========================= */
 
 export const serviceCitySitemap = async (req, res) => {
+  const cities = await City.find().select("slug updatedAt");
+const categories = await Category.find().select("slug updatedAt");
 
-const cities = await City.find().select("slug");
-const categories = await Category.find().select("slug");
+  let urls = "";
 
-let urls = [];
-
-cities.forEach(city => {
-
-categories.forEach(cat => {
-
-urls.push(`
+  for (const city of cities) {
+    for (const cat of categories) {
+      urls += `
 <url>
-<loc>${baseUrl}/${city.slug}/${cat.slug}</loc>
-<lastmod>${today}</lastmod>
+<loc>${FRONTEND_URL}/${city.slug}/${cat.slug}</loc>
+<lastmod>${getLastMod(
+  city.updatedAt || cat.updatedAt
+)}</lastmod>
 <changefreq>weekly</changefreq>
 <priority>0.9</priority>
-</url>
-`);
+</url>`;
+    }
+  }
 
-});
-
-});
-
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+  const sitemap = `
+${xmlHeader}
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.join("")}
+${urls}
 </urlset>`;
 
-res.header("Content-Type", "application/xml");
-res.send(sitemap);
-
+  res.header("Content-Type", "application/xml");
+  res.send(sitemap.trim());
 };
 
 /* =========================
@@ -174,51 +208,51 @@ res.send(sitemap);
 ========================= */
 
 export const businessSitemap = async (req, res) => {
+  try {
+    const PAGE_SIZE = 5000;
 
-try {
+const page = Number(req.params.page || 1);
+const skip = (page - 1) * PAGE_SIZE;
 
-const businesses = await Business.find({ status: "approved" })
-.select("slug updatedAt image");
+const businesses = await Business.find({
+  status: "approved",
+})
+  .select("slug updatedAt image")
+  .skip(skip)
+  .limit(PAGE_SIZE);
 
-const urls = businesses.map(b => `
+    const urls = businesses
+      .map(
+        (b) => `
 <url>
-
-<loc>${baseUrl}/business/${b.slug}</loc>
-
-<lastmod>${new Date(b.updatedAt).toISOString()}</lastmod>
-
+<loc>${FRONTEND_URL}/business/${b.slug}</loc>
+<lastmod>${getLastMod(b.updatedAt)}</lastmod>
 <changefreq>weekly</changefreq>
-
 <priority>0.7</priority>
-
-${b.image ? `
+${
+  b.image
+    ? `
 <image:image>
 <image:loc>${b.image}</image:loc>
-</image:image>
-` : ""}
+</image:image>`
+    : ""
+}
+</url>`
+      )
+      .join("");
 
-</url>
-`).join("");
-
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-
+    const sitemap = `
+<?xml version="1.0" encoding="UTF-8"?>
 <urlset 
 xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
 xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
-
 ${urls}
-
 </urlset>`;
 
-res.header("Content-Type", "application/xml");
-res.send(sitemap);
-
-} catch (error) {
-
-console.error("Business Sitemap Error:", error);
-
-res.status(500).send("Error generating sitemap");
-
-}
-
+    res.header("Content-Type", "application/xml");
+    res.send(sitemap.trim());
+  } catch (error) {
+    console.error("Business Sitemap Error:", error);
+    res.status(500).send("Error generating sitemap");
+  }
 };

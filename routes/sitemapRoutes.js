@@ -15,6 +15,6 @@ router.get("/sitemap-static.xml", staticSitemap);
 router.get("/sitemap-cities.xml", citySitemap);
 router.get("/sitemap-categories.xml", categorySitemap);
 router.get("/sitemap-services.xml", serviceCitySitemap);
-router.get("/sitemap-businesses.xml", businessSitemap);
+router.get("/sitemap-businesses-:page.xml", businessSitemap);
 
 export default router;
