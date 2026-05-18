@@ -7,99 +7,105 @@ import Banner from "../models/Banner.js";
 export const createBanner = async (req, res) => {
   try {
     const { title, image, link, placement, cityId, categoryId } = req.body;
-  
-    // VALIDATE PLACEMENT
-const allowedPlacements = [
-  "homepage_top",
-  "homepage_middle",
-  "homepage_bottom",
-  "category_page",
-  "city_page",
-];
 
-if (!allowedPlacements.includes(placement)) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid placement",
-  });
-}
-
-    // CHECK EXISTING PENDING
-    const existingPending = await Banner.findOne({
-  createdBy: req.user._id,
-  status: "pending",
-});
-
-if (existingPending) {
-  return res.status(400).json({
-    success: false,
-    message: "You already have a pending banner",
-  });
-}
-
-if (!cityId || !categoryId) {
-  return res.status(400).json({
-    success: false,
-    message: "cityId and categoryId are required",
-  });
-}
-
-if (req.user.role === "user") {
-  return res.status(403).json({
-    success: false,
-    message: "Users are not allowed to create banners",
-  });
-}
+    // ================= ROLE SETUP =================
     const role = req.user.role;
 
-const isAdmin = role === "admin" || role === "superadmin";
-const isProvider = role === "provider";
+    if (!["admin", "superadmin", "provider"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed to create banners",
+      });
+    }
 
-if (!["admin", "superadmin", "provider"].includes(role)) {
-  return res.status(403).json({
-    success: false,
-    message: "Not allowed to create banners",
-  });
-}
+    if (role === "user") {
+      return res.status(403).json({
+        success: false,
+        message: "Users are not allowed to create banners",
+      });
+    }
 
-if (!mongoose.Types.ObjectId.isValid(cityId) || !mongoose.Types.ObjectId.isValid(categoryId)) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid cityId or categoryId",
-  });
-}
+    const isAdmin = role === "admin" || role === "superadmin";
+    const isProvider = role === "provider";
 
-const banner = await Banner.create({
-  title,
-  image,
-  link,
-  placement,
-  cityId,
-  categoryId,
+    // ================= VALIDATE PLACEMENT =================
+    const allowedPlacements = [
+      "homepage_top",
+      "homepage_middle",
+      "homepage_bottom",
+      "category_page",
+      "city_page",
+    ];
 
-  createdBy: req.user._id,
-  role: req.user.role,
+    if (!allowedPlacements.includes(placement)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid placement",
+      });
+    }
 
-  status: isAdmin ? "approved" : "pending",
-  paymentStatus: isAdmin ? "paid" : "pending",
-  
-  if (isAdmin) {
-  banner.paymentStatus = "paid";
-},
+    // ================= PROVIDER REQUIREMENT =================
+    if (isProvider && (!cityId || !categoryId)) {
+      return res.status(400).json({
+        success: false,
+        message: "cityId and categoryId are required for providers",
+      });
+    }
 
-  approvedBy: isAdmin ? req.user._id : undefined,
-  approvedAt: isAdmin ? new Date() : undefined,
-});
+    // ================= VALIDATE OBJECT IDS =================
+    if (
+      (cityId && !mongoose.Types.ObjectId.isValid(cityId)) ||
+      (categoryId && !mongoose.Types.ObjectId.isValid(categoryId))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid cityId or categoryId",
+      });
+    }
 
-    res.status(201).json({
-  success: true,
-  data: banner,
-  meta: {
-  status: isAdmin ? "auto-approved" : "pending"
-}
-});
+    // ================= CHECK EXISTING PENDING =================
+    const existingPending = await Banner.findOne({
+      createdBy: req.user._id,
+      status: "pending",
+    });
+
+    if (existingPending) {
+      return res.status(400).json({
+        success: false,
+        message: "You already have a pending banner",
+      });
+    }
+
+    // ================= CREATE BANNER =================
+    const banner = await Banner.create({
+      title,
+      image,
+      link,
+      placement,
+      cityId: cityId || null,
+      categoryId: categoryId || null,
+
+      createdBy: req.user._id,
+      role,
+
+      status: isAdmin ? "approved" : "pending",
+      paymentStatus: isAdmin ? "paid" : "pending",
+
+      approvedBy: isAdmin ? req.user._id : undefined,
+      approvedAt: isAdmin ? new Date() : undefined,
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: banner,
+      meta: {
+        status: isAdmin ? "auto-approved" : "pending",
+      },
+    });
+
   } catch (error) {
-    res.status(500).json({
+    console.error("Create Banner Error:", error);
+    return res.status(500).json({
       success: false,
       message: "Failed to create banner",
     });
@@ -343,6 +349,10 @@ export const updateBanner = async (req, res) => {
   try {
     const { title, image, link, placement, cityId, categoryId, isActive } = req.body;
 
+    const role = req.user.role;
+    const isAdmin = role === "admin" || role === "superadmin";
+    const isProvider = role === "provider";
+
     const banner = await Banner.findById(req.params.bannerId);
 
     if (!banner) {
@@ -352,14 +362,68 @@ export const updateBanner = async (req, res) => {
       });
     }
 
-    // 🚨 BLOCK UPDATING APPROVED + PAID BANNERS WITHOUT ADMIN OVERRIDE
-    if (banner.status === "approved" && banner.paymentStatus === "paid" && req.user.role === "provider") {
+    // ================= ROLE PROTECTION =================
+    if (!["admin", "superadmin", "provider"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed to update banner",
+      });
+    }
+
+    if (role === "user") {
+      return res.status(403).json({
+        success: false,
+        message: "Users are not allowed to update banners",
+      });
+    }
+
+    // ================= PROTECTED BANNER RULE =================
+    if (
+      banner.status === "approved" &&
+      banner.paymentStatus === "paid" &&
+      role === "provider"
+    ) {
       return res.status(403).json({
         success: false,
         message: "Cannot modify approved paid banner",
       });
     }
 
+    // ================= PROVIDER VALIDATION =================
+    if (isProvider && (!cityId || !categoryId)) {
+      return res.status(400).json({
+        success: false,
+        message: "cityId and categoryId are required for providers",
+      });
+    }
+
+    // ================= VALIDATION =================
+    const allowedPlacements = [
+      "homepage_top",
+      "homepage_middle",
+      "homepage_bottom",
+      "category_page",
+      "city_page",
+    ];
+
+    if (placement && !allowedPlacements.includes(placement)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid placement",
+      });
+    }
+
+    if (
+      (cityId && !mongoose.Types.ObjectId.isValid(cityId)) ||
+      (categoryId && !mongoose.Types.ObjectId.isValid(categoryId))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid cityId or categoryId",
+      });
+    }
+
+    // ================= UPDATE FIELDS =================
     banner.title = title ?? banner.title;
     banner.image = image ?? banner.image;
     banner.link = link ?? banner.link;
@@ -370,7 +434,7 @@ export const updateBanner = async (req, res) => {
 
     await banner.save();
 
-    res.json({
+    return res.json({
       success: true,
       data: banner,
       meta: {
@@ -379,7 +443,8 @@ export const updateBanner = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({
+    console.error("Update Banner Error:", error);
+    return res.status(500).json({
       success: false,
       message: "Failed to update banner",
     });
