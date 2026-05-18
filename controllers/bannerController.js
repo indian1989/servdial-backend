@@ -193,91 +193,77 @@ export const rejectBanner = async (req, res) => {
 ========================= */
 export const getBanners = async (req, res) => {
   try {
-    console.log("🔥 getBanners HIT");
     const now = new Date();
 
     const { cityId, categoryId, placement } = req.query;
-console.log("📩 QUERY RECEIVED:", { cityId, categoryId, placement });
 
-    // ================= BASE FILTER =================
-    const filter = {
-  status: "approved",
-  isActive: true,
-  paymentStatus: { $in: ["paid", "pending"] },
-  $and: [
-    {
+    const baseFilter = {
+      status: "approved",
+      isActive: true,
       $or: [
-        { startDate: { $lte: now } },
-        { startDate: null },
-        { startDate: { $exists: false } },
+        { paymentStatus: "paid" },
+        { role: { $in: ["admin", "superadmin"] } }
       ],
-    },
-    {
-      $or: [
-        { endDate: { $gte: now } },
-        { endDate: null },
-        { endDate: { $exists: false } },
-      ],
-    },
-  ],
-};
+      $and: [
+        {
+          $or: [
+            { startDate: { $lte: now } },
+            { startDate: null },
+            { startDate: { $exists: false } }
+          ]
+        },
+        {
+          $or: [
+            { endDate: { $gte: now } },
+            { endDate: null },
+            { endDate: { $exists: false } }
+          ]
+        }
+      ]
+    };
 
-    // ================= GLOBAL + LOCAL LOGIC =================
-
-    // CITY FILTER (GLOBAL + MATCHING CITY)
+    // CITY FILTER SAFE
     if (cityId) {
-      filter.$and.push({
+      baseFilter.$and.push({
         $or: [
-          { cityId: cityId },
-          { cityId: null },
-          { cityId: { $exists: false } },
-        ],
+          { cityId },
+          { cityId: null }
+        ]
       });
     }
 
-    // CATEGORY FILTER (GLOBAL + MATCHING CATEGORY)
+    // CATEGORY FILTER SAFE
     if (categoryId) {
-      filter.$and.push({
+      baseFilter.$and.push({
         $or: [
-          { categoryId: categoryId },
-          { categoryId: null },
-          { categoryId: { $exists: false } },
-        ],
+          { categoryId },
+          { categoryId: null }
+        ]
       });
     }
 
-    // ================= PLACEMENT FILTER =================
     if (placement) {
-      filter.placement = placement;
+      baseFilter.placement = placement;
     }
 
-    // ================= QUERY =================
-    const banners = await Banner.find(filter)
-    console.log("📦 RAW BANNERS COUNT:", banners.length);
-console.log("📦 SAMPLE BANNER:", banners[0])
+    const banners = await Banner.find(baseFilter)
       .sort({ order: 1, createdAt: -1 })
       .lean()
       .select("title image link placement cityId categoryId order");
-console.log("🚀 SENDING RESPONSE WITH:", banners.length);
 
-    // ================= RESPONSE =================
-    res.json({
+    return res.json({
       success: true,
       data: banners,
       meta: {
-        total: banners.length,
-        filters: {
-          cityId: cityId || null,
-          categoryId: categoryId || null,
-          placement: placement || null,
-        },
-      },
+        total: banners.length
+      }
     });
+
   } catch (error) {
-    console.error("Get Banners Error:", error);
-    res.status(500).json({
+    console.error("🔥 Banner API Error:", error);
+    return res.status(500).json({
       success: false,
-      message: "Failed to fetch banners",
+      message: error.message || "Failed to fetch banners"
     });
   }
 };
