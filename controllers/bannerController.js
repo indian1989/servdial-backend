@@ -199,26 +199,26 @@ export const getBanners = async (req, res) => {
 
     // ================= BASE FILTER =================
     const filter = {
-      status: "approved",
-      isActive: true,
-      paymentStatus: "paid",
-      $and: [
-        {
-          $or: [
-            { startDate: { $lte: now } },
-            { startDate: null },
-            { startDate: { $exists: false } },
-          ],
-        },
-        {
-          $or: [
-            { endDate: { $gte: now } },
-            { endDate: null },
-            { endDate: { $exists: false } },
-          ],
-        },
+  status: "approved",
+  isActive: true,
+  paymentStatus: { $in: ["paid", "pending"] },
+  $and: [
+    {
+      $or: [
+        { startDate: { $lte: now } },
+        { startDate: null },
+        { startDate: { $exists: false } },
       ],
-    };
+    },
+    {
+      $or: [
+        { endDate: { $gte: now } },
+        { endDate: null },
+        { endDate: { $exists: false } },
+      ],
+    },
+  ],
+};
 
     // ================= GLOBAL + LOCAL LOGIC =================
 
