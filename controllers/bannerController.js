@@ -193,9 +193,11 @@ export const rejectBanner = async (req, res) => {
 ========================= */
 export const getBanners = async (req, res) => {
   try {
+    console.log("🔥 getBanners HIT");
     const now = new Date();
 
     const { cityId, categoryId, placement } = req.query;
+console.log("📩 QUERY RECEIVED:", { cityId, categoryId, placement });
 
     // ================= BASE FILTER =================
     const filter = {
@@ -251,9 +253,12 @@ export const getBanners = async (req, res) => {
 
     // ================= QUERY =================
     const banners = await Banner.find(filter)
+    console.log("📦 RAW BANNERS COUNT:", banners.length);
+console.log("📦 SAMPLE BANNER:", banners[0])
       .sort({ order: 1, createdAt: -1 })
       .lean()
       .select("title image link placement cityId categoryId order");
+console.log("🚀 SENDING RESPONSE WITH:", banners.length);
 
     // ================= RESPONSE =================
     res.json({
