@@ -8,9 +8,11 @@ export const createBanner = async (req, res) => {
   try {
     const { title, image, link, placement, cityId, categoryId } = req.body;
 
-    // ================= ROLE SETUP =================
     const role = req.user.role;
+    const isAdmin = role === "admin" || role === "superadmin";
+    const isProvider = role === "provider";
 
+    // ================= ROLE CHECK =================
     if (!["admin", "superadmin", "provider"].includes(role)) {
       return res.status(403).json({
         success: false,
@@ -21,14 +23,11 @@ export const createBanner = async (req, res) => {
     if (role === "user") {
       return res.status(403).json({
         success: false,
-        message: "Users are not allowed to create banners",
+        message: "Users are not allowed",
       });
     }
 
-    const isAdmin = role === "admin" || role === "superadmin";
-    const isProvider = role === "provider";
-
-    // ================= VALIDATE PLACEMENT =================
+    // ================= PLACEMENT VALIDATION =================
     const allowedPlacements = [
       "homepage_top",
       "homepage_middle",
@@ -44,26 +43,36 @@ export const createBanner = async (req, res) => {
       });
     }
 
-    // ================= PROVIDER REQUIREMENT =================
+    // ================= PROVIDER RULE =================
+    // provider MUST have city/category
     if (isProvider && (!cityId || !categoryId)) {
       return res.status(400).json({
         success: false,
-        message: "cityId and categoryId are required for providers",
+        message: "cityId and categoryId required for provider",
       });
     }
 
-    // ================= VALIDATE OBJECT IDS =================
-    if (
-      (cityId && !mongoose.Types.ObjectId.isValid(cityId)) ||
-      (categoryId && !mongoose.Types.ObjectId.isValid(categoryId))
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid cityId or categoryId",
-      });
+    // ================= ADMIN RULE =================
+    // admin/superadmin → GLOBAL banner allowed (NULL city/category)
+    let finalCityId = null;
+    let finalCategoryId = null;
+
+    if (isProvider) {
+      finalCityId = cityId;
+      finalCategoryId = categoryId;
+
+      if (
+        !mongoose.Types.ObjectId.isValid(cityId) ||
+        !mongoose.Types.ObjectId.isValid(categoryId)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid cityId or categoryId",
+        });
+      }
     }
 
-    // ================= CHECK EXISTING PENDING =================
+    // ================= DUPLICATE CHECK =================
     const existingPending = await Banner.findOne({
       createdBy: req.user._id,
       status: "pending",
@@ -76,14 +85,15 @@ export const createBanner = async (req, res) => {
       });
     }
 
-    // ================= CREATE BANNER =================
+    // ================= CREATE =================
     const banner = await Banner.create({
       title,
       image,
       link,
       placement,
-      cityId: cityId || null,
-      categoryId: categoryId || null,
+
+      cityId: finalCityId,       // 🔥 IMPORTANT FIX
+      categoryId: finalCategoryId, // 🔥 IMPORTANT FIX
 
       createdBy: req.user._id,
       role,
@@ -100,9 +110,9 @@ export const createBanner = async (req, res) => {
       data: banner,
       meta: {
         status: isAdmin ? "auto-approved" : "pending",
+        scope: isAdmin ? "GLOBAL" : "TARGETED",
       },
     });
-
   } catch (error) {
     console.error("Create Banner Error:", error);
     return res.status(500).json({
@@ -185,6 +195,8 @@ export const getBanners = async (req, res) => {
   try {
     const now = new Date();
 
+    const { cityId, categoryId, placement } = req.query;
+
     // ================= BASE FILTER =================
     const filter = {
       status: "approved",
@@ -208,17 +220,31 @@ export const getBanners = async (req, res) => {
       ],
     };
 
-    // ================= OPTIONAL FILTERS =================
-    const { cityId, categoryId, placement } = req.query;
+    // ================= GLOBAL + LOCAL LOGIC =================
 
+    // CITY FILTER (GLOBAL + MATCHING CITY)
     if (cityId) {
-      filter.cityId = cityId;
+      filter.$and.push({
+        $or: [
+          { cityId: cityId },
+          { cityId: null },
+          { cityId: { $exists: false } },
+        ],
+      });
     }
 
+    // CATEGORY FILTER (GLOBAL + MATCHING CATEGORY)
     if (categoryId) {
-      filter.categoryId = categoryId;
+      filter.$and.push({
+        $or: [
+          { categoryId: categoryId },
+          { categoryId: null },
+          { categoryId: { $exists: false } },
+        ],
+      });
     }
 
+    // ================= PLACEMENT FILTER =================
     if (placement) {
       filter.placement = placement;
     }
@@ -243,6 +269,7 @@ export const getBanners = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Get Banners Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch banners",
