@@ -288,6 +288,9 @@ export const getAllBanners = async (req, res) => {
       .populate("createdBy", "name email")
       .sort({ createdAt: -1 })
       .lean();
+const all = await Banner.find().lean();
+console.log("ALL BANNERS COUNT:", all.length);
+console.log("SAMPLE BANNER:", all[0]);
 
     res.json({
       success: true,
