@@ -10,10 +10,6 @@ import Category from "../models/Category.js";
 const FRONTEND_URL =
   process.env.FRONTEND_URL || "https://servdial.com";
 
-// IMPORTANT: use ONLY for API calls, NOT sitemap URLs
-const BACKEND_URL =
-  process.env.BACKEND_URL || "https://api.servdial.com";
-
 const getLastMod = (date) =>
   new Date(date || Date.now()).toISOString();
 
@@ -39,7 +35,7 @@ export const sitemapIndex = async (req, res) => {
     { length: totalPages },
     (_, i) => `
 <sitemap>
-<loc>${BACKEND_URL}/sitemap-businesses-${i + 1}.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-businesses-${i + 1}.xml</loc>
 </sitemap>`
   ).join("");
 
@@ -48,19 +44,19 @@ export const sitemapIndex = async (req, res) => {
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
 <sitemap>
-<loc>${BACKEND_URL}/sitemap-static.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-static.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${BACKEND_URL}/sitemap-cities.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-cities.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${BACKEND_URL}/sitemap-categories.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-categories.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${BACKEND_URL}/sitemap-services.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-services.xml</loc>
 </sitemap>
 
 ${businessSitemaps}
