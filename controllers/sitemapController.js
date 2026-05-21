@@ -39,7 +39,7 @@ export const sitemapIndex = async (req, res) => {
     { length: totalPages },
     (_, i) => `
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-businesses-${i + 1}.xml</loc>
+<loc>${BACKEND_URL}/sitemap-businesses-${i + 1}.xml</loc>
 </sitemap>`
   ).join("");
 
@@ -48,19 +48,19 @@ export const sitemapIndex = async (req, res) => {
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-static.xml</loc>
+<loc>${BACKEND_URL}/sitemap-static.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-cities.xml</loc>
+<loc>${BACKEND_URL}/sitemap-cities.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-categories.xml</loc>
+<loc>${BACKEND_URL}/sitemap-categories.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-services.xml</loc>
+<loc>${BACKEND_URL}/sitemap-services.xml</loc>
 </sitemap>
 
 ${businessSitemaps}
@@ -214,7 +214,10 @@ const skip = (page - 1) * PAGE_SIZE;
 const businesses = await Business.find({
   status: "approved",
 })
-  .select("slug updatedAt image")
+  .select(
+    "slug updatedAt image citySlug categorySlug"
+  )
+  .sort({ updatedAt: -1 })
   .skip(skip)
   .limit(PAGE_SIZE);
 
@@ -222,7 +225,7 @@ const businesses = await Business.find({
       .map(
         (b) => `
 <url>
-<loc>${FRONTEND_URL}/business/${b.slug}</loc>
+<loc>${FRONTEND_URL}/${b.citySlug}/${b.categorySlug}/${b.slug}</loc>
 <lastmod>${getLastMod(b.updatedAt)}</lastmod>
 <changefreq>weekly</changefreq>
 <priority>0.7</priority>
