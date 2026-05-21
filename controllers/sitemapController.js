@@ -26,7 +26,6 @@ const xmlHeader = `<?xml version="1.0" encoding="UTF-8"?>`;
 /* =========================
    SITEMAP INDEX
 ========================= */
-
 export const sitemapIndex = async (req, res) => {
   const PAGE_SIZE = 5000;
 
@@ -40,7 +39,7 @@ export const sitemapIndex = async (req, res) => {
     { length: totalPages },
     (_, i) => `
 <sitemap>
-<loc>https://servdial.com/sitemap-businesses-${i + 1}.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-businesses-${i + 1}.xml</loc>
 </sitemap>`
   ).join("");
 
@@ -49,19 +48,19 @@ export const sitemapIndex = async (req, res) => {
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
 <sitemap>
-<loc>https://servdial.com/sitemap-static.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-static.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>https://servdial.com/sitemap-cities.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-cities.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>https://servdial.com/sitemap-categories.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-categories.xml</loc>
 </sitemap>
 
 <sitemap>
-<loc>https://servdial.com/sitemap-services.xml</loc>
+<loc>${FRONTEND_URL}/sitemap-services.xml</loc>
 </sitemap>
 
 ${businessSitemaps}
