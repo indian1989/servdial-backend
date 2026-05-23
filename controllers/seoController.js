@@ -1,12 +1,13 @@
-// backend/controllers/seoController.js
 import City from "../models/City.js";
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
-import { getCache, setCache} from "../utils/memoryCache.js"; // or wherever it is ( temporarly commented need fix)
+import { getCache, setCache } from "../utils/memoryCache.js";
+import rankBusinesses from "../services/ranking/unifiedRankingEngine.js";
 
 const baseUrl = "https://servdial.com";
 
-// ================ GENERATE CITY CATEGORY PAGE ===============
+/* ===================== CITY + CATEGORY PAGE BUILDER ===================== */
+
 export const generateCityCategoryPages = async (req, res) => {
   try {
     const cities = await City.find({ status: "active" })
@@ -17,34 +18,34 @@ export const generateCityCategoryPages = async (req, res) => {
       .select("slug name parentCategory")
       .lean();
 
-    // 👉 only leaf categories
+    // ONLY LEAF CATEGORIES (SAFE FIX)
     const leafCategories = categories.filter(
-      (cat) => cat.parentCategory !== null
+      (cat) => !cat.parentCategory
     );
 
-    let pages = [];
+    const pages = [];
 
-    cities.forEach((city) => {
-      leafCategories.forEach((cat) => {
+    for (const city of cities) {
+      for (const cat of leafCategories) {
         pages.push({
           city: city.slug,
           category: cat.slug,
           url: `${baseUrl}/${city.slug}/${cat.slug}`,
           title: `${cat.name} in ${city.name} | ServDial`,
         });
-      });
-    });
+      }
+    }
 
     return res.json({
       success: true,
       data: pages,
       meta: {
-        totalPages: pages.length,
+        total: pages.length,
       },
     });
+
   } catch (error) {
     console.error(error);
-
     return res.status(500).json({
       success: false,
       message: "Error generating SEO pages",
@@ -52,20 +53,22 @@ export const generateCityCategoryPages = async (req, res) => {
   }
 };
 
-// ============= GET CITY CATEGORY PAGE ==================
+/* ===================== CITY + CATEGORY PAGE ===================== */
+
 export const getCityCategoryPage = async (req, res) => {
   try {
     const { citySlug, categorySlug } = req.params;
 
-    // ================= CACHE =================
-    let cityId = getCache(`city:slug:${citySlug}`);
-    let category = getCache(`category:slug:${categorySlug}`);
+    /* ================= CITY ================= */
+    let city = getCache(`city:slug:${citySlug}`);
 
-    // ================= CITY RESOLUTION =================
-    if (!cityId) {
-      const city =
-        (await City.findOne({ slug: citySlug })) ||
-        (await City.findOne({ slugHistory: citySlug }));
+    if (!city) {
+      city = await City.findOne({
+        $or: [
+          { slug: citySlug },
+          { "slugHistory.slug": citySlug }
+        ]
+      }).lean();
 
       if (!city) {
         return res.status(404).json({
@@ -74,17 +77,21 @@ export const getCityCategoryPage = async (req, res) => {
         });
       }
 
-      cityId = city._id;
-      setCache(`city:slug:${citySlug}`, cityId, 60 * 60 * 6);
+      setCache(`city:slug:${citySlug}`, city, 60 * 60 * 6);
     }
 
-    // ================= CATEGORY RESOLUTION =================
-    if (!category) {
-      const categoryDoc =
-        (await Category.findOne({ slug: categorySlug })) ||
-        (await Category.findOne({ slugHistory: categorySlug }));
+    /* ================= CATEGORY ================= */
+    let category = getCache(`category:slug:${categorySlug}`);
 
-      if (!categoryDoc) {
+    if (!category) {
+      category = await Category.findOne({
+        $or: [
+          { slug: categorySlug },
+          { "slugHistory.slug": categorySlug }
+        ]
+      }).lean();
+
+      if (!category) {
         return res.json({
           success: true,
           data: [],
@@ -94,58 +101,53 @@ export const getCityCategoryPage = async (req, res) => {
         });
       }
 
-      category = categoryDoc;
-      setCache(`category:slug:${categorySlug}`, categoryDoc, 60 * 60 * 6);
+      setCache(`category:slug:${categorySlug}`, category, 60 * 60 * 6);
     }
 
-    // ================= CATEGORY EXPANSION =================
-    let categoryIds = [category._id];
+    /* ================= CATEGORY IDS (FIXED LOGIC) ================= */
 
-   const isParentCategory =
-  category.parentCategory &&
-  typeof category.parentCategory === "object";
+    let categoryIds = [];
 
-if (isParentCategory) {
-      const leafCats = await Category.find({
-        parentCategory: category._id,
+    // If parent category → include ALL children + itself
+    if (!category.parentCategory) {
+      const children = await Category.find({
+        $or: [
+          { parentCategory: category._id },
+          { _id: category._id }
+        ]
       })
         .select("_id")
         .lean();
 
-      categoryIds = leafCats.map((c) => c._id);
+      categoryIds = children.map((c) => c._id);
+    } else {
+      categoryIds = [category._id];
     }
 
-    if (!cityId || !category) {
-  return res.status(404).json({
-    success: false,
-    message: "Invalid SEO route",
-  });
-}
+    /* ================= BUSINESSES ================= */
 
-    // ================= QUERY =================
     const businesses = await Business.find({
-  cityId,
-  $or: [
-    { categoryId: { $in: categoryIds } },
-    { parentCategoryId: { $in: categoryIds } }
-  ],
-  status: "approved",
-})
+      cityId: city._id,
+      categoryId: { $in: categoryIds },
+      status: "approved",
+    })
       .select("name slug rating location images views clicks")
       .lean();
 
-    // ================= FAILSAFE =================
     if (!businesses.length) {
       return res.json({
         success: true,
         data: [],
         meta: {
           message: "No businesses found",
+          city: city.slug,
+          category: category.slug,
         },
       });
     }
 
-    // ================= RANKING =================
+    /* ================= RANKING ================= */
+
     const ranked = rankBusinesses(businesses, {
       userLocation: null,
       userPreferences: null,
@@ -153,16 +155,16 @@ if (isParentCategory) {
       timeOfDay: new Date().getHours(),
     });
 
-    // ================= RESPONSE =================
     return res.json({
       success: true,
       data: ranked,
       meta: {
         total: ranked.length,
-        city: { slug: citySlug },
-        category: { slug: categorySlug },
+        city: city.slug,
+        category: category.slug,
       },
     });
+
   } catch (error) {
     console.error(error);
 

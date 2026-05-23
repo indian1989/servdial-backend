@@ -4,25 +4,32 @@ import {
   staticSitemap,
   citySitemap,
   categorySitemap,
-  serviceCitySitemap,
+  cityCategorySitemap,
   businessSitemap
 } from "../controllers/sitemapController.js";
 
 const router = express.Router();
 
+/* ================= INDEX ================= */
 router.get("/sitemap.xml", sitemapIndex);
+
+/* ================= STATIC ================= */
 router.get("/sitemap-static.xml", staticSitemap);
+
+/* ================= CITY (BASE + PAGINATION) ================= */
 router.get("/sitemap-cities.xml", citySitemap);
+router.get("/sitemap-cities-:page.xml", citySitemap);
+
+/* ================= CATEGORY (BASE + PAGINATION) ================= */
 router.get("/sitemap-categories.xml", categorySitemap);
-router.get("/sitemap-services.xml", serviceCitySitemap);
+router.get("/sitemap-categories-:page.xml", categorySitemap);
 
-// FIX 1: add fallback (IMPORTANT)
-router.get("/sitemap-businesses.xml", (req, res) => {
-  req.params.page = 1;
-  businessSitemap(req, res);
-});
+/* ================= CITY + CATEGORY ================= */
+router.get("/sitemap-city-category.xml", cityCategorySitemap);
+router.get("/sitemap-city-category-:page.xml", cityCategorySitemap);
 
-// pagination version
+/* ================= BUSINESS ================= */
+router.get("/sitemap-businesses.xml", businessSitemap);
 router.get("/sitemap-businesses-:page.xml", businessSitemap);
 
 export default router;
