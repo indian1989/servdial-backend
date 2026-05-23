@@ -2,7 +2,7 @@ import City from "../models/City.js";
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
 import { getCache, setCache } from "../utils/memoryCache.js";
-import rankBusinesses from "../services/ranking/unifiedRankingEngine.js";
+import { rankBusinesses } from "../services/ranking/unifiedRankingEngine.js";
 
 const baseUrl = "https://servdial.com";
 
@@ -148,7 +148,7 @@ export const getCityCategoryPage = async (req, res) => {
 
     /* ================= RANKING ================= */
 
-    const ranked = rankBusinesses(businesses, {
+   export const ranked = rankBusinesses(businesses, {
       userLocation: null,
       userPreferences: null,
       searchIntent: null,
