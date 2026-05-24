@@ -7,6 +7,9 @@ import Category from "../models/Category.js";
 const FRONTEND_URL =
   process.env.FRONTEND_URL || "https://servdial.com";
 
+const BACKEND_URL =
+  process.env.BACKEND_URL || "https://api.servdial.com";
+
 const PAGE_SIZE = 50000;
 
 const getLastMod = (date) =>
@@ -18,19 +21,50 @@ const xmlHeader = `<?xml version="1.0" encoding="UTF-8"?>`;
 
 export const sitemapIndex = async (req, res) => {
   try {
-    const businessCount = await Business.countDocuments({ status: "approved" });
-    const cityCount = await City.countDocuments({ status: "active" });
-    const categoryCount = await Category.countDocuments({ status: "active" });
+    const businessCount = await Business.countDocuments({
+  status: "approved",
+});
 
-    const businessPages = Math.ceil(businessCount / PAGE_SIZE);
-    const cityPages = Math.ceil(cityCount / PAGE_SIZE);
-    const categoryPages = Math.ceil(categoryCount / PAGE_SIZE);
+const cityCount = await City.countDocuments({
+  status: "active",
+});
+
+const categoryCount = await Category.countDocuments({
+  status: "active",
+});
+
+const cityCategoryCount = await Business.aggregate([
+  {
+    $match: {
+      status: "approved",
+    },
+  },
+  {
+    $group: {
+      _id: {
+        citySlug: "$citySlug",
+        categorySlug: "$categorySlug",
+      },
+    },
+  },
+  {
+    $count: "total",
+  },
+]);
+
+const businessPages = Math.ceil(businessCount / PAGE_SIZE);
+const cityPages = Math.ceil(cityCount / PAGE_SIZE);
+const categoryPages = Math.ceil(categoryCount / PAGE_SIZE);
+
+const cityCategoryPages = Math.ceil(
+  (cityCategoryCount[0]?.total || 0) / PAGE_SIZE
+);
 
     const businessMaps = Array.from(
       { length: businessPages },
       (_, i) => `
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-businesses-${i + 1}.xml</loc>
+<loc>${BACKEND_URL}/sitemap-businesses-${i + 1}.xml</loc>
 <lastmod>${new Date().toISOString()}</lastmod>
 </sitemap>`
     ).join("");
@@ -39,7 +73,7 @@ export const sitemapIndex = async (req, res) => {
       { length: cityPages },
       (_, i) => `
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-cities-${i + 1}.xml</loc>
+<loc>${BACKEND_URL}/sitemap-cities-${i + 1}.xml</loc>
 <lastmod>${new Date().toISOString()}</lastmod>
 </sitemap>`
     ).join("");
@@ -48,32 +82,37 @@ export const sitemapIndex = async (req, res) => {
       { length: categoryPages },
       (_, i) => `
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-categories-${i + 1}.xml</loc>
+<loc>${BACKEND_URL}/sitemap-categories-${i + 1}.xml</loc>
 <lastmod>${new Date().toISOString()}</lastmod>
 </sitemap>`
     ).join("");
 
-    const sitemap = `
+    const cityCategoryMaps = Array.from(
+  { length: cityCategoryPages },
+  (_, i) => `
+<sitemap>
+<loc>${BACKEND_URL}/sitemap-city-category-${i + 1}.xml</loc>
+<lastmod>${new Date().toISOString()}</lastmod>
+</sitemap>`
+).join("");
+
+const sitemap = `
 ${xmlHeader}
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
 <sitemap>
-<loc>${FRONTEND_URL}/sitemap-static.xml</loc>
-<lastmod>${new Date().toISOString()}</lastmod>
-</sitemap>
-
-<sitemap>
-<loc>${FRONTEND_URL}/sitemap-city-category.xml</loc>
+<loc>${BACKEND_URL}/sitemap-static.xml</loc>
 <lastmod>${new Date().toISOString()}</lastmod>
 </sitemap>
 
 ${cityMaps}
 ${categoryMaps}
 ${businessMaps}
+${cityCategoryMaps}
 
 </sitemapindex>`;
 
-    res.header("Content-Type", "application/xml");
+    res.type("application/xml");
     res.send(sitemap.trim());
   } catch (err) {
     res.status(500).send("Error generating sitemap index");
@@ -97,7 +136,7 @@ export const staticSitemap = async (req, res) => {
     )
     .join("");
 
-  res.header("Content-Type", "application/xml");
+  res.type("application/xml");
   res.send(
     `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
   );
@@ -130,7 +169,7 @@ export const citySitemap = async (req, res) => {
       )
       .join("");
 
-    res.header("Content-Type", "application/xml");
+    res.type("application/xml");
     res.send(
       `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
     );
@@ -167,7 +206,7 @@ export const categorySitemap = async (req, res) => {
       )
       .join("");
 
-    res.header("Content-Type", "application/xml");
+    res.type("application/xml");
     res.send(
       `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
     );
@@ -214,7 +253,7 @@ export const cityCategorySitemap = async (req, res) => {
       )
       .join("");
 
-    res.header("Content-Type", "application/xml");
+    res.type("application/xml");
     res.send(
       `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
     );
@@ -260,7 +299,7 @@ ${
       )
       .join("");
 
-    res.header("Content-Type", "application/xml");
+    res.type("application/xml");
     res.send(
       `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">${urls}</urlset>`
     );
