@@ -39,21 +39,21 @@ export const unifiedSearchEngine = async (searchContext = {}) => {
 
   // ================= TEXT SEARCH (FIXED SAFETY) =================
   if (textSearch) {
-  const tokens = textSearch
-    .split(" ")
-    .filter(Boolean);
+  const tokens = textSearch.split(" ").filter(Boolean);
 
-  query.$or = [
+  const textConditions = [
     { name: { $regex: textSearch, $options: "i" } },
     { description: { $regex: textSearch, $options: "i" } },
     { categorySlug: { $regex: textSearch, $options: "i" } },
     { citySlug: { $regex: textSearch, $options: "i" } },
 
-    // token-level fallback (VERY IMPORTANT)
     ...tokens.map(t => ({
       name: { $regex: t, $options: "i" }
     }))
   ];
+
+  query.$and = query.$and || [];
+  query.$and.push({ $or: textConditions });
 }
 
   // ================= GEO FILTER =================

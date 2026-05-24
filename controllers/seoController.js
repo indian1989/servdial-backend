@@ -131,7 +131,7 @@ export const getCityCategoryPage = async (req, res) => {
       categoryId: { $in: categoryIds },
       status: "approved",
     })
-      .select("name slug rating location images views clicks")
+      .select("name slug averageRating location images views clicks")
       .lean();
 
     if (!businesses.length) {
@@ -148,7 +148,7 @@ export const getCityCategoryPage = async (req, res) => {
 
     /* ================= RANKING ================= */
 
-   export const ranked = rankBusinesses(businesses, {
+   const ranked = rankBusinesses(businesses, {
       userLocation: null,
       userPreferences: null,
       searchIntent: null,

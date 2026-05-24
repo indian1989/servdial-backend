@@ -26,7 +26,7 @@ const safeNumber = (val) => {
 // 🧠 NORMALIZE HELPER
 // =============================
 const normalize = (value, max) => {
-  if (!max) return 0;
+  if (!max || max <= 0) return 0;
   return value / max;
 };
 
