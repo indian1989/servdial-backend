@@ -113,7 +113,13 @@ ${cityCategoryMaps}
 </sitemapindex>`;
 
     res.type("application/xml");
-    res.send(sitemap.trim());
+
+res.set(
+  "Cache-Control",
+  "public, max-age=3600, s-maxage=3600"
+);
+
+res.send(sitemap.trim());
   } catch (err) {
     res.status(500).send("Error generating sitemap index");
   }
@@ -137,7 +143,13 @@ export const staticSitemap = async (req, res) => {
     .join("");
 
   res.type("application/xml");
-  res.send(
+
+res.set(
+  "Cache-Control",
+  "public, max-age=3600, s-maxage=3600"
+);
+
+res.send(
     `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
   );
 };
@@ -170,7 +182,13 @@ export const citySitemap = async (req, res) => {
       .join("");
 
     res.type("application/xml");
-    res.send(
+
+res.set(
+  "Cache-Control",
+  "public, max-age=3600, s-maxage=3600"
+);
+
+res.send(
       `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
     );
   } catch (err) {
@@ -207,7 +225,13 @@ export const categorySitemap = async (req, res) => {
       .join("");
 
     res.type("application/xml");
-    res.send(
+
+res.set(
+  "Cache-Control",
+  "public, max-age=3600, s-maxage=3600"
+);
+
+res.send(
       `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
     );
   } catch (err) {
@@ -254,7 +278,13 @@ export const cityCategorySitemap = async (req, res) => {
       .join("");
 
     res.type("application/xml");
-    res.send(
+
+res.set(
+  "Cache-Control",
+  "public, max-age=3600, s-maxage=3600"
+);
+
+res.send(
       `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
     );
   } catch (err) {
@@ -298,9 +328,15 @@ ${
 </url>`
       )
       .join("");
+      
+res.type("application/xml");
 
-    res.type("application/xml");
-    res.send(
+res.set(
+  "Cache-Control",
+  "public, max-age=3600, s-maxage=3600"
+);
+
+res.send(
       `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">${urls}</urlset>`
     );
   } catch (err) {
