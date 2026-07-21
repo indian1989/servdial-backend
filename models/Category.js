@@ -55,6 +55,22 @@ const categorySchema = new mongoose.Schema(
     icon: { type: String, default: "" },
     image: { type: String, default: "" },
 
+    /* ================= UI ================= */
+uiType: {
+  type: String,
+  enum: [
+    "service",
+    "appointment",
+    "room",
+    "table",
+    "consultation",
+    "quotation",
+    "catalog",
+  ],
+  default: "service",
+  index: true,
+},
+
     /* ================= SEO ================= */
     seoTitle: String,
     seoDescription: String,

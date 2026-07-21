@@ -65,7 +65,7 @@ import healthRoutes from "./routes/health.js";
 
 import adminRoutes from "./routes/adminRoutes.js";
 
-console.log("🔥 ServDial Server Booting...");
+console.log("ENV FILE TEST:", process.env.MONGO_URI);
 
 // ================= ROOT =================
 app.get("/api", (req, res) => {
