@@ -1,3 +1,4 @@
+//backend/controllers/businessController.js
 import asyncHandler from "express-async-handler";
 import mongoose from "mongoose";
 
@@ -708,6 +709,64 @@ export const trackBusinessView = asyncHandler(async (req, res) => {
     success: true,
     data: null,
   });
+});
+
+// ================= TRACK BUSINESS ANALYTICS =========================
+export const trackBusinessAnalytics = asyncHandler(async (req,res)=>{
+
+const {id}=req.params;
+const {type}=req.body;
+
+
+const update={};
+
+
+switch(type){
+
+case "call":
+update.phoneClicks={$inc:1};
+break;
+
+case "whatsapp":
+update.whatsappClicks={$inc:1};
+break;
+
+case "direction":
+update.directionClicks={$inc:1};
+break;
+
+case "share":
+update.shareClicks={$inc:1};
+break;
+
+case "booking":
+update.bookingClicks={$inc:1};
+break;
+
+default:
+return res.status(400).json({
+success:false,
+message:"Invalid analytics type"
+});
+
+}
+
+
+const business = await Business.findByIdAndUpdate(
+id,
+{
+$inc:update
+},
+{new:true}
+);
+
+
+res.json({
+success:true,
+data:null
+});
+
+
 });
 
 /* =========================

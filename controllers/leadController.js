@@ -17,13 +17,28 @@ export const createLead = asyncHandler(async (req, res) => {
   }
 
   const lead = await Lead.create({
-    business: businessId,
-    name,
-    phone,
-    email,
-    message,
-    city: business.city,
-  });
+
+business:businessId,
+
+name,
+phone,
+email,
+message,
+
+bookingType:type,
+
+bookingDate:date,
+
+bookingTime:time,
+
+guests,
+
+service,
+
+cityId:business.cityId,
+cityName:business.cityName
+
+});
 
   res.status(201).json({
     success: true,
@@ -33,15 +48,44 @@ export const createLead = asyncHandler(async (req, res) => {
 });
 
 // ================= GET BUSINESS LEADS =================
-export const getBusinessLeads = asyncHandler(async (req, res) => {
-  const leads = await Lead.find({ business: req.params.businessId })
-    .sort({ createdAt: -1 });
+export const getBusinessLeads = asyncHandler(async(req,res)=>{
 
-  res.status(200).json({
-    success: true,
-    count: leads.length,
-    leads,
-  });
+ const business = await Business.findById(
+   req.params.businessId
+ );
+
+ if(!business){
+   return res.status(404).json({
+    success:false,
+    message:"Business not found"
+   });
+ }
+
+
+ if(
+  req.user.role==="provider" &&
+  String(business.owner)!==String(req.user._id)
+ ){
+   return res.status(403).json({
+    success:false,
+    message:"Unauthorized"
+   });
+ }
+
+
+ const leads = await Lead.find({
+   business:req.params.businessId
+ })
+ .sort({createdAt:-1});
+
+
+ res.json({
+  success:true,
+  count:leads.length,
+  leads
+ });
+
+
 });
 
 // ================= ADMIN ALL LEADS =================

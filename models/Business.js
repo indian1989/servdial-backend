@@ -162,6 +162,26 @@ phoneVerifiedAt: Date,
       twitter: String,
     },
 
+    directionClicks: {
+  type:Number,
+  default:0
+},
+
+shareClicks:{
+  type:Number,
+  default:0
+},
+
+bookingClicks:{
+  type:Number,
+  default:0
+},
+
+leadCount:{
+  type:Number,
+  default:0
+},
+
     // ================= BUSINESS HOURS =================
     businessHours: {
   monday: { open: String, close: String, closed: { type: Boolean, default: false } },

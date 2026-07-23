@@ -7,6 +7,7 @@ import {
   getBusinessBySlug,
   getSimilarBusinesses,
   trackBusinessView,
+  trackBusinessAnalytics,
   getBusinessCount,
   getLatestBusinesses,
 } from "../controllers/businessController.js";
@@ -27,6 +28,11 @@ const router = express.Router();
 router.get(
   "/count/all",
   getBusinessCount
+);
+
+router.post(
+"/analytics/:id",
+trackBusinessAnalytics
 );
 
 /* =========================

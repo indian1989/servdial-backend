@@ -44,7 +44,8 @@ export const getProviderBusinesses = asyncHandler(async (req, res) => {
 
   const businessesWithCategoryNames = businesses.map((biz) => ({
     ...biz._doc,
-    categoryName: categoriesMap[biz.category] || biz.category,
+    categoryName:
+categoriesMap[biz.categoryId] || biz.categoryId,
   }));
 
   res.json({ success: true, count: businessesWithCategoryNames.length, businesses: businessesWithCategoryNames });
@@ -113,18 +114,6 @@ export const getProviderProfile = asyncHandler(async (req, res) => {
 export const getProviderSubscription = asyncHandler(async (req, res) => {
   const subscription = await Subscription.findOne({ user: req.user._id });
   res.json({ success: true, subscription });
-});
-
-// ================================
-// TRACK BUSINESS VIEWS
-// ================================
-export const trackBusinessView = asyncHandler(async (req, res) => {
-  const business = await Business.findByIdAndUpdate(
-    req.params.id,
-    { $inc: { views: 1 } },
-    { new: true }
-  );
-  res.json({ success: true, business });
 });
 
 // ================================

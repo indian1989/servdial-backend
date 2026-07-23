@@ -32,10 +32,10 @@ const leadSchema = new mongoose.Schema(
     default: ""
   },
 
-  city: {
+  cityId:{
   type: mongoose.Schema.Types.ObjectId,
-  ref: "City",
-  index: true
+  ref:"City",
+  index:true
 },
 
 // optional snapshot
@@ -50,6 +50,24 @@ cityName: {
     default: "form"
   },
 
+  bookingType:{
+ type:String,
+ enum:[
+ "table_booking",
+ "room_booking",
+ "service_booking",
+ "appointment"
+ ]
+},
+
+bookingDate:String,
+
+bookingTime:String,
+
+guests:Number,
+
+service:String,
+
   // Lead lifecycle
   status: {
     type: String,
@@ -63,6 +81,16 @@ cityName: {
   timestamps: true
 }
 );
+
+leadSchema.pre("save", function(next){
+
+ if(this.phone){
+   this.phone=this.phone.replace(/\D/g,"");
+ }
+
+ next();
+
+});
 
 
 // ================= INDEXES =================

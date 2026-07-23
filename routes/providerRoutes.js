@@ -19,7 +19,6 @@ import {
   getProviderOffers,
   getProviderProfile,
   getProviderSubscription,
-  trackBusinessView,
 } from "../controllers/providerController.js";
 
 import {
@@ -65,8 +64,5 @@ router.get("/offers", getProviderOffers);
 
 /* ================= SUBSCRIPTION ================= */
 router.get("/subscription", getProviderSubscription);
-
-/* ================= TRACK BUSINESS VIEWS ================= */
-router.post("/businesses/:id/track-view", trackBusinessView);
 
 export default router;
