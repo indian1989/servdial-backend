@@ -229,7 +229,7 @@ const populatedBusiness = await Business.findById(
   business._id
 )
   .populate("cityId", "name slug")
-  .populate("categoryId", "name slug");
+  .populate("categoryId", "name slug uiType")
 
 await pingGoogleSitemap();
 
@@ -292,7 +292,7 @@ export const updateBusinessHours = asyncHandler(async (req, res) => {
 export const getBusinesses = asyncHandler(async (req, res) => {
   const businesses = await Business.find()
     .populate("cityId", "name slug latitude longitude")
-    .populate("categoryId", "name slug");
+    .populate("categoryId", "name slug uiType")
 
   res.json({
     success: true,
@@ -502,7 +502,7 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   }
 )
   .populate("cityId", "name slug")
-  .populate("categoryId", "name slug");
+  .populate("categoryId", "name slug uiType")
 
 await pingGoogleSitemap();
 
@@ -585,7 +585,7 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     isDeleted: false,
   })
     .populate("cityId", "name slug")
-    .populate("categoryId", "name slug")
+    .populate("categoryId", "name slug uiType")
     .lean();
 
   if (!business) {
@@ -795,7 +795,7 @@ export const getLatestBusinesses = asyncHandler(async (req, res) => {
   // ================= FETCH =================
   const rawBusinesses = await Business.find(filter)
     .populate("cityId", "name slug")
-    .populate("categoryId", "name slug")
+    .populate("categoryId", "name slug uiType")
     .sort({ createdAt: -1 })
     .limit(Number(limit))
     .lean();

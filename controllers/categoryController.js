@@ -178,11 +178,12 @@ export const getTrendingCategories = async (req, res) => {
 export const createCategory = async (req, res) => {
   try {
     const {
-      name,
-      parentCategory = null,
-      order = 0,
-      description = "",
-    } = req.body;
+  name,
+  parentCategory = null,
+  order = 0,
+  description = "",
+  uiType = "service",
+} = req.body;
 
     const slug = slugify(name);
 
@@ -195,13 +196,17 @@ export const createCategory = async (req, res) => {
       });
     }
 
-    const category = await Category.create({
-      name,
-      slug,
-      parentCategory,
-      order,
-      description,
-    });
+    const level = parentCategory ? 1 : 0;
+
+const category = await Category.create({
+  name,
+  slug,
+  parentCategory,
+  level,
+  order,
+  description,
+  uiType,
+});
 
     resetCategoryCache();
     await pingSearchEngines();
@@ -233,13 +238,14 @@ export const updateCategory = async (req, res) => {
     }
 
     const {
-      name,
-      order,
-      status,
-      description,
-      parentCategory,
-      isTrending,
-    } = req.body;
+  name,
+ order,
+  status,
+  description,
+  parentCategory,
+  isTrending,
+  uiType,
+} = req.body;
 
     if (name && name !== category.name) {
       const newSlug = slugify(name);
@@ -266,6 +272,16 @@ export const updateCategory = async (req, res) => {
       category.description = description;
     if (parentCategory !== undefined)
       category.parentCategory = parentCategory || null;
+    
+    if (parentCategory !== undefined) {
+  category.parentCategory = parentCategory || null;
+  category.level = parentCategory ? 1 : 0;
+}
+
+if (uiType !== undefined) {
+  category.uiType = uiType;
+}
+
     if (isTrending !== undefined)
       category.isTrending = isTrending;
 
