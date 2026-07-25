@@ -11,24 +11,29 @@ import { unifiedSearchEngine } from "../services/search/unifiedSearchEngine.js";
 
 export const unifiedSearch = asyncHandler(async (req, res) => {
   const {
-    q = "",
-    city,
-    categorySlug,
-    lat,
-    lng,
-    distance = 10,
-    limit = 20,
-  } = req.query;
+  q = "",
+  city,
+  citySlug,
+  categorySlug,
+  lat,
+  lng,
+  distance = 10,
+  limit = 20,
+} = req.query;
+
+
+const finalCitySlug =
+  citySlug || city || null;
 
   // ================= CLEAN QUERY =================
   // Prevent duplicate city interpretation
-  const cleanedQuery = city
-    ? q.replace(new RegExp(city, "i"), "").trim()
-    : q.trim();
+  const cleanedQuery = finalCitySlug
+  ? q.replace(new RegExp(finalCitySlug, "i"), "").trim()
+  : q.trim();
 
   // ================= CONTEXT BUILD =================
   const context = await buildSearchContext(cleanedQuery, {
-    citySlug: city || null,
+    citySlug: finalCitySlug,
     categorySlug: categorySlug || null,
     lat: lat ? Number(lat) : null,
     lng: lng ? Number(lng) : null,

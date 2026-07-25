@@ -194,7 +194,16 @@ citySlug: {
 
 district: String,
 state: String,
+country:{
+ type:String,
+ default:"India",
+ index:true
+},
 
+countryCode:{
+ type:String,
+ default:"IN"
+},
     pincode: String,
 
     location: {

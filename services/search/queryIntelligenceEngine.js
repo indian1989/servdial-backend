@@ -116,11 +116,19 @@ export const buildSearchContext = async (
   // =====================================================
   // RESOLVE CITY
   // =====================================================
-  let city = null;
+  // =====================================================
+// RESOLVE CITY
+// =====================================================
 
-  if (citySlug) {
-    city = await resolveCity(citySlug);
-  }
+console.log("CITY SLUG BEFORE RESOLVE:", citySlug);
+
+let city = null;
+
+if (citySlug) {
+  city = await resolveCity(citySlug);
+}
+
+console.log("RESOLVED CITY:", city);
 
   // =====================================================
   // RESOLVE CATEGORY
