@@ -414,6 +414,7 @@ export const updateBusiness = asyncHandler(async (req, res) => {
 
   const updates = { ...req.body };
 
+  console.log("🔥 UPDATE BODY:", req.body);
   /* ================= HARD PROTECTION ================= */
 
   delete updates.slug;

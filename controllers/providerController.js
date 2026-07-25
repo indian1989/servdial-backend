@@ -93,20 +93,24 @@ export const getProviderBusinessById = asyncHandler(async (req, res) => {
     _id: req.params.id,
     owner: req.user._id,
   })
-  .populate("categoryId", "name slug")
-  .populate("cityId", "name slug");
-
+  .populate(
+    "categoryId",
+    "name slug uiType features"
+  )
+  .populate(
+    "cityId",
+    "name slug"
+  );
 
   if (!business) {
     return res.status(404).json({
-      success:false,
-      message:"Business not found",
+      success: false,
+      message: "Business not found",
     });
   }
 
-
   res.json({
-    success:true,
+    success: true,
     business,
   });
 
