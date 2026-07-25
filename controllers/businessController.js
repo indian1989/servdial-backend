@@ -229,7 +229,10 @@ const populatedBusiness = await Business.findById(
   business._id
 )
   .populate("cityId", "name slug")
-  .populate("categoryId", "name slug uiType")
+  .populate(
+  "categoryId",
+  "name slug uiType features"
+)
 
 await pingGoogleSitemap();
 
@@ -292,7 +295,10 @@ export const updateBusinessHours = asyncHandler(async (req, res) => {
 export const getBusinesses = asyncHandler(async (req, res) => {
   const businesses = await Business.find()
     .populate("cityId", "name slug latitude longitude")
-    .populate("categoryId", "name slug uiType")
+    .populate(
+  "categoryId",
+  "name slug uiType features"
+)
 
   res.json({
     success: true,
@@ -318,6 +324,12 @@ export const getBusinessById = asyncHandler(async (req, res) => {
     .populate("cityId")
     .populate("categoryId");
 
+
+console.log(
+  "CATEGORY FROM BACKEND:",
+  business.categoryId
+);
+
   if (!business) {
     return res.status(404).json({
   success: false,
@@ -335,13 +347,13 @@ export const getBusinessById = asyncHandler(async (req, res) => {
    CLAIM BUSINESS (PROVIDER FLOW)
 ========================================================= */
 export const claimBusiness = asyncHandler(async (req, res) => {
-  const { businessId } = req.body;
+  const businessId = req.params.id;
   const userId = req.user?._id;
 
-  if (!businessId) {
-    return res.status(400).json({
+  if (!userId) {
+    return res.status(401).json({
       success: false,
-      message: "Business ID required",
+      message: "Login required",
     });
   }
 
@@ -354,7 +366,6 @@ export const claimBusiness = asyncHandler(async (req, res) => {
     });
   }
 
-  // already claimed
   if (business.isClaimed) {
     return res.status(400).json({
       success: false,
@@ -362,12 +373,14 @@ export const claimBusiness = asyncHandler(async (req, res) => {
     });
   }
 
-  // assign owner
-  business.owner = userId;
-  business.isClaimed = true;
-  business.status = "pending"; // admin approval flow
+  // assign claim user
+business.claimedBy = userId;
 
-  await business.save();
+business.claimStatus = "pending";
+
+business.isClaimed = false;
+
+await business.save();
 
   return res.json({
     success: true,
@@ -502,7 +515,10 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   }
 )
   .populate("cityId", "name slug")
-  .populate("categoryId", "name slug uiType")
+  .populate(
+  "categoryId",
+  "name slug uiType features"
+)
 
 await pingGoogleSitemap();
 
@@ -585,7 +601,10 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     isDeleted: false,
   })
     .populate("cityId", "name slug")
-    .populate("categoryId", "name slug uiType")
+    .populate(
+  "categoryId",
+  "name slug uiType features"
+)
     .lean();
 
   if (!business) {
@@ -795,7 +814,10 @@ export const getLatestBusinesses = asyncHandler(async (req, res) => {
   // ================= FETCH =================
   const rawBusinesses = await Business.find(filter)
     .populate("cityId", "name slug")
-    .populate("categoryId", "name slug uiType")
+    .populate(
+  "categoryId",
+  "name slug uiType features"
+)
     .sort({ createdAt: -1 })
     .limit(Number(limit))
     .lean();

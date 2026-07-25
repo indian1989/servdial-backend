@@ -42,12 +42,11 @@ export const approveBusiness = asyncHandler(async (req, res) => {
     });
   }
 
-  business.status = "approved";
+business.status = "approved";
 
-  // refresh updatedAt for sitemap freshness
-  business.updatedAt = new Date();
+business.updatedAt = new Date();
 
-  await business.save();
+await business.save();
 
   // SEO ping (non-blocking safe)
   try {
@@ -84,8 +83,9 @@ export const rejectBusiness = asyncHandler(async (req, res) => {
     });
   }
 
-  business.status = "rejected";
-  business.updatedAt = new Date();
+ business.status = "rejected";
+
+business.updatedAt = new Date();
 
   await business.save();
 
@@ -194,4 +194,85 @@ export const getBusinessStats = asyncHandler(async (req, res) => {
       featured,
     },
   });
+});
+
+/* ======================================================
+   APPROVE CLAIM
+====================================================== */
+export const approveClaim = asyncHandler(async(req,res)=>{
+
+ const business = await Business.findById(req.params.id);
+
+ if(!business){
+  return res.status(404).json({
+   success:false,
+   message:"Business not found"
+  });
+ }
+
+
+ if(business.claimStatus !== "pending"){
+  return res.status(400).json({
+   success:false,
+   message:"No pending claim found"
+  });
+ }
+
+
+ business.claimStatus = "approved";
+
+business.isClaimed = true;
+
+
+if(business.claimedBy){
+
+  business.owner = business.claimedBy;
+
+}
+
+
+business.claimedAt = new Date();
+
+business.updatedAt = new Date();
+
+
+await business.save();
+
+ res.json({
+  success:true,
+  message:"Claim approved",
+  data:business
+ });
+
+});
+
+/* ======================================================
+   REJECT CLAIM
+====================================================== */
+export const rejectClaim = asyncHandler(async(req,res)=>{
+
+ const business = await Business.findById(req.params.id);
+
+
+ if(!business){
+   return res.status(404).json({
+    success:false,
+    message:"Business not found"
+   });
+ }
+
+
+ business.claimStatus="rejected";
+ business.updatedAt=new Date();
+
+
+ await business.save();
+
+
+ res.json({
+  success:true,
+  message:"Claim rejected",
+  data:business
+ });
+
 });

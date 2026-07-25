@@ -34,21 +34,82 @@ export const getProviderDashboardStats = asyncHandler(async (req, res) => {
 // GET PROVIDER BUSINESSES
 // ================================
 export const getProviderBusinesses = asyncHandler(async (req, res) => {
+
   const ownerId = req.user._id;
 
-  const businesses = await Business.find({ owner: ownerId }).sort({ createdAt: -1 });
+  console.log("PROVIDER LOGIN ID:", ownerId);
+
+
+  const businesses = await Business.find({
+    owner: ownerId
+  })
+  .sort({ createdAt: -1 });
+
+
+  console.log(
+    "PROVIDER BUSINESSES FOUND:",
+    businesses.map(b => ({
+      id: b._id,
+      name: b.name,
+      owner: b.owner,
+      status: b.status,
+      claimStatus: b.claimStatus
+    }))
+  );
+
 
   const categories = await Category.find();
+
   const categoriesMap = {};
-  categories.forEach((cat) => { categoriesMap[cat._id] = cat.name; });
+
+  categories.forEach((cat) => {
+    categoriesMap[cat._id.toString()] = cat.name;
+  });
+
 
   const businessesWithCategoryNames = businesses.map((biz) => ({
     ...biz._doc,
+
     categoryName:
-categoriesMap[biz.categoryId] || biz.categoryId,
+      categoriesMap[biz.categoryId?.toString()] ||
+      biz.categoryId,
   }));
 
-  res.json({ success: true, count: businessesWithCategoryNames.length, businesses: businessesWithCategoryNames });
+
+  res.json({
+    success: true,
+    count: businessesWithCategoryNames.length,
+    businesses: businessesWithCategoryNames
+  });
+
+});
+
+// ================================
+// GET SINGLE PROVIDER BUSINESS
+// ================================
+export const getProviderBusinessById = asyncHandler(async (req, res) => {
+
+  const business = await Business.findOne({
+    _id: req.params.id,
+    owner: req.user._id,
+  })
+  .populate("categoryId", "name slug")
+  .populate("cityId", "name slug");
+
+
+  if (!business) {
+    return res.status(404).json({
+      success:false,
+      message:"Business not found",
+    });
+  }
+
+
+  res.json({
+    success:true,
+    business,
+  });
+
 });
 
 // ================================

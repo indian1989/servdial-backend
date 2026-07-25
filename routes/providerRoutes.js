@@ -10,6 +10,7 @@ import {
 import {
   getProviderDashboardStats,
   getProviderBusinesses,
+  getProviderBusinessById,
   getProviderLeads,
   getProviderReviews,
   getProviderAnalytics,
@@ -40,6 +41,10 @@ router.get("/dashboard", getProviderDashboardStats);
 
 /* ================= BUSINESSES ================= */
 router.get("/businesses", getProviderBusinesses);
+router.get(
+  "/businesses/:id",
+  getProviderBusinessById
+);
 router.post("/businesses", createBusiness);
 router.put("/businesses/:id", updateBusiness);
 router.post("/businesses/claim", claimBusiness);

@@ -1,9 +1,11 @@
 // backend/routes/publicBusinessRoutes.js
 
 import express from "express";
+import { protect } from "../middleware/authMiddleware.js";
 
 import {
   getBusinesses,
+  claimBusiness,
   getBusinessBySlug,
   getSimilarBusinesses,
   trackBusinessView,
@@ -73,6 +75,12 @@ router.post(
 router.get(
   "/",
   getBusinesses
+);
+
+router.post(
+ "/:id/claim",
+ protect,
+ claimBusiness
 );
 
 /* =========================

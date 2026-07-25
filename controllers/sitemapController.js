@@ -175,7 +175,7 @@ export const citySitemap = async (req, res) => {
 <url>
 <loc>${FRONTEND_URL}/city/${city.slug}</loc>
 <lastmod>${getLastMod(city.updatedAt)}</lastmod>
-<changefreq>weekly</changefreq>
+<changefreq>daily</changefreq>
 <priority>0.8</priority>
 </url>`
       )

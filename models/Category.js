@@ -69,10 +69,21 @@ uiType: {
   index: true,
 },
 
-features:{
-  type:[String],
-  default:[]
-},
+features: [
+  {
+    type: String,
+    enum: [
+      "pricing",
+      "appointment_booking",
+      "room_booking",
+      "table_booking",
+      "food_menu",
+      "party_booking",
+      "catalog",
+      "lead_form"
+    ]
+  }
+],
 
     /* ================= SEO ================= */
     seoTitle: String,

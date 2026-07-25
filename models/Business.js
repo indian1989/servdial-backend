@@ -43,7 +43,91 @@ slugHistory: [
   },
 ],
 
-    services: [String],
+    services:[
+  {
+    name:{
+      type:String,
+      trim:true,
+    },
+
+    description:{
+      type:String,
+      default:"",
+    }
+  }
+],
+
+pricing:[
+ {
+   name:{
+     type:String,
+     trim:true,
+   },
+
+   price:{
+     type:Number,
+     default:0,
+   }
+ }
+],
+
+catalog:[
+ {
+   name:String,
+
+   description:{
+     type:String,
+     default:"",
+   },
+
+   price:{
+     type:Number,
+     default:0,
+   },
+
+   image:{
+     type:String,
+     default:"",
+   }
+ }
+],
+
+faq:[
+ {
+   question:String,
+
+   answer:String,
+ }
+],
+
+offers: [
+  {
+    title: String,
+
+    description: String,
+
+    image: String,
+
+    expiryDate: Date,
+  },
+],
+
+bookingSettings: {
+  enabled: {
+    type: Boolean,
+    default: false,
+  },
+
+  type: {
+    type: String,
+    enum: [
+      "appointment",
+      "table",
+      "room",
+      "party",
+    ],
+  },
+},
 
     description: {
       type: String,
@@ -137,6 +221,43 @@ state: String,
   index: true,
 },
 
+menu: {
+  type: [
+    {
+      name: {
+        type: String,
+        trim: true,
+      },
+
+      description: {
+        type: String,
+        default: "",
+      },
+
+      price: {
+        type: Number,
+        default: 0,
+      },
+
+      image: {
+        type: String,
+        default: "",
+      },
+
+      category: {
+        type: String,
+        default: "",
+      },
+
+      isAvailable: {
+        type: Boolean,
+        default: true,
+      },
+    },
+  ],
+  default: [],
+},
+
     // ================= CONTACT =================
     phone: {
       type: String,
@@ -220,7 +341,33 @@ leadCount:{
     featuredUntil: Date,
 
     isVerified: { type: Boolean, default: false },
-    isClaimed: { type: Boolean, default: false },
+
+    // ================= CLAIM =================
+isClaimed: {
+  type:Boolean,
+  default:false,
+},
+
+claimStatus:{
+  type:String,
+  enum:[
+    "none",
+    "pending",
+    "approved",
+    "rejected"
+  ],
+  default:"none",
+},
+
+claimedBy:{
+  type:mongoose.Schema.Types.ObjectId,
+  ref:"User",
+  default:null,
+},
+
+claimedAt:{
+  type:Date,
+},
 
     // ================= STATUS =================
     status: {
@@ -269,38 +416,44 @@ if (
   return next(new Error("Location must have [lng, lat]"));
 }
 
-    // ================= CITY SYNC =================
-    if (this.isModified("cityId")) {
-      const cityDoc = await mongoose.models.City.findById(this.cityId);
-
-      if (!cityDoc) {
-        throw new Error("Invalid cityId: City not found");
-      }
-
-      this.district = normalizeText(cityDoc.district);
-      this.state = normalizeText(cityDoc.state);
-    }
-
-    // ================= SAFETY NORMALIZATION =================
-    if (this.cityName) {
-      this.cityName = normalizeCity(this.cityName);
-    }
-
-    // ================= CATEGORY SYNC =================
+ // ================= CITY SYNC =================
 if (this.isModified("cityId")) {
-  const cityDoc = await mongoose.models.City.findById(this.cityId);
+
+  const cityDoc =
+    await mongoose.models.City.findById(this.cityId);
 
   if (!cityDoc) {
     throw new Error("Invalid cityId: City not found");
   }
 
-  // SAFE CACHE (DO NOT DELETE IT LATER)
+  // SEO Cache
   this.cityName = cityDoc.name.toLowerCase().trim();
   this.citySlug = cityDoc.slug;
 
-  this.district = cityDoc.district;
-  this.state = cityDoc.state;
+  // Display Data
+  this.district = normalizeText(cityDoc.district);
+  this.state = normalizeText(cityDoc.state);
 }
+
+
+// ================= CATEGORY SYNC =================
+if (this.isModified("categoryId")) {
+
+  const categoryDoc =
+    await mongoose.models.Category.findById(this.categoryId);
+
+  if (!categoryDoc) {
+    throw new Error("Invalid categoryId");
+  }
+
+  this.categorySlug = categoryDoc.slug;
+  this.parentCategoryId = categoryDoc.parentCategory || null;
+}
+
+    // ================= SAFETY NORMALIZATION =================
+    if (this.cityName) {
+      this.cityName = normalizeCity(this.cityName);
+    }
 
     // ================= PHONE =================
     if (this.phone) {

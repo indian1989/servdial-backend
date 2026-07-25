@@ -1,3 +1,5 @@
+import mongoose from "mongoose";
+
 import Category from "../models/Category.js";
 import slugify from "../utils/slugify.js";
 import memoryCache from "../utils/memoryCache.js";
@@ -88,31 +90,61 @@ export const getCategoryTree = async (req, res) => {
 };
 
 /* ================= GET BY SLUG ================= */
-export const getCategoryBySlug = async (req, res) => {
-  try {
-    const category = await Category.findOne({
-      slug: req.params.slug,
-    }).lean();
 
-    if (!category) {
+export const getCategoryBySlug = async(req,res)=>{
+
+  try {
+
+    const value = req.params.slug;
+
+
+    let category;
+
+
+    if(
+      mongoose.Types.ObjectId.isValid(value)
+    ){
+
+      category = await Category.findById(value);
+
+    } 
+    else {
+
+      category = await Category.findOne({
+        slug:value
+      });
+
+    }
+
+
+    if(!category){
       return res.status(404).json({
-        success: false,
-        message: "Category not found",
+        success:false,
+        message:"Category not found"
       });
     }
 
+
     res.json({
-      success: true,
-      data: category,
+      success:true,
+      data:category
     });
-  } catch (err) {
-    console.error("getCategoryBySlug:", err);
+
+
+  } catch(err){
+
+    console.error(
+      "getCategoryBySlug error",
+      err
+    );
 
     res.status(500).json({
-      success: false,
-      message: "Failed to fetch category",
+      success:false,
+      message:"Server error"
     });
+
   }
+
 };
 
 /* ================= GET CHILDREN ================= */
