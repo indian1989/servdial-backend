@@ -27,7 +27,20 @@ router.get("/", async (req, res) => {
       isDeleted: false,
       cityId: cityDoc._id,
     })
-      .select("name slug averageRating totalReviews views isFeatured featurePriority cityId")
+      .select(`
+  name
+  slug
+  averageRating
+  totalReviews
+  views
+  isFeatured
+  featurePriority
+  isVerified
+  plan
+  isTrustedPartner
+  isPremiumPartner
+  cityId
+`)
       .populate("cityId", "name slug")
       .limit(50)
       .lean();

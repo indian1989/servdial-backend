@@ -38,7 +38,6 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   ...cityFilter,
 };
 
-console.log("🔥 BASE FILTER:", baseBusinessFilter);
 
 // 👇 ADD THIS NEXT
 const testCount = await Business.countDocuments(baseBusinessFilter);
@@ -59,6 +58,9 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   isFeatured
   featurePriority
   isVerified
+    plan
+  isTrustedPartner
+  isPremiumPartner
   citySlug
   categorySlug
 `;
@@ -186,6 +188,10 @@ lat && lng
     isFeatured: 1,
     featurePriority: 1,
     isVerified: 1,
+
+     plan: 1,
+  isTrustedPartner: 1,
+  isPremiumPartner: 1,
     citySlug: 1,
     categorySlug: 1,
     cityId: 1,
@@ -215,6 +221,22 @@ lat && lng
       .limit(8)
       .lean(),
   ]);
+
+  console.log(
+  "🔥 FEATURED RAW PLAN:",
+  featuredRaw.map(b => ({
+    name: b.name,
+    plan: b.plan
+  }))
+);
+
+console.log(
+  "🔥 RECOMMENDED RAW PLAN:",
+  recommendedRaw.map(b => ({
+    name: b.name,
+    plan: b.plan
+  }))
+);
 
   // ================= RANKING =================
   const [
@@ -264,6 +286,35 @@ lat && lng
       ? Number((b.distance / 1000).toFixed(1))
       : null,
   }));
+
+  console.log("🔥 HOMEPAGE FEATURED PLAN CHECK:", 
+  rankedFeatured.map(b => ({
+    name: b.name,
+    plan: b.plan,
+    isFeatured: b.isFeatured
+  }))
+);
+
+console.log("🔥 HOMEPAGE TOP RATED PLAN CHECK:",
+  rankedTopRated.map(b => ({
+    name: b.name,
+    plan: b.plan
+  }))
+);
+
+console.log("🔥 HOMEPAGE LATEST PLAN CHECK:",
+  rankedLatest.map(b => ({
+    name: b.name,
+    plan: b.plan
+  }))
+);
+
+console.log("🔥 HOMEPAGE RECOMMENDED PLAN CHECK:",
+  rankedRecommended.map(b => ({
+    name: b.name,
+    plan: b.plan
+  }))
+);
 
   // ================= RESPONSE =================
   res.json({

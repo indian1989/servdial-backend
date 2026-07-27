@@ -276,3 +276,59 @@ export const rejectClaim = asyncHandler(async(req,res)=>{
  });
 
 });
+
+/* ======================================================
+   UPDATE BUSINESS PLAN
+====================================================== */
+
+export const updateBusinessPlan = asyncHandler(async (req, res) => {
+
+  const business = await Business.findById(req.params.id);
+
+
+  if (!business) {
+    return res.status(404).json({
+      success:false,
+      message:"Business not found"
+    });
+  }
+
+
+  const { plan } = req.body;
+
+
+  if (!["free","trusted","premium"].includes(plan)) {
+    return res.status(400).json({
+      success:false,
+      message:"Invalid plan"
+    });
+  }
+
+
+  business.plan = plan;
+
+
+  // auto sync badges
+
+  business.isTrustedPartner =
+    plan === "trusted" || plan === "premium";
+
+
+  business.isPremiumPartner =
+    plan === "premium";
+
+
+  business.updatedAt = new Date();
+
+
+  await business.save();
+
+
+  res.json({
+    success:true,
+    message:"Business plan updated",
+    data:business
+  });
+
+
+});

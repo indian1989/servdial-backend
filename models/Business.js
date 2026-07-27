@@ -43,92 +43,6 @@ slugHistory: [
   },
 ],
 
-    services:[
-  {
-    name:{
-      type:String,
-      trim:true,
-    },
-
-    description:{
-      type:String,
-      default:"",
-    }
-  }
-],
-
-pricing:[
- {
-   name:{
-     type:String,
-     trim:true,
-   },
-
-   price:{
-     type:Number,
-     default:0,
-   }
- }
-],
-
-catalog:[
- {
-   name:String,
-
-   description:{
-     type:String,
-     default:"",
-   },
-
-   price:{
-     type:Number,
-     default:0,
-   },
-
-   image:{
-     type:String,
-     default:"",
-   }
- }
-],
-
-faq:[
- {
-   question:String,
-
-   answer:String,
- }
-],
-
-offers: [
-  {
-    title: String,
-
-    description: String,
-
-    image: String,
-
-    expiryDate: Date,
-  },
-],
-
-bookingSettings: {
-  enabled: {
-    type: Boolean,
-    default: false,
-  },
-
-  type: {
-    type: String,
-    enum: [
-      "appointment",
-      "table",
-      "room",
-      "party",
-    ],
-  },
-},
-
     description: {
       type: String,
       trim: true,
@@ -230,6 +144,116 @@ countryCode:{
   index: true,
 },
 
+    // ================= CONTACT =================
+    phone: {
+      type: String,
+      required: true,
+    },
+
+    phoneVerified: {
+  type: Boolean,
+  default: false,
+},
+
+documentVerified:{
+ type:Boolean,
+ default:false
+},
+
+phoneVerifiedAt: Date,
+
+    whatsapp: String,
+    email: String,
+    website: String,
+
+    
+    services:[
+  {
+    name:{
+      type:String,
+      trim:true,
+    },
+
+    description:{
+      type:String,
+      default:"",
+    }
+  }
+],
+
+pricing:[
+ {
+   name:{
+     type:String,
+     trim:true,
+   },
+
+   price:{
+     type:Number,
+     default:0,
+   }
+ }
+],
+
+catalog:[
+ {
+   name:String,
+
+   description:{
+     type:String,
+     default:"",
+   },
+
+   price:{
+     type:Number,
+     default:0,
+   },
+
+   image:{
+     type:String,
+     default:"",
+   }
+ }
+],
+
+faq:[
+ {
+   question:String,
+
+   answer:String,
+ }
+],
+
+offers: [
+  {
+    title: String,
+
+    description: String,
+
+    image: String,
+
+    expiryDate: Date,
+  },
+],
+
+bookingSettings: {
+  enabled: {
+    type: Boolean,
+    default: false,
+  },
+
+  type: {
+    type: String,
+    enum: [
+      "appointment",
+      "table",
+      "room",
+      "party",
+    ],
+  },
+},
+
+
 menu: {
   type: [
     {
@@ -266,23 +290,6 @@ menu: {
   ],
   default: [],
 },
-
-    // ================= CONTACT =================
-    phone: {
-      type: String,
-      required: true,
-    },
-
-    phoneVerified: {
-  type: Boolean,
-  default: false,
-},
-
-phoneVerifiedAt: Date,
-
-    whatsapp: String,
-    email: String,
-    website: String,
 
     // ================= SOCIAL =================
     socialLinks: {
@@ -349,8 +356,35 @@ leadCount:{
     featurePriority: { type: Number, default: 0 },
     featuredUntil: Date,
 
-    isVerified: { type: Boolean, default: false },
+    isVerified:{
+ type:Boolean,
+ default:false,
+ index:true,
+},
 
+verificationType:{
+ type:String,
+ enum:[
+   "none",
+   "phone",
+   "document",
+   "both"
+ ],
+ default:"none"
+},
+
+verifiedAt:Date,
+
+plan: {
+  type: String,
+  enum: [
+    "free",
+    "trusted",
+    "premium"
+  ],
+  default: "free",
+    index:true,
+},
     // ================= CLAIM =================
 isClaimed: {
   type:Boolean,

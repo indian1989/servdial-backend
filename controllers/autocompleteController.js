@@ -133,11 +133,25 @@ const [trending, recent] = await Promise.all([
 }
 
   const results = await Business.find(mongoQuery)
-    .select(
-  "name category categoryId cityName citySlug averageRating reviewCount isFeatured views tags"
+.select(
+`
+name
+category
+categoryId
+cityName
+citySlug
+averageRating
+reviewCount
+isFeatured
+views
+tags
+plan
+isTrustedPartner
+isPremiumPartner
+`
 )
-    .limit(12)
-    .lean();
+.limit(12)
+.lean();
 
   const businessIds = results.map((b) => b._id);
 

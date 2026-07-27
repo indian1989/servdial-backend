@@ -11,6 +11,7 @@ import {
   toggleVerifiedBusiness,
   approveClaim,
   rejectClaim,
+  updateBusinessPlan,
 } from "../controllers/adminBusinessController.js";
 
 import {
@@ -56,6 +57,7 @@ router.put("/:id/approve", approveBusiness);
 router.put("/:id/reject", rejectBusiness);
 router.put("/:id/feature", toggleFeatured);
 router.put("/:id/verify", toggleVerifiedBusiness);
+router.put("/:id/plan", updateBusinessPlan);
 router.patch("/:id/approve-claim", approveClaim);
 
 router.patch("/:id/reject-claim", rejectClaim);
