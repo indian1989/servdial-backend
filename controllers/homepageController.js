@@ -59,6 +59,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   featurePriority
   isVerified
     plan
+  businessHours
   isTrustedPartner
   isPremiumPartner
   citySlug
@@ -178,6 +179,8 @@ lat && lng
     slug: 1,
     logo: 1,
     images: 1,
+    businessHours:1,
+    
     averageRating: 1,
     totalReviews: 1,
     views: 1,
@@ -295,21 +298,16 @@ console.log(
   }))
 );
 
-console.log("🔥 HOMEPAGE TOP RATED PLAN CHECK:",
-  rankedTopRated.map(b => ({
+console.log(
+  "🔥 PROD FINAL FEATURED:",
+  rankedFeatured.map(b => ({
     name: b.name,
     plan: b.plan
   }))
 );
 
-console.log("🔥 HOMEPAGE LATEST PLAN CHECK:",
-  rankedLatest.map(b => ({
-    name: b.name,
-    plan: b.plan
-  }))
-);
-
-console.log("🔥 HOMEPAGE RECOMMENDED PLAN CHECK:",
+console.log(
+  "🔥 PROD FINAL RECOMMENDED:",
   rankedRecommended.map(b => ({
     name: b.name,
     plan: b.plan
