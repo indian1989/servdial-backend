@@ -1,3 +1,5 @@
+// backend/utils/getDistance.js
+
 export const getDistanceInKm = (lat1, lng1, lat2, lng2) => {
   const R = 6371; // Earth radius in km
 

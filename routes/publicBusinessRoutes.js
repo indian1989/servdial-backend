@@ -1,5 +1,4 @@
 // backend/routes/publicBusinessRoutes.js
-
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
 
@@ -74,6 +73,10 @@ router.post(
 ========================= */
 router.get(
   "/",
+  (req,res,next)=>{
+    console.log("🔥 GET /businesses ROUTE HIT");
+    next();
+  },
   getBusinesses
 );
 

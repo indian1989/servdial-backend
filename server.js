@@ -8,6 +8,19 @@ dotenv.config();
 
 const app = express();
 
+// DEBUG LOGGER
+app.use((req,res,next)=>{
+
+ console.log(
+   "🔥 REQUEST:",
+   req.method,
+   req.originalUrl
+ );
+
+ next();
+
+});
+
 // ================= CORE CONFIG =================
 app.set("etag", false);
 
@@ -65,8 +78,20 @@ import healthRoutes from "./routes/health.js";
 
 import adminRoutes from "./routes/adminRoutes.js";
 
-console.log("ENV FILE TEST:", process.env.MONGO_URI);
+console.log("🔥 SERVER FILE LOADED");
 
+// ================= DEBUG REQUEST LOGGER =================
+app.use((req, res, next) => {
+
+  console.log(
+    "🔥 REQUEST:",
+    req.method,
+    req.originalUrl
+  );
+
+  next();
+
+});
 // ================= ROOT =================
 app.get("/api", (req, res) => {
   res.json({ message: "🚀 ServDial API Running" });
@@ -78,6 +103,7 @@ app.use("/api/user", userRoutes);
 
 // ================= BUSINESS =================
 app.use("/api/businesses", publicBusinessRoutes);
+console.log("🔥 PUBLIC BUSINESS ROUTE LOADED");
 app.use("/api/admin/businesses", adminBusinessRoutes);
 
 // ================= ADMIN =================

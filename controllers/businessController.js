@@ -292,18 +292,47 @@ export const updateBusinessHours = asyncHandler(async (req, res) => {
    GET BUSINESSES (BASE)
 ========================= */
 
-export const getBusinesses = asyncHandler(async (req, res) => {
-  const businesses = await Business.find()
-    .populate("cityId", "name slug latitude longitude")
-    .populate(
-  "categoryId",
-  "name slug uiType features"
-)
+export const getBusinesses = asyncHandler(async (req,res)=>{
 
-  res.json({
-    success: true,
-    data: businesses,
-  });
+  console.log(
+    "🔥🔥🔥 GET BUSINESSES CONTROLLER HIT 🔥🔥🔥"
+  );
+
+ const businesses = await Business.find()
+   .populate("cityId","name slug latitude longitude")
+   .populate(
+      "categoryId",
+      "name slug uiType features"
+   );
+
+
+console.log(
+ "🔥 TOTAL BUSINESSES:",
+ businesses.length
+);
+
+
+console.log(
+ "🔥 FIRST BUSINESS:",
+ JSON.stringify(
+   businesses[0],
+   null,
+   2
+ )
+);
+
+
+console.log(
+ "🔥 FIRST LOCATION:",
+ businesses[0]?.location
+);
+
+
+res.json({
+ success:true,
+ data:businesses
+ });
+
 });
 
 /* =========================
