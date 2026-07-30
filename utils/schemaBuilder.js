@@ -10,6 +10,21 @@ const titleCase = (str = "") =>
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
+const buildAddress = (address = {}) => {
+  if (!address) return "";
+
+  // Old string compatibility
+  if (typeof address === "string") return address;
+
+  return [
+    address.street,
+    address.area,
+    address.landmark,
+  ]
+    .filter(Boolean)
+    .join(", ");
+};
+
 /* =================================================
    DYNAMIC CATEGORY → SCHEMA TYPE
 ================================================= */
@@ -52,7 +67,7 @@ const resolveSchemaType = (category = "") => {
     return "Store";
   }
 
-  // Default for all current & future categories
+  // Default
   return "LocalBusiness";
 };
 
@@ -61,41 +76,55 @@ const resolveSchemaType = (category = "") => {
 ================================================= */
 
 export const generateLocalBusinessSchema = (business = {}) => {
-  const type = resolveSchemaType(
+  const category =
     business.categoryName ||
-      business.categorySlug ||
-      business.categoryId?.name ||
-      ""
-  );
+    business.categorySlug ||
+    business.categoryId?.name ||
+    "Business";
 
-  const latitude = business.location?.coordinates?.[1];
-  const longitude = business.location?.coordinates?.[0];
+  const type = resolveSchemaType(category);
 
   const cityName =
     business.cityName ||
     business.cityId?.name ||
     "";
 
+  const latitude = business.location?.coordinates?.[1];
+  const longitude = business.location?.coordinates?.[0];
+
+  const businessUrl =
+    business.url ||
+    `https://servdial.com/${business.citySlug}/${business.categorySlug}/${business.slug}`;
+
+  const addressText = buildAddress(business.address);
+
   const schema = {
     "@context": "https://schema.org",
     "@type": type,
 
+    "@id": businessUrl,
+
     name: business.name,
 
-    url: `https://servdial.com/${business.citySlug}/${business.categorySlug}/${business.slug}`,
-
-    telephone: business.phone || undefined,
+    url: businessUrl,
 
     image:
-      business.images?.length > 0
+      business.image ||
+      (business.images?.length > 0
         ? business.images
         : business.logo
         ? [business.logo]
-        : undefined,
+        : ["https://servdial.com/logo.png"]),
+
+    telephone: business.phone || undefined,
+
+    description:
+      business.descriptionSEO ||
+      `${business.name} is a trusted ${category} in ${cityName}. Find address, phone number, reviews, photos and services on ServDial.`,
 
     address: {
       "@type": "PostalAddress",
-      streetAddress: business.address || undefined,
+      streetAddress: addressText || undefined,
       addressLocality: titleCase(cityName),
       addressRegion: titleCase(business.state || ""),
       postalCode: business.pincode || undefined,
@@ -127,7 +156,7 @@ export const generateLocalBusinessSchema = (business = {}) => {
 
     openingHoursSpecification: business.businessHours
       ? Object.entries(business.businessHours)
-          .filter(([_, v]) => v?.open && v?.close)
+          .filter(([_, v]) => v?.open && v?.close && !v?.closed)
           .map(([day, v]) => ({
             "@type": "OpeningHoursSpecification",
             dayOfWeek: `https://schema.org/${titleCase(day)}`,
@@ -137,11 +166,18 @@ export const generateLocalBusinessSchema = (business = {}) => {
       : undefined,
 
     priceRange:
-      business.plan === "premium"
+      business.priceRange ||
+      (business.plan === "premium"
         ? "₹₹₹"
         : business.plan === "trusted"
         ? "₹₹"
-        : "₹",
+        : "₹"),
+
+    areaServed: titleCase(cityName),
+
+    currenciesAccepted: "INR",
+
+    paymentAccepted: "Cash, UPI, Card",
 
     sameAs: [business.website].filter(Boolean),
   };
