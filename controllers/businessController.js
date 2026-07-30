@@ -47,6 +47,7 @@ const generateBusinessSlug = async (name) => {
 ========================= */
 
 export const createBusiness = asyncHandler(async (req, res) => {
+
   const {
     name,
     categoryId,
@@ -61,249 +62,405 @@ export const createBusiness = asyncHandler(async (req, res) => {
     logo,
     images,
     businessHours,
+    district,
+    state,
   } = req.body;
+
 
   /* ================= VALIDATION ================= */
 
   try {
-  requireField(name, "Business name");
-  requireField(categoryId, "Category");
-  requireField(cityId, "City");
-  requireField(pincode, "Pincode");
-  requireField(phone, "Phone");
-} catch (err) {
-  return res.status(400).json({
-    success: false,
-    message: err.message,
-  });
-}
+
+    requireField(name, "Business name");
+    requireField(categoryId, "Category");
+    requireField(cityId, "City");
+    requireField(pincode, "Pincode");
+    requireField(phone, "Phone");
+
+  } catch (err) {
+
+    return res.status(400).json({
+      success:false,
+      message:err.message,
+    });
+
+  }
+
 
   if (!isValidObjectId(categoryId)) {
     return res.status(400).json({
-  success: false,
-  message: "Invalid categoryId",
-});
+      success:false,
+      message:"Invalid categoryId",
+    });
   }
+
 
   if (!isValidObjectId(cityId)) {
     return res.status(400).json({
-  success: false,
-  message: "Invalid cityId",
-});
+      success:false,
+      message:"Invalid cityId",
+    });
   }
 
-  const cleanPincode = String(pincode).replace(/\D/g, "");
 
-if (cleanPincode.length !== 6) {
-  return res.status(400).json({
-    success: false,
-    message: "Pincode must be 6 digits",
-  });
-}
 
-  const cleanPhone = String(phone).replace(/\D/g, "");
-  if (cleanPhone.length !== 10) {
+  const cleanPincode =
+    String(pincode).replace(/\D/g,"");
+
+
+  if(cleanPincode.length !== 6){
+
     return res.status(400).json({
-  success: false,
-  message: "Phone must be 10 digits",
-});
+      success:false,
+      message:"Pincode must be 6 digits",
+    });
+
   }
+
+
+
+  const cleanPhone =
+    String(phone).replace(/\D/g,"");
+
+
+  if(cleanPhone.length !== 10){
+
+    return res.status(400).json({
+      success:false,
+      message:"Phone must be 10 digits",
+    });
+
+  }
+
+
 
   /* ================= RESOLVE CITY ================= */
 
   const city = await City.findById(cityId);
-  if (!city) {
+
+
+  if(!city){
+
     return res.status(404).json({
-  success: false,
-  message: "City not found",
-});
+      success:false,
+      message:"City not found",
+    });
+
   }
+
+
 
   /* ================= RESOLVE CATEGORY ================= */
 
-  const category = await Category.findById(categoryId);
-  if (!category) {
+  const category =
+    await Category.findById(categoryId);
+
+
+
+  if(!category){
+
     return res.status(404).json({
-  success: false,
-  message: "Category not found",
-});
+      success:false,
+      message:"Category not found",
+    });
+
   }
 
-  /* ================= LOCATION SAFETY ================= */
 
-let safeLocation = null;
 
-if (
-  location &&
-  location.type === "Point" &&
-  Array.isArray(location.coordinates) &&
-  location.coordinates.length === 2
-) {
-  const lng = Number(location.coordinates[0]);
-  const lat = Number(location.coordinates[1]);
 
-  // ✅ strict NaN + range validation
-  if (
-    !isNaN(lat) &&
-    !isNaN(lng) &&
-    lat >= -90 &&
-    lat <= 90 &&
-    lng >= -180 &&
-    lng <= 180
-  ) {
-    safeLocation = {
-      type: "Point",
-      coordinates: [lng, lat],
-    };
+  /* ================= ADDRESS NORMALIZE ================= */
+
+
+  const safeAddress = {
+
+    street:
+      address?.street?.trim() || "",
+
+    area:
+      address?.area?.trim() || "",
+
+    landmark:
+      address?.landmark?.trim() || "",
+
+  };
+
+
+
+  // Full address for geocoding
+
+  const fullAddress = [
+
+    safeAddress.street,
+    safeAddress.landmark,
+    safeAddress.area,
+    city.name,
+    district,
+    state,
+    cleanPincode
+
+  ]
+  .filter(Boolean)
+  .join(", ");
+
+
+
+
+
+  /* ================= LOCATION ================= */
+
+
+  let safeLocation = null;
+
+
+  if(
+    location &&
+    location.type === "Point" &&
+    Array.isArray(location.coordinates) &&
+    location.coordinates.length === 2
+  ){
+
+    const lng =
+      Number(location.coordinates[0]);
+
+    const lat =
+      Number(location.coordinates[1]);
+
+
+    if(
+      !isNaN(lat) &&
+      !isNaN(lng) &&
+      lat >= -90 &&
+      lat <=90 &&
+      lng >=-180 &&
+      lng<=180
+    ){
+
+      safeLocation={
+        type:"Point",
+        coordinates:[
+          lng,
+          lat
+        ],
+      };
+
+    }
+
   }
-}
 
-/* ===== FALLBACK TO CITY ===== */
-if (!safeLocation) {
-  const cityLat = Number(city.latitude);
-  const cityLng = Number(city.longitude);
 
-  if (
-    !isNaN(cityLat) &&
-    !isNaN(cityLng) &&
-    cityLat >= -90 &&
-    cityLat <= 90 &&
-    cityLng >= -180 &&
-    cityLng <= 180
-  ) {
-    safeLocation = {
-      type: "Point",
-      coordinates: [cityLng, cityLat],
-    };
+
+
+  // fallback city location
+
+  if(!safeLocation){
+
+    const cityLat =
+      Number(city.latitude);
+
+    const cityLng =
+      Number(city.longitude);
+
+
+
+    if(
+      !isNaN(cityLat) &&
+      !isNaN(cityLng)
+    ){
+
+      safeLocation={
+        type:"Point",
+        coordinates:[
+          cityLng,
+          cityLat
+        ],
+      };
+
+    }
+
   }
-}
 
-/* ===== FINAL VALIDATION ===== */
-if (!safeLocation) {
-  return res.status(400).json({
-    success: false,
-    message: "Valid location required",
+
+
+  if(!safeLocation){
+
+    return res.status(400).json({
+      success:false,
+      message:"Valid location required",
+    });
+
+  }
+
+
+
+
+  /* ================= CREATE ================= */
+
+
+  const slug =
+    await generateBusinessSlug(name);
+
+
+
+  const status =
+    req.user?.role === "admin" ||
+    req.user?.role === "superadmin"
+      ? "approved"
+      : "pending";
+
+
+
+
+
+  /* ================= GEOCODE ================= */
+
+
+  const addressLocation =
+    await geocodeAddress({
+
+      address: fullAddress,
+
+      city: city.name,
+
+      district,
+
+      state,
+
+      pincode: cleanPincode,
+
+    });
+
+
+
+
+
+  const business =
+    await Business.create({
+
+
+      name:name.trim(),
+
+
+      categoryId,
+
+      cityId,
+
+
+      cityName:
+        city.name.toLowerCase(),
+
+
+      citySlug:
+        city.slug,
+
+
+      categorySlug:
+        category.slug,
+
+
+      slug,
+
+
+
+      // 🔥 NEW ADDRESS OBJECT
+
+      address:safeAddress,
+
+
+
+      district:
+        district || city.district || "",
+
+
+      state:
+        state || city.state || "",
+
+
+      pincode:
+        cleanPincode,
+
+
+
+      phone:
+        cleanPhone,
+
+
+      whatsapp:
+        whatsapp || "",
+
+
+      website:
+        website || "",
+
+
+      description:
+        description || "",
+
+
+
+      location:
+        addressLocation?.location ||
+        safeLocation,
+
+
+
+      logo:
+        logo || "",
+
+
+      images:
+        Array.isArray(images)
+          ? images
+          : [],
+
+
+
+      businessHours:
+        normalizeBusinessHours(
+          businessHours || {}
+        ),
+
+
+
+      status,
+
+
+    });
+
+
+
+
+
+  const populatedBusiness =
+    await Business.findById(
+      business._id
+    )
+
+    .populate(
+      "cityId",
+      "name slug"
+    )
+
+    .populate(
+      "categoryId",
+      "name slug uiType features"
+    );
+
+
+
+  await pingGoogleSitemap();
+
+
+
+  res.status(201).json({
+
+    success:true,
+
+    data:populatedBusiness,
+
   });
-}
-
-  /* ================= BUSINESS CREATION ================= */
-
-// ✅ generate slug
-const slug = await generateBusinessSlug(name);
 
 
-// ✅ role-based status
-const status =
-  req.user?.role === "admin" || req.user?.role === "superadmin"
-    ? "approved"
-    : "pending";
-
-
-// ✅ BUSINESS ADDRESS GEOCODE
-const addressLocation = await geocodeAddress({
-
-  address,
-
-  city: city.name,
-
-  district,
-
-  state,
-
-  pincode: cleanPincode,
-
-});
-
-
-// ✅ create business
-const business = await Business.create({
-
-  name: name.trim(),
-
-
-  categoryId,
-
-  cityId,
-
-
-  citySlug: city.slug,
-
-  categorySlug: category.slug,
-
-
-  slug,
-
-
-  address:
-    address?.trim() || "",
-
-
-  pincode:
-    cleanPincode,
-
-
-  phone:
-    cleanPhone,
-
-
-  whatsapp:
-    whatsapp || "",
-
-
-  website:
-    website || "",
-
-
-  description:
-    description || "",
-
-
-
-  // 🔥 FULL ADDRESS BASED LOCATION
-  location:
-    addressLocation?.location ||
-    safeLocation,
-
-
-
-  logo:
-    logo || "",
-
-
-  images:
-    Array.isArray(images)
-      ? images
-      : [],
-
-
-
-  businessHours:
-    normalizeBusinessHours(
-      businessHours || {}
-    ),
-
-
-
-  status,
-
-});
-
-// ✅ response
-const populatedBusiness = await Business.findById(
-  business._id
-)
-  .populate("cityId", "name slug")
-  .populate(
-  "categoryId",
-  "name slug uiType features"
-)
-
-await pingGoogleSitemap();
-
-res.status(201).json({
-  success: true,
-  data: populatedBusiness,
-});
 });
 
 /* =========================================================
@@ -483,27 +640,43 @@ await business.save();
 ========================= */
 
 export const updateBusiness = asyncHandler(async (req, res) => {
+
   const { id } = req.params;
+
 
   if (!isValidObjectId(id)) {
     return res.status(400).json({
-      success: false,
-      message: "Invalid business id",
+      success:false,
+      message:"Invalid business id",
     });
   }
 
-  const business = await Business.findById(id);
+
+  const business =
+    await Business.findById(id);
+
 
   if (!business) {
     return res.status(404).json({
-      success: false,
-      message: "Business not found",
+      success:false,
+      message:"Business not found",
     });
   }
 
-  const updates = { ...req.body };
 
-  console.log("🔥 UPDATE BODY:", req.body);
+
+  const updates = {
+    ...req.body
+  };
+
+
+  console.log(
+    "🔥 UPDATE BODY:",
+    req.body
+  );
+
+
+
   /* ================= HARD PROTECTION ================= */
 
   delete updates.slug;
@@ -511,111 +684,378 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   delete updates.categorySlug;
   delete updates.status;
 
+
+
+
+  /* ================= ADDRESS NORMALIZE ================= */
+
+
+  if(updates.address){
+
+    // New format
+
+    if(typeof updates.address === "object"){
+
+      updates.address = {
+
+        street:
+          updates.address.street?.trim() || "",
+
+        area:
+          updates.address.area?.trim() || "",
+
+        landmark:
+          updates.address.landmark?.trim() || "",
+
+      };
+
+    }
+
+
+    // Old format support
+
+    else if(typeof updates.address === "string"){
+
+      updates.address = {
+
+        street:
+          updates.address.trim(),
+
+        area:"",
+        landmark:"",
+
+      };
+
+    }
+
+  }
+
+
+
+
   /* ================= PINCODE ================= */
 
-  if (updates.pincode) {
-    updates.pincode = String(updates.pincode)
-      .replace(/\D/g, "");
 
-    if (updates.pincode.length !== 6) {
+  if(updates.pincode){
+
+    updates.pincode =
+      String(updates.pincode)
+      .replace(/\D/g,"");
+
+
+    if(updates.pincode.length !== 6){
+
       return res.status(400).json({
-        success: false,
-        message: "Invalid pincode",
+
+        success:false,
+
+        message:"Invalid pincode",
+
       });
+
     }
+
   }
+
+
+
+
 
   /* ================= PHONE ================= */
 
-  if (updates.phone) {
-    updates.phone = String(updates.phone)
-      .replace(/\D/g, "");
 
-    if (updates.phone.length !== 10) {
+  if(updates.phone){
+
+    updates.phone =
+      String(updates.phone)
+      .replace(/\D/g,"");
+
+
+    if(updates.phone.length !==10){
+
       return res.status(400).json({
-        success: false,
-        message: "Invalid phone number",
+
+        success:false,
+
+        message:"Invalid phone number",
+
       });
+
     }
+
   }
+
+
+
+
+
+
 
   /* ================= CITY RESOLVE ================= */
 
-  if (updates.cityId) {
-    if (!isValidObjectId(updates.cityId)) {
+
+  let city = null;
+
+
+  if(updates.cityId){
+
+
+    if(!isValidObjectId(updates.cityId)){
+
       return res.status(400).json({
-        success: false,
-        message: "Invalid cityId",
+
+        success:false,
+
+        message:"Invalid cityId",
+
       });
+
     }
 
-    const city = await City.findById(updates.cityId);
 
-    if (!city) {
+
+    city =
+      await City.findById(
+        updates.cityId
+      );
+
+
+    if(!city){
+
       return res.status(404).json({
-        success: false,
-        message: "City not found",
+
+        success:false,
+
+        message:"City not found",
+
       });
+
     }
 
-    updates.citySlug = city.slug;
+
+    updates.citySlug =
+      city.slug;
+
+
+    updates.cityName =
+      city.name.toLowerCase();
+
   }
+
+  else {
+
+    city =
+      await City.findById(
+        business.cityId
+      );
+
+  }
+
+
+
+
+
+
 
   /* ================= CATEGORY RESOLVE ================= */
 
-  if (updates.categoryId) {
-    if (!isValidObjectId(updates.categoryId)) {
+
+  if(updates.categoryId){
+
+
+    if(!isValidObjectId(updates.categoryId)){
+
       return res.status(400).json({
-        success: false,
-        message: "Invalid categoryId",
+
+        success:false,
+
+        message:"Invalid categoryId",
+
       });
+
     }
 
-    const category = await Category.findById(
-      updates.categoryId
-    );
 
-    if (!category) {
+
+    const category =
+      await Category.findById(
+        updates.categoryId
+      );
+
+
+
+    if(!category){
+
       return res.status(404).json({
-        success: false,
-        message: "Category not found",
+
+        success:false,
+
+        message:"Category not found",
+
       });
+
     }
 
-    updates.categorySlug = category.slug;
+
+    updates.categorySlug =
+      category.slug;
+
   }
 
-  /* ================= HOURS NORMALIZATION ================= */
 
-  if (updates.businessHours) {
+
+
+
+
+  /* ================= HOURS ================= */
+
+
+  if(updates.businessHours){
+
     updates.businessHours =
       normalizeBusinessHours(
         updates.businessHours
       );
+
   }
+
+
+
+
+
+
+  /* ================= GEO UPDATE ================= */
+
+
+  const addressChanged =
+    updates.address ||
+    updates.cityId ||
+    updates.district ||
+    updates.state ||
+    updates.pincode;
+
+
+
+  if(addressChanged){
+
+
+    const finalAddress =
+      updates.address ||
+      business.address;
+
+
+
+    const fullAddress = [
+
+      finalAddress?.street,
+
+      finalAddress?.landmark,
+
+      finalAddress?.area,
+
+      city?.name ||
+      business.cityName,
+
+      updates.district ||
+      business.district,
+
+      updates.state ||
+      business.state,
+
+      updates.pincode ||
+      business.pincode
+
+    ]
+    .filter(Boolean)
+    .join(", ");
+
+
+
+
+    const addressLocation =
+      await geocodeAddress({
+
+        address:fullAddress,
+
+        city:
+          city?.name ||
+          business.cityName,
+
+        district:
+          updates.district ||
+          business.district,
+
+        state:
+          updates.state ||
+          business.state,
+
+        pincode:
+          updates.pincode ||
+          business.pincode,
+
+      });
+
+
+
+    if(addressLocation?.location){
+
+      updates.location =
+        addressLocation.location;
+
+    }
+
+  }
+
+
+
+
+
+
 
   /* ================= UPDATE ================= */
 
-  const updated = await Business.findByIdAndUpdate(
-  id,
-  updates,
-  {
-    new: true,
-    runValidators: true,
-  }
-)
-  .populate("cityId", "name slug")
-  .populate(
-  "categoryId",
-  "name slug uiType features"
-)
 
-await pingGoogleSitemap();
+  const updated =
+    await Business.findByIdAndUpdate(
 
-res.json({
-  success: true,
-  data: updated,
-});
+      id,
+
+      updates,
+
+      {
+        new:true,
+        runValidators:true,
+      }
+
+    )
+
+    .populate(
+      "cityId",
+      "name slug"
+    )
+
+    .populate(
+      "categoryId",
+      "name slug uiType features"
+    );
+
+
+
+
+
+  await pingGoogleSitemap();
+
+
+
+  res.json({
+
+    success:true,
+
+    data:updated,
+
+  });
+
+
 });
 
 /* =========================

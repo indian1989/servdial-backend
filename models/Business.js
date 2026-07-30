@@ -84,7 +84,25 @@ intentTags: [
 ],
 
     // ================= LOCATION =================
-    address: String,
+address: {
+  street: {
+    type: String,
+    trim: true,
+    default: ""
+  },
+
+  area: {
+    type: String,
+    trim: true,
+    default: ""
+  },
+
+  landmark: {
+    type: String,
+    trim: true,
+    default: ""
+  }
+},
 
 cityId: {
   type: mongoose.Schema.Types.ObjectId,
@@ -108,6 +126,8 @@ citySlug: {
 
 district: String,
 state: String,
+pincode: String,
+
 country:{
  type:String,
  default:"India",
@@ -118,7 +138,7 @@ countryCode:{
  type:String,
  default:"IN"
 },
-    pincode: String,
+    
 
     location: {
       type: {
