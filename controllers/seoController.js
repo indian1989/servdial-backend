@@ -1,176 +1,603 @@
 import City from "../models/City.js";
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
-import { getCache, setCache } from "../utils/memoryCache.js";
-import { rankBusinesses } from "../services/ranking/unifiedRankingEngine.js";
+
+import {
+  getCache,
+  setCache,
+} from "../utils/memoryCache.js";
+
+import {
+  rankBusinesses,
+} from "../services/ranking/unifiedRankingEngine.js";
+
 
 const baseUrl = "https://servdial.com";
 
-/* ===================== CITY + CATEGORY PAGE BUILDER ===================== */
 
-export const generateCityCategoryPages = async (req, res) => {
-  try {
-    const cities = await City.find({ status: "active" })
-      .select("slug name")
-      .lean();
 
-    const categories = await Category.find({ status: "active" })
-      .select("slug name parentCategory")
-      .lean();
+const titleCase = (text = "") =>
+  text
+    .toString()
+    .trim()
+    .replace(/\b\w/g, c => c.toUpperCase());
 
-    // ONLY LEAF CATEGORIES (SAFE FIX)
-    const leafCategories = categories.filter(
-      (cat) => !cat.parentCategory
-    );
 
-    const pages = [];
 
-    for (const city of cities) {
-      for (const cat of leafCategories) {
-        pages.push({
-          city: city.slug,
-          category: cat.slug,
-          url: `${baseUrl}/${city.slug}/${cat.slug}`,
-          title: `${cat.name} in ${city.name} | ServDial`,
-        });
-      }
-    }
+/*
+=================================================
+ GENERATE ALL CITY CATEGORY SEO URLS
+=================================================
+*/
 
-    return res.json({
-      success: true,
-      data: pages,
-      meta: {
-        total: pages.length,
-      },
-    });
+export const generateCityCategoryPages = async (req,res)=>{
 
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: "Error generating SEO pages",
-    });
-  }
+try{
+
+
+const cities =
+await City.find({
+ status:"active"
+})
+.select(
+ "slug name district state"
+)
+.lean();
+
+
+
+const categories =
+await Category.find({
+ status:"active"
+})
+.select(
+ "slug name parentCategory"
+)
+.lean();
+
+
+
+// leaf + parent both supported
+
+const pages=[];
+
+
+
+for(const city of cities){
+
+
+for(const category of categories){
+
+
+pages.push({
+
+citySlug:
+city.slug,
+
+
+categorySlug:
+category.slug,
+
+
+url:
+`${baseUrl}/${city.slug}/${category.slug}`,
+
+
+title:
+`${category.name} in ${city.name}, ${city.district || ""} | ServDial`,
+
+
+description:
+`Find verified ${category.name} services in ${city.name}, ${city.state || ""}. Compare ratings, reviews, contact details and trusted businesses on ServDial.`
+
+
+});
+
+
+}
+
+
+}
+
+
+
+return res.json({
+
+success:true,
+
+data:pages,
+
+meta:{
+ total:pages.length
+}
+
+});
+
+
+
+}
+catch(error){
+
+
+console.error(
+"SEO PAGE GENERATION ERROR:",
+error
+);
+
+
+return res.status(500).json({
+
+success:false,
+
+message:
+"Error generating SEO pages"
+
+});
+
+
+}
+
 };
 
-/* ===================== CITY + CATEGORY PAGE ===================== */
 
-export const getCityCategoryPage = async (req, res) => {
-  try {
-    const { citySlug, categorySlug } = req.params;
 
-    /* ================= CITY ================= */
-    let city = getCache(`city:slug:${citySlug}`);
 
-    if (!city) {
-      city = await City.findOne({
-        $or: [
-          { slug: citySlug },
-          { "slugHistory.slug": citySlug }
-        ]
-      }).lean();
 
-      if (!city) {
-        return res.status(404).json({
-          success: false,
-          message: "City not found",
-        });
-      }
+/*
+=================================================
+ CITY + CATEGORY SEO PAGE
+=================================================
+*/
 
-      setCache(`city:slug:${citySlug}`, city, 60 * 60 * 6);
-    }
 
-    /* ================= CATEGORY ================= */
-    let category = getCache(`category:slug:${categorySlug}`);
+export const getCityCategoryPage = async(req,res)=>{
 
-    if (!category) {
-      category = await Category.findOne({
-        $or: [
-          { slug: categorySlug },
-          { "slugHistory.slug": categorySlug }
-        ]
-      }).lean();
+console.log(
+  "🔥 SEO CITY CATEGORY API HIT",
+  req.params
+);
 
-      if (!category) {
-        return res.json({
-          success: true,
-          data: [],
-          meta: {
-            message: "Category not found",
-          },
-        });
-      }
+try{
 
-      setCache(`category:slug:${categorySlug}`, category, 60 * 60 * 6);
-    }
 
-    /* ================= CATEGORY IDS (FIXED LOGIC) ================= */
+const {
+citySlug,
+categorySlug
+}=req.params;
 
-    let categoryIds = [];
 
-    // If parent category → include ALL children + itself
-    if (!category.parentCategory) {
-      const children = await Category.find({
-        $or: [
-          { parentCategory: category._id },
-          { _id: category._id }
-        ]
-      })
-        .select("_id")
-        .lean();
 
-      categoryIds = children.map((c) => c._id);
-    } else {
-      categoryIds = [category._id];
-    }
 
-    /* ================= BUSINESSES ================= */
+/*
+==============================
+ CITY
+==============================
+*/
 
-    const businesses = await Business.find({
-      cityId: city._id,
-      categoryId: { $in: categoryIds },
-      status: "approved",
-    })
-      .select("name slug averageRating location images views clicks")
-      .lean();
 
-    if (!businesses.length) {
-      return res.json({
-        success: true,
-        data: [],
-        meta: {
-          message: "No businesses found",
-          city: city.slug,
-          category: category.slug,
-        },
-      });
-    }
+let city =
+getCache(
+`city:slug:${citySlug}`
+);
 
-    /* ================= RANKING ================= */
 
-   const ranked = rankBusinesses(businesses, {
-      userLocation: null,
-      userPreferences: null,
-      searchIntent: null,
-      timeOfDay: new Date().getHours(),
-    });
 
-    return res.json({
-      success: true,
-      data: ranked,
-      meta: {
-        total: ranked.length,
-        city: city.slug,
-        category: category.slug,
-      },
-    });
+if(!city){
 
-  } catch (error) {
-    console.error(error);
 
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
+city =
+await City.findOne({
+
+status:"active",
+
+$or:[
+{
+slug:citySlug
+},
+{
+"slugHistory.slug":citySlug
+}
+
+]
+
+})
+.lean();
+
+
+if(!city){
+
+return res.status(404).json({
+
+success:false,
+
+message:
+"City not found"
+
+});
+
+}
+
+
+
+setCache(
+
+`city:slug:${citySlug}`,
+
+city,
+
+60*60*6
+
+);
+
+
+}
+
+
+
+
+
+/*
+==============================
+ CATEGORY
+==============================
+*/
+
+
+let category =
+getCache(
+`category:slug:${categorySlug}`
+);
+
+
+
+if(!category){
+
+
+category =
+await Category.findOne({
+
+status:"active",
+
+$or:[
+
+{
+slug:categorySlug
+},
+
+{
+"slugHistory.slug":categorySlug
+}
+
+]
+
+})
+
+.lean();
+
+
+
+if(!category){
+
+return res.status(404).json({
+
+success:false,
+
+message:
+"Category not found"
+
+});
+
+}
+
+
+
+setCache(
+
+`category:slug:${categorySlug}`,
+
+category,
+
+60*60*6
+
+);
+
+
+
+}
+
+
+
+
+/*
+==============================
+ CATEGORY TREE SUPPORT
+==============================
+*/
+
+
+let categoryIds = [];
+let subCategories = [];
+
+// MAIN CATEGORY
+if (!category.parentCategory) {
+
+  subCategories = await Category.find({
+    parentCategory: category._id,
+    status:"active"
+  })
+  .select("name slug")
+  .lean();
+
+
+  categoryIds = [
+    category._id,
+    ...subCategories.map(
+      c=>c._id
+    )
+  ];
+
+}
+else {
+
+  categoryIds=[
+    category._id
+  ];
+
+}
+
+const page =
+Number(req.query.page) || 1;
+
+const limit =
+Number(req.query.limit) || 20;
+
+const skip =
+(page - 1) * limit;
+
+/*
+==============================
+ BUSINESSES
+==============================
+*/
+
+console.log(
+  "CITY ID:",
+  city._id
+);
+
+console.log(
+  "CATEGORY IDS:",
+  categoryIds
+);
+
+console.log(
+  "CATEGORY:",
+  category.name
+);
+
+const businesses =
+
+await Business.find({
+
+cityId:
+city._id,
+
+
+categoryId:
+{
+$in:
+categoryIds
+},
+
+
+status:
+"approved"
+
+
+})
+
+
+.select(
+`
+_id
+name
+slug
+description
+logo
+images
+phone
+whatsapp
+website
+address
+
+cityId
+citySlug
+cityName
+
+categoryId
+categorySlug
+categoryName
+
+district
+state
+pincode
+
+averageRating
+totalReviews
+
+location
+businessHours
+
+views
+clicks
+`
+)
+
+.populate("categoryId", "name slug")
+
+.lean();
+
+console.log(
+  "FOUND BUSINESSES:",
+  businesses.length
+);
+
+
+
+
+/*
+==============================
+ RANKING
+==============================
+*/
+
+
+const ranked =
+
+rankBusinesses(
+
+businesses,
+
+{
+
+userLocation:null,
+
+userPreferences:null,
+
+searchIntent:null,
+
+timeOfDay:
+new Date().getHours()
+
+}
+
+);
+
+
+
+
+
+/*
+==============================
+ SEO DATA
+==============================
+*/
+
+
+const locationText =
+
+[
+city.name,
+city.district,
+city.state
+
+]
+.filter(Boolean)
+.join(", ");
+
+
+
+
+const seo={
+
+
+title:
+
+`${category.name} in ${locationText} | Best Verified Services - ServDial`,
+
+
+
+description:
+
+`Find verified ${category.name} services in ${locationText}. View ratings, reviews, contact numbers, photos and trusted businesses on ServDial.`,
+
+
+
+canonical:
+
+`${baseUrl}/${city.slug}/${category.slug}`
+
+
+};
+
+
+
+
+
+
+return res.json({
+
+
+success:true,
+
+
+data:ranked,
+
+
+subCategories,
+
+seo,
+
+city:{
+
+name:city.name,
+slug:city.slug,
+district:city.district,
+state:city.state
+
+},
+
+
+category:{
+
+name:category.name,
+slug:category.slug,
+isParent:
+!category.parentCategory
+
+},
+
+
+
+meta:{
+
+total: ranked.length,
+
+page,
+
+limit,
+
+hasMore:
+ranked.length === limit
+
+}
+
+
+
+});
+}
+catch(error){
+
+
+console.error(
+"SEO CONTROLLER ERROR:",
+error
+);
+
+
+
+return res.status(500).json({
+
+success:false,
+
+message:
+"Server error"
+
+});
+
+
+}
+
+
+
 };

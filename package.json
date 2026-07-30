@@ -5,9 +5,10 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
+  "dev": "nodemon server.js",
+  "start": "node server.js",
+  "update:locations": "node scripts/updateBusinessLocations.js"
+},
   "keywords": [],
   "author": "Rahmat Hussain",
   "license": "ISC",

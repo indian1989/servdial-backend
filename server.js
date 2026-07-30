@@ -1,4 +1,5 @@
 // backend/server.js
+
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
@@ -8,62 +9,126 @@ dotenv.config();
 
 const app = express();
 
-// DEBUG LOGGER
-app.use((req,res,next)=>{
 
- console.log(
-   "🔥 REQUEST:",
-   req.method,
-   req.originalUrl
- );
+// =================================================
+// BASIC CONFIG
+// =================================================
 
- next();
-
-});
-
-// ================= CORE CONFIG =================
 app.set("etag", false);
 
-// ================= MIDDLEWARE =================
-app.use(cors());
-app.use(express.json());
 
-// 🔥 GLOBAL CACHE CONTROL (single layer only)
-app.use((req, res, next) => {
 
-  // ✅ Allow caching for sitemap
-  if (req.path.includes("sitemap")) {
+// =================================================
+// GLOBAL MIDDLEWARE
+// =================================================
+
+
+app.use(
+  cors({
+
+    origin: [
+      process.env.FRONTEND_URL,
+      "http://localhost:5173",
+    ],
+
+    credentials: true,
+
+  })
+);
+
+
+
+app.use(
+  express.json({
+    limit: "5mb",
+  })
+);
+
+
+
+// =================================================
+// CACHE CONTROL
+// =================================================
+
+
+app.use((req,res,next)=>{
+
+
+  // Sitemap Google cache allow
+
+  if(
+    req.path.includes("sitemap")
+  ){
     return next();
   }
 
+
+
   res.setHeader(
     "Cache-Control",
-    "no-store, no-cache, must-revalidate, proxy-revalidate"
+    "no-store, no-cache, must-revalidate"
   );
 
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
 
-  res.removeHeader("ETag");
+  res.setHeader(
+    "Pragma",
+    "no-cache"
+  );
+
+
+  res.setHeader(
+    "Expires",
+    "0"
+  );
+
+
+  res.removeHeader(
+    "ETag"
+  );
+
 
   next();
+
+
 });
 
-// ================= ROUTES IMPORT =================
+
+
+// =================================================
+// ROUTES IMPORT
+// =================================================
+
+
+// AUTH
+
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+
+
+// BUSINESS
 
 import publicBusinessRoutes from "./routes/publicBusinessRoutes.js";
 import adminBusinessRoutes from "./routes/adminBusinessRoutes.js";
 
+
+// CATEGORY
+
 import categoryRoutes from "./routes/categoryRoutes.js";
 import adminCategoryRoutes from "./routes/adminCategoryRoutes.js";
+
+
+// CITY
 
 import cityRoutes from "./routes/cityRoutes.js";
 import adminCityRoutes from "./routes/adminCityRoutes.js";
 
-import bannerRoutes from "./routes/bannerRoutes.js";
-import adminBannerRoutes from "./routes/adminBannerRoutes.js";
+
+// ADMIN
+
+import adminRoutes from "./routes/adminRoutes.js";
+
+
+// FEATURES
 
 import homepageRoutes from "./routes/homepageRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
@@ -71,112 +136,433 @@ import leadRoutes from "./routes/leadRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import recommendationRoutes from "./routes/recommendationRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
+
+
+// SEO + SYSTEM
+
 import seoRoutes from "./routes/seoRoutes.js";
-import locationRoutes from "./routes/locationRoutes.js";
 import sitemapRoutes from "./routes/sitemapRoutes.js";
+import locationRoutes from "./routes/locationRoutes.js";
 import healthRoutes from "./routes/health.js";
 
-import adminRoutes from "./routes/adminRoutes.js";
 
-console.log("🔥 SERVER FILE LOADED");
+// ADS
 
-// ================= DEBUG REQUEST LOGGER =================
-app.use((req, res, next) => {
+import bannerRoutes from "./routes/bannerRoutes.js";
+import adminBannerRoutes from "./routes/adminBannerRoutes.js";
 
-  console.log(
-    "🔥 REQUEST:",
-    req.method,
-    req.originalUrl
-  );
 
-  next();
 
-});
-// ================= ROOT =================
-app.get("/api", (req, res) => {
-  res.json({ message: "🚀 ServDial API Running" });
-});
 
-// ================= AUTH =================
-app.use("/api/auth", authRoutes);
-app.use("/api/user", userRoutes);
 
-// ================= BUSINESS =================
-app.use("/api/businesses", publicBusinessRoutes);
-console.log("🔥 PUBLIC BUSINESS ROUTE LOADED");
-app.use("/api/admin/businesses", adminBusinessRoutes);
+// =================================================
+// ROOT API
+// =================================================
 
-// ================= ADMIN =================
-app.use("/api/admin", adminRoutes);
 
-// ================= CATEGORY =================
-app.use("/api/categories", categoryRoutes);
-app.use("/api/admin/categories", adminCategoryRoutes);
+app.get(
+  "/api",
+  (req,res)=>{
 
-// ================= CITY =================
-app.use("/api/cities", cityRoutes);
-app.use("/api/admin/cities", adminCityRoutes);
+    res.json({
 
-// ================= BANNER =================
-app.use("/api/banners", bannerRoutes);
-app.use("/api/admin/banners", adminBannerRoutes);
+      success:true,
 
-// ================= CORE FEATURES =================
-app.use("/api/homepage", homepageRoutes);
+      message:
+      "🚀 ServDial API Running"
 
-app.use("/api/search", searchRoutes);
-app.use("/api/leads", leadRoutes);
-app.use("/api/reviews", reviewRoutes);
-app.use("/api/recommendations", recommendationRoutes);
-app.use("/api/provider", providerRoutes);
-app.use("/api/location", locationRoutes);
-
-// ================= SEO + INFRA =================
-app.use("/api/seo", seoRoutes);
-app.use("/", sitemapRoutes);
-app.use("/api/health", healthRoutes);
-
-// ================= DB CONNECT =================
-const connectDB = async () => {
-  try {
-    if (!process.env.MONGO_URI) {
-      throw new Error("MONGO_URI not defined");
-    }
-
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000,
-      maxPoolSize: 20,
     });
 
-    console.log("✅ MongoDB Connected:", conn.connection.host);
-  } catch (err) {
-    console.error("❌ MongoDB Error:", err.message);
-    process.exit(1);
   }
+);
+
+
+
+
+
+// =================================================
+// API ROUTES
+// =================================================
+
+
+
+// AUTH
+
+app.use(
+  "/api/auth",
+  authRoutes
+);
+
+
+app.use(
+  "/api/user",
+  userRoutes
+);
+
+
+
+
+
+// SEO
+
+app.use(
+  "/api/seo",
+  seoRoutes
+);
+
+
+
+
+
+// BUSINESS
+
+app.use(
+  "/api/businesses",
+  publicBusinessRoutes
+);
+
+
+app.use(
+  "/api/admin/businesses",
+  adminBusinessRoutes
+);
+
+
+
+
+
+// ADMIN
+
+app.use(
+  "/api/admin",
+  adminRoutes
+);
+
+
+
+
+
+// CATEGORY
+
+app.use(
+  "/api/categories",
+  categoryRoutes
+);
+
+
+app.use(
+  "/api/admin/categories",
+  adminCategoryRoutes
+);
+
+
+
+
+
+// CITY
+
+app.use(
+  "/api/cities",
+  cityRoutes
+);
+
+
+app.use(
+  "/api/admin/cities",
+  adminCityRoutes
+);
+
+
+
+
+
+// BANNER
+
+app.use(
+  "/api/banners",
+  bannerRoutes
+);
+
+
+app.use(
+  "/api/admin/banners",
+  adminBannerRoutes
+);
+
+
+
+
+
+// FEATURES
+
+
+app.use(
+  "/api/homepage",
+  homepageRoutes
+);
+
+
+app.use(
+  "/api/search",
+  searchRoutes
+);
+
+
+app.use(
+  "/api/leads",
+  leadRoutes
+);
+
+
+app.use(
+  "/api/reviews",
+  reviewRoutes
+);
+
+
+app.use(
+  "/api/recommendations",
+  recommendationRoutes
+);
+
+
+app.use(
+  "/api/provider",
+  providerRoutes
+);
+
+
+app.use(
+  "/api/location",
+  locationRoutes
+);
+
+
+
+
+
+// =================================================
+// INFRA ROUTES
+// =================================================
+
+
+// IMPORTANT:
+// sitemap.xml
+// sitemap-cities.xml
+// sitemap-businesses.xml
+
+app.use(
+  "/",
+  sitemapRoutes
+);
+
+
+
+app.use(
+  "/api/health",
+  healthRoutes
+);
+
+
+
+
+
+// =================================================
+// DATABASE
+// =================================================
+
+
+const connectDB = async()=>{
+
+
+try{
+
+
+if(
+!process.env.MONGO_URI
+){
+
+throw new Error(
+"MONGO_URI missing"
+);
+
+}
+
+
+
+const conn =
+await mongoose.connect(
+
+process.env.MONGO_URI,
+
+{
+
+serverSelectionTimeoutMS:10000,
+
+maxPoolSize:20,
+
+}
+
+);
+
+
+
+console.log(
+"✅ MongoDB Connected:",
+conn.connection.host
+);
+
+
+
+}
+
+catch(error){
+
+
+console.error(
+"❌ MongoDB Connection Failed:",
+error.message
+);
+
+
+process.exit(1);
+
+
+}
+
+
 };
 
-// ================= ERROR HANDLERS =================
-app.use((req, res) => {
-  res.status(404).json({ success: false, message: "Route not found" });
+
+
+
+
+
+// =================================================
+// 404 HANDLER
+// =================================================
+
+
+app.use(
+(req,res)=>{
+
+
+res.status(404).json({
+
+success:false,
+
+message:
+"Route not found"
+
 });
 
-app.use((err, req, res, next) => {
-  console.error("❌ Global Error:", err.message);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || "Internal Server Error",
-  });
+
 });
 
-// ================= START SERVER =================
-const PORT = process.env.PORT || 5000;
 
-const startServer = async () => {
-  await connectDB();
 
-  app.listen(PORT, () => {
-    console.log(`🔥 Server running on port ${PORT}`);
-  });
+
+
+// =================================================
+// GLOBAL ERROR HANDLER
+// =================================================
+
+
+app.use(
+(err,req,res,next)=>{
+
+
+console.error(
+"❌ Server Error:",
+err
+);
+
+
+
+res.status(
+err.status || 500
+)
+.json({
+
+success:false,
+
+message:
+err.message ||
+"Internal Server Error"
+
+});
+
+
+}
+
+);
+
+
+
+
+
+// =================================================
+// START SERVER
+// =================================================
+
+
+const PORT =
+process.env.PORT || 5000;
+
+
+
+const startServer = async()=>{
+
+
+await connectDB();
+
+
+
+const server =
+app.listen(
+PORT,
+()=>{
+
+
+console.log(
+`🔥 ServDial Server running on ${PORT}`
+);
+
+
+}
+
+);
+
+
+
+// graceful shutdown
+
+process.on(
+"SIGTERM",
+()=>{
+
+
+console.log(
+"SIGTERM received"
+);
+
+
+server.close(
+()=>{
+
+mongoose.connection.close();
+
+process.exit(0);
+
+}
+);
+
+
+});
+
+
 };
+
+
 
 startServer();

@@ -64,6 +64,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   isPremiumPartner
   citySlug
   categorySlug
+  location
 `;
   const safeLocation =
     lat && lng ? { lat: Number(lat), lng: Number(lng) } : {};
@@ -180,7 +181,7 @@ lat && lng
     logo: 1,
     images: 1,
     businessHours:1,
-    
+
     averageRating: 1,
     totalReviews: 1,
     views: 1,
@@ -200,6 +201,7 @@ lat && lng
     cityId: 1,
     categoryId: 1,
     distance: 1,
+    location: 1,
   },
 },
 

@@ -9,6 +9,7 @@ import Review from "../models/Review.js";
 import { normalizeBusinessHours } from "../utils/normalizeBusinessHours.js";
 import { rankBusinesses } from "../services/ranking/unifiedRankingEngine.js";
 import { pingGoogleSitemap } from "../utils/pingSitemap.js";
+import { geocodeAddress } from "../services/geocodeService.js";
 
 import slugify from "../utils/slugify.js";
 
@@ -23,6 +24,7 @@ const requireField = (field, name) => {
     throw new Error(`${name} is required`);
   }
 };
+
 
 /* =========================
    SLUG GENERATOR (CONTROLLED)
@@ -189,39 +191,101 @@ if (!safeLocation) {
 // ✅ generate slug
 const slug = await generateBusinessSlug(name);
 
+
 // ✅ role-based status
 const status =
   req.user?.role === "admin" || req.user?.role === "superadmin"
     ? "approved"
     : "pending";
 
+
+// ✅ BUSINESS ADDRESS GEOCODE
+const addressLocation = await geocodeAddress({
+
+  address,
+
+  city: city.name,
+
+  district,
+
+  state,
+
+  pincode: cleanPincode,
+
+});
+
+
 // ✅ create business
 const business = await Business.create({
+
   name: name.trim(),
 
+
   categoryId,
+
   cityId,
 
+
   citySlug: city.slug,
+
   categorySlug: category.slug,
+
 
   slug,
 
-  address: address?.trim() || "",
-  pincode: cleanPincode,
-  phone: cleanPhone,
-  whatsapp: whatsapp || "",
-  website: website || "",
-  description: description || "",
 
-  location: safeLocation,
+  address:
+    address?.trim() || "",
 
-  logo: logo || "",
-  images: Array.isArray(images) ? images : [],
 
-  businessHours: normalizeBusinessHours(businessHours || {}),
+  pincode:
+    cleanPincode,
+
+
+  phone:
+    cleanPhone,
+
+
+  whatsapp:
+    whatsapp || "",
+
+
+  website:
+    website || "",
+
+
+  description:
+    description || "",
+
+
+
+  // 🔥 FULL ADDRESS BASED LOCATION
+  location:
+    addressLocation?.location ||
+    safeLocation,
+
+
+
+  logo:
+    logo || "",
+
+
+  images:
+    Array.isArray(images)
+      ? images
+      : [],
+
+
+
+  businessHours:
+    normalizeBusinessHours(
+      businessHours || {}
+    ),
+
+
 
   status,
+
 });
 
 // ✅ response
@@ -292,49 +356,45 @@ export const updateBusinessHours = asyncHandler(async (req, res) => {
    GET BUSINESSES (BASE)
 ========================= */
 
-export const getBusinesses = asyncHandler(async (req,res)=>{
+export const getBusinesses = asyncHandler(async (req, res) => {
 
   console.log(
     "🔥🔥🔥 GET BUSINESSES CONTROLLER HIT 🔥🔥🔥"
   );
 
- const businesses = await Business.find()
-   .populate("cityId","name slug latitude longitude")
-   .populate(
+  const businesses = await Business.find({})
+    .select("+location")
+    .populate("cityId", "name slug latitude longitude")
+    .populate(
       "categoryId",
       "name slug uiType features"
-   );
+    );
 
+  console.log(
+    "🔥 TOTAL BUSINESSES:",
+    businesses.length
+  );
 
-console.log(
- "🔥 TOTAL BUSINESSES:",
- businesses.length
-);
+  console.log(
+    "🔥 FIRST BUSINESS:",
+    JSON.stringify(
+      businesses[0],
+      null,
+      2
+    )
+  );
 
+  console.log(
+    "🔥 FIRST LOCATION:",
+    businesses[0]?.location
+  );
 
-console.log(
- "🔥 FIRST BUSINESS:",
- JSON.stringify(
-   businesses[0],
-   null,
-   2
- )
-);
-
-
-console.log(
- "🔥 FIRST LOCATION:",
- businesses[0]?.location
-);
-
-
-res.json({
- success:true,
- data:businesses
- });
+  res.json({
+    success: true,
+    data: businesses
+  });
 
 });
-
 /* =========================
    GET SINGLE BUSINESS
 ========================= */
@@ -709,12 +769,26 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
     status: "approved",
     isDeleted: false,
   })
+
+  .populate("cityId", "name slug")
+  .populate("categoryId", "name slug")
     .limit(20)
     .lean();
 
+    // Normalize for BusinessCard / DTO
+    const normalized = raw.map((b) => ({
+      ...b,
+
+      cityName: b.cityName || b.cityId?.name || "",
+      citySlug: b.citySlug || b.cityId?.slug || "",
+
+      categoryName: b.categoryName || b.categoryId?.name || "General",
+      categorySlug: b.categorySlug || b.categoryId?.slug || "",
+      }));
+
   // ✅ Ranking layer
   const ranked = await rankBusinesses(
-    raw,
+    normalized,
     {},
     "",
     {},
