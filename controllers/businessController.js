@@ -10,6 +10,7 @@ import { normalizeBusinessHours } from "../utils/normalizeBusinessHours.js";
 import { rankBusinesses } from "../services/ranking/unifiedRankingEngine.js";
 import { pingGoogleSitemap } from "../utils/pingSitemap.js";
 import { geocodeAddress } from "../services/geocodeService.js";
+import generateBusinessFAQ from "../utils/generateBusinessFAQ.js";
 
 import slugify from "../utils/slugify.js";
 
@@ -527,31 +528,13 @@ export const getBusinesses = asyncHandler(async (req, res) => {
       "name slug uiType features"
     );
 
-  console.log(
-    "🔥 TOTAL BUSINESSES:",
-    businesses.length
-  );
-
-  console.log(
-    "🔥 FIRST BUSINESS:",
-    JSON.stringify(
-      businesses[0],
-      null,
-      2
-    )
-  );
-
-  console.log(
-    "🔥 FIRST LOCATION:",
-    businesses[0]?.location
-  );
-
   res.json({
     success: true,
     data: businesses
   });
 
 });
+
 /* =========================
    GET SINGLE BUSINESS
 ========================= */
@@ -569,12 +552,6 @@ export const getBusinessById = asyncHandler(async (req, res) => {
   const business = await Business.findById(id)
     .populate("cityId")
     .populate("categoryId");
-
-
-console.log(
-  "CATEGORY FROM BACKEND:",
-  business.categoryId
-);
 
   if (!business) {
     return res.status(404).json({
@@ -919,11 +896,6 @@ export const updateBusiness = asyncHandler(async (req, res) => {
 
   }
 
-
-
-
-
-
   /* ================= GEO UPDATE ================= */
 
 
@@ -934,16 +906,11 @@ export const updateBusiness = asyncHandler(async (req, res) => {
     updates.state ||
     updates.pincode;
 
-
-
   if(addressChanged){
-
 
     const finalAddress =
       updates.address ||
       business.address;
-
-
 
     const fullAddress = [
 
@@ -1005,12 +972,6 @@ export const updateBusiness = asyncHandler(async (req, res) => {
     }
 
   }
-
-
-
-
-
-
 
   /* ================= UPDATE ================= */
 
@@ -1144,6 +1105,37 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     });
   }
 
+  const language =
+(
+  req.query.lang ||
+  req.headers["accept-language"]?.split(",")[0]?.split("-")[0] ||
+  "en"
+).toLowerCase();
+
+const supportedLanguages = [
+  "en",
+  "hi",
+  "bn",
+  "mr",
+  "ta",
+  "te",
+  "gu"
+];
+
+
+const finalLanguage =
+supportedLanguages.includes(language)
+?
+language
+:
+"en";
+
+
+business.faq = generateBusinessFAQ({
+  business,
+  language
+});
+
   // 🔥 OPTIONAL: fetch reviews here if needed
   const reviews = await Review.find({ businessId: business._id })
     .sort({ createdAt: -1 })
@@ -1181,9 +1173,10 @@ export const getBusinessCount = asyncHandler(async (req, res) => {
 
 // ================= GET SIMILAR BUSINESS =================
 export const getSimilarBusinesses = asyncHandler(async (req, res) => {
+
   const { id } = req.params;
 
-  // ✅ Validate ID
+
   if (!isValidObjectId(id)) {
     return res.status(400).json({
       success: false,
@@ -1191,42 +1184,161 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
     });
   }
 
-  // ✅ Get base business
-  const base = await Business.findById(id).lean();
+
+
+  const base = await Business.findById(id)
+    .select(
+      "location cityId categoryId"
+    )
+    .lean();
+
+
 
   if (!base) {
     return res.status(404).json({
-      success: false,
-      message: "Base business not found",
+      success:false,
+      message:"Base business not found",
     });
   }
 
-  // ✅ Find similar businesses
-  const raw = await Business.find({
-    _id: { $ne: id },
-    cityId: base.cityId,
-    categoryId: base.categoryId,
-    status: "approved",
-    isDeleted: false,
-  })
 
-  .populate("cityId", "name slug")
-  .populate("categoryId", "name slug")
-    .limit(20)
-    .lean();
 
-    // Normalize for BusinessCard / DTO
-    const normalized = raw.map((b) => ({
-      ...b,
 
-      cityName: b.cityName || b.cityId?.name || "",
-      citySlug: b.citySlug || b.cityId?.slug || "",
+  const nearby = await Business.aggregate([
 
-      categoryName: b.categoryName || b.categoryId?.name || "General",
-      categorySlug: b.categorySlug || b.categoryId?.slug || "",
-      }));
 
-  // ✅ Ranking layer
+    {
+      $geoNear: {
+
+        near: {
+          type:"Point",
+          coordinates:
+            base.location.coordinates
+        },
+
+
+        distanceField:
+          "distanceMeters",
+
+
+        spherical:true,
+
+
+        query:{
+
+          _id:{
+            $ne:base._id
+          },
+
+
+          cityId:
+            base.cityId,
+
+
+          categoryId:
+            base.categoryId,
+
+
+          status:"approved",
+
+
+          isDeleted:false,
+
+        }
+
+      }
+
+    },
+
+
+    {
+      $limit:20
+    },
+
+
+    {
+      $lookup:{
+        from:"cities",
+        localField:"cityId",
+        foreignField:"_id",
+        as:"cityId"
+      }
+    },
+
+
+    {
+      $unwind:{
+        path:"$cityId",
+        preserveNullAndEmptyArrays:true
+      }
+    },
+
+
+    {
+      $lookup:{
+        from:"categories",
+        localField:"categoryId",
+        foreignField:"_id",
+        as:"categoryId"
+      }
+    },
+
+
+    {
+      $unwind:{
+        path:"$categoryId",
+        preserveNullAndEmptyArrays:true
+      }
+    }
+
+
+  ]);
+
+
+
+
+  const normalized = nearby.map((b)=>({
+
+    ...b,
+
+
+    distance:
+      Number(
+        (b.distanceMeters / 1000)
+        .toFixed(1)
+      ),
+
+
+    cityName:
+      b.cityName ||
+      b.cityId?.name ||
+      "",
+
+
+    citySlug:
+      b.citySlug ||
+      b.cityId?.slug ||
+      "",
+
+
+
+    categoryName:
+      b.categoryName ||
+      b.categoryId?.name ||
+      "General",
+
+
+    categorySlug:
+      b.categorySlug ||
+      b.categoryId?.slug ||
+      "",
+
+  }));
+
+
+
+
+
   const ranked = await rankBusinesses(
     normalized,
     {},
@@ -1236,11 +1348,19 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
     base.cityId
   );
 
-  // ✅ Final response
+
+
+
   res.json({
-    success: true,
-    data: ranked.slice(0, 8),
+
+    success:true,
+
+    data:
+      ranked.slice(0,8)
+
   });
+
+
 });
 
 // ================= Track BUSINESS VIEW =================

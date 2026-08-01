@@ -73,6 +73,155 @@ categorySlug: {
   index: true,
 },
 
+// ================= SERVICES =================
+
+services: [
+  {
+    name: {
+      type: String,
+      trim: true,
+    },
+
+    description: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+  }
+],
+
+
+// ================= SERVICE TYPE =================
+
+serviceTypes: [
+  {
+    type: String,
+    trim: true,
+  }
+],
+
+
+// ================= SERVICE COVERAGE =================
+
+serviceCoverage: {
+
+  // Coverage level
+  type: {
+    type:String,
+
+    enum:[
+      "city",      // selected cities
+      "state",     // selected states
+      "country",   // selected countries
+      "global"     // worldwide
+    ],
+
+    default:"city",
+  },
+
+  // Whether selected list or full coverage
+  mode: {
+    type: String,
+    enum: [
+      "selected",
+      "all"
+    ],
+    default: "selected",
+  },
+
+  // selected countries
+  countries:[
+
+    {
+      name:{
+        type:String,
+        trim:true,
+      },
+
+      code:{
+        type:String,
+        trim:true,
+      }
+    }
+
+  ],
+
+
+  // selected states
+  states:[
+
+    {
+      name:{
+        type:String,
+        trim:true,
+      },
+
+      stateCode:{
+        type:String,
+        trim:true,
+      },
+
+      country:{
+        type:String,
+        trim:true,
+      },
+
+      countryCode:{
+        type:String,
+        trim:true,
+      }
+
+    }
+
+  ],
+
+
+  // selected cities
+
+  cities:[
+
+    {
+
+      cityId:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"City",
+      },
+
+
+      name:{
+        type:String,
+        trim:true,
+      },
+
+
+      district: {
+        type: String,
+        trim: true,
+      },
+
+
+      state:{
+        type:String,
+        trim:true,
+      },
+
+
+      country:{
+        type:String,
+        trim:true,
+      },
+
+
+      countryCode:{
+        type:String,
+        trim:true,
+      }
+
+    }
+
+  ]
+
+},
     
 // ================= INTENT TAGS =================
 intentTags: [

@@ -1,5 +1,5 @@
 // backend/utils/schemaBuilder.js
-
+import { normalizeLocation } from "./locationHelper";
 /* =================================================
    HELPERS
 ================================================= */
@@ -128,7 +128,9 @@ export const generateLocalBusinessSchema = (business = {}) => {
       addressLocality: titleCase(cityName),
       addressRegion: titleCase(business.state || ""),
       postalCode: business.pincode || undefined,
-      addressCountry: "IN",
+      addressCountry:
+  business.countryCode ||
+  "IN"
     },
 
     geo:

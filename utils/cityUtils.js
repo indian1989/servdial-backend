@@ -5,6 +5,7 @@ export const normalizeCity = (data) => {
   const name = data.name?.trim();
   const district = data.district?.trim();
   const state = data.state?.trim();
+  const country = data.country?.trim();
 
   const lat = Number(data.latitude);
   const lng = Number(data.longitude);
@@ -17,6 +18,7 @@ export const normalizeCity = (data) => {
     district,
     state,
     country: data.country || "India",
+    countryCode: data.countryCode || "IN",
 
     latitude,
     longitude,
@@ -54,7 +56,7 @@ export const fetchCoordinates = async (city) => {
   }
 
   try {
-    const query = `${city.name}, ${city.district}, ${city.state}, India`;
+const query = `${city.name}, ${city.district}, ${city.state}, ${city.country || "India"}`;
 
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`
