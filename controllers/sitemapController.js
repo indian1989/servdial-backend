@@ -1,6 +1,7 @@
 import Business from "../models/Business.js";
 import City from "../models/City.js";
 import Category from "../models/Category.js";
+import { getCache, setCache } from "../utils/memoryCache.js";
 
 /* ========================= CONFIG ========================= */
 
@@ -21,6 +22,15 @@ const xmlHeader = `<?xml version="1.0" encoding="UTF-8"?>`;
 
 export const sitemapIndex = async (req, res) => {
   try {
+
+    const cached = getCache("sitemap:index");
+
+if (cached) {
+  return res
+    .type("application/xml")
+    .send(cached);
+}
+
     const businessCount = await Business.countDocuments({
   status: "approved",
 });
@@ -119,7 +129,15 @@ res.set(
   "public, max-age=3600, s-maxage=3600"
 );
 
-res.send(sitemap.trim());
+const finalSitemap = sitemap.trim();
+
+setCache(
+  "sitemap:index",
+  finalSitemap,
+  3600
+);
+
+res.send(finalSitemap);
   } catch (err) {
     res.status(500).send("Error generating sitemap index");
   }
@@ -128,7 +146,25 @@ res.send(sitemap.trim());
 /* ========================= STATIC ========================= */
 
 export const staticSitemap = async (req, res) => {
-  const pages = ["", "/about", "/contact", "/privacy-policy", "/terms"];
+
+  const cacheKey = "sitemap:static";
+
+  const cached = getCache(cacheKey);
+
+  if (cached) {
+    return res
+      .type("application/xml")
+      .send(cached);
+  }
+
+
+  const pages = [
+    "",
+    "/about",
+    "/contact",
+    "/privacy-policy",
+    "/terms"
+  ];
 
   const urls = pages
     .map(
@@ -149,16 +185,37 @@ res.set(
   "public, max-age=3600, s-maxage=3600"
 );
 
-res.send(
-    `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
-  );
+const xml =
+`${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+
+
+setCache(
+  "sitemap:static",
+  xml,
+  3600
+);
+
+
+res.send(xml);
 };
 
 /* ========================= CITY (PAGINATED) ========================= */
 
 export const citySitemap = async (req, res) => {
   try {
+
     const page = Number(req.params.page || 1);
+
+    const cacheKey = `sitemap:cities:${page}`;
+
+    const cached = getCache(cacheKey);
+
+    if (cached) {
+      return res
+        .type("application/xml")
+        .send(cached);
+    }
+
     const skip = (page - 1) * PAGE_SIZE;
 
     const cities = await City.find({ status: "active" })
@@ -188,9 +245,18 @@ res.set(
   "public, max-age=3600, s-maxage=3600"
 );
 
-res.send(
-      `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
-    );
+const xml =
+`${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+
+
+setCache(
+  cacheKey,
+  xml,
+  3600
+);
+
+
+res.send(xml);
   } catch (err) {
     res.status(500).send("City sitemap error");
   }
@@ -200,7 +266,19 @@ res.send(
 
 export const categorySitemap = async (req, res) => {
   try {
+
     const page = Number(req.params.page || 1);
+
+    const cacheKey = `sitemap:categories:${page}`;
+
+    const cached = getCache(cacheKey);
+
+    if (cached) {
+      return res
+        .type("application/xml")
+        .send(cached);
+    }
+
     const skip = (page - 1) * PAGE_SIZE;
 
     const categories = await Category.find({ status: "active" })
@@ -231,9 +309,18 @@ res.set(
   "public, max-age=3600, s-maxage=3600"
 );
 
-res.send(
-      `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
-    );
+const xml =
+`${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+
+
+setCache(
+  cacheKey,
+  xml,
+  3600
+);
+
+
+res.send(xml);
   } catch (err) {
     res.status(500).send("Category sitemap error");
   }
@@ -244,6 +331,17 @@ res.send(
 export const cityCategorySitemap = async (req, res) => {
   try {
     const page = Number(req.params.page || 1);
+
+    const cacheKey = `sitemap:city-category:${page}`;
+
+const cached = getCache(cacheKey);
+
+if (cached) {
+  return res
+    .type("application/xml")
+    .send(cached);
+}
+
     const skip = (page - 1) * PAGE_SIZE;
 
     const data = await Business.aggregate([
@@ -284,9 +382,18 @@ res.set(
   "public, max-age=3600, s-maxage=3600"
 );
 
-res.send(
-      `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`
-    );
+const xml =
+`${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+
+
+setCache(
+  cacheKey,
+  xml,
+  3600
+);
+
+
+res.send(xml);
   } catch (err) {
     res.status(500).send("City-category sitemap error");
   }
@@ -297,6 +404,17 @@ res.send(
 export const businessSitemap = async (req, res) => {
   try {
     const page = Number(req.params.page || 1);
+
+    const cacheKey = `sitemap:businesses:${page}`;
+
+const cached = getCache(cacheKey);
+
+if (cached) {
+  return res
+    .type("application/xml")
+    .send(cached);
+}
+
     const skip = (page - 1) * PAGE_SIZE;
 
     const businesses = await Business.find({ status: "approved" })
@@ -336,9 +454,18 @@ res.set(
   "public, max-age=3600, s-maxage=3600"
 );
 
-res.send(
-      `${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">${urls}</urlset>`
-    );
+const xml =
+`${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">${urls}</urlset>`;
+
+
+setCache(
+  cacheKey,
+  xml,
+  3600
+);
+
+
+res.send(xml);
   } catch (err) {
     res.status(500).send("Business sitemap error");
   }

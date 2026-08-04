@@ -1,3 +1,5 @@
+// backend/services/ranking/unifiedRankingEngine.js
+
 //
 // Unified Ranking Engine
 // PURE: no DB access, no slug logic, no side-effects
@@ -7,12 +9,11 @@
 // ⚙️ WEIGHTS (TUNE LATER)
 // =============================
 const WEIGHTS = {
-  views: 0.3,
-  clicks: 0.4,
-  rating: 0.3,
-
-  // boost flags (optional future)
-  featuredBoost: 50,
+  views: 0.25,
+  clicks: 0.35,
+  rating: 0.25,
+  priority: 0.15,
+  featuredBoost: 0.5,
 };
 
 // =============================
@@ -62,12 +63,14 @@ const calculateScore = (item, max, context) => {
   const viewsScore = normalize(views, max.maxViews);
   const clicksScore = normalize(clicks, max.maxClicks);
   const ratingScore = normalize(rating, max.maxRating);
+  const priorityScore = safeNumber(item.priorityScore); const priorityNormalized = priorityScore / 100;
 
   let score =
     viewsScore * WEIGHTS.views +
     clicksScore * WEIGHTS.clicks +
     ratingScore * WEIGHTS.rating;
-
+    priorityNormalized * WEIGHTS.priority;
+    
   // 🔥 FEATURE BOOST
   if (item.isFeatured) {
     score += WEIGHTS.featuredBoost;

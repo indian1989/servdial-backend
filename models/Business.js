@@ -554,6 +554,12 @@ plan: {
   default: "free",
     index:true,
 },
+
+priorityScore:{
+ type:Number,
+ default:10
+},
+
     // ================= CLAIM =================
 isClaimed: {
   type:Boolean,

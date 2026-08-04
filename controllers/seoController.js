@@ -11,16 +11,11 @@ import {
   rankBusinesses,
 } from "../services/ranking/unifiedRankingEngine.js";
 
+import {
+  normalizeLocation,
+} from "../utils/locationHelper.js";
 
 const baseUrl = "https://servdial.com";
-
-
-
-const titleCase = (text = "") =>
-  text
-    .toString()
-    .trim()
-    .replace(/\b\w/g, c => c.toUpperCase());
 
 
 
@@ -61,9 +56,13 @@ await Category.find({
 
 const pages=[];
 
-
-
 for(const city of cities){
+
+const locationText = normalizeLocation(
+  city.name,
+  city.district,
+  city.state
+);
 
 
 for(const category of categories){
@@ -84,12 +83,11 @@ url:
 
 
 title:
-`${category.name} in ${city.name}, ${city.district || ""} | ServDial`,
+`${category.name} in ${locationText} | ServDial`,
 
 
 description:
-`Find verified ${category.name} services in ${city.name}, ${city.state || ""}. Compare ratings, reviews, contact details and trusted businesses on ServDial.`
-
+`Find verified ${category.name} services in ${locationText}. Compare ratings, reviews, contact details and trusted businesses on ServDial.`,
 
 });
 
@@ -249,101 +247,14 @@ getCache(
 );
 
 
-
-if(!category){
-
-
-category =
-await Category.findOne({
-
-status:"active",
-
-$or:[
-
-{
-slug:categorySlug
-},
-
-{
-"slugHistory.slug":categorySlug
-}
-
-]
-
-})
-
-.lean();
-
-
-
-if(!category){
-
-return res.status(404).json({
-
-success:false,
-
-message:
-"Category not found"
-
-});
-
-}
-
-
-
-setCache(
-
-`category:slug:${categorySlug}`,
-
-category,
-
-60*60*6
-
-);
-
-
-
-}
-
-
-
-
 /*
 ==============================
- CATEGORY TREE SUPPORT
+ CITY ALL BUSINESSES PAGE
 ==============================
 */
 
+if(categorySlug === "all") {
 
-let categoryIds = [];
-let subCategories = [];
-
-// MAIN CATEGORY
-if (!category.parentCategory) {
-
-  subCategories = await Category.find({
-    parentCategory: category._id,
-    status:"active"
-  })
-  .select("name slug")
-  .lean();
-
-
-  categoryIds = [
-    category._id,
-    ...subCategories.map(
-      c=>c._id
-    )
-  ];
-
-}
-else {
-
-  categoryIds=[
-    category._id
-  ];
-
-}
 
 const page =
 Number(req.query.page) || 1;
@@ -351,51 +262,13 @@ Number(req.query.page) || 1;
 const limit =
 Number(req.query.limit) || 20;
 
-const skip =
-(page - 1) * limit;
+const businesses = await Business.find({
 
-/*
-==============================
- BUSINESSES
-==============================
-*/
+cityId: city._id,
 
-console.log(
-  "CITY ID:",
-  city._id
-);
-
-console.log(
-  "CATEGORY IDS:",
-  categoryIds
-);
-
-console.log(
-  "CATEGORY:",
-  category.name
-);
-
-const businesses =
-
-await Business.find({
-
-cityId:
-city._id,
-
-
-categoryId:
-{
-$in:
-categoryIds
-},
-
-
-status:
-"approved"
-
+status:"approved"
 
 })
-
 
 .select(
 `
@@ -433,112 +306,63 @@ clicks
 `
 )
 
-.populate("categoryId", "name slug")
+.populate(
+"categoryId",
+"name slug"
+)
 
 .lean();
 
-console.log(
-  "FOUND BUSINESSES:",
-  businesses.length
-);
-
-
-
-
-/*
-==============================
- RANKING
-==============================
-*/
 
 
 const ranked =
-
 rankBusinesses(
-
 businesses,
-
 {
-
 userLocation:null,
-
 userPreferences:null,
-
 searchIntent:null,
-
-timeOfDay:
-new Date().getHours()
-
+timeOfDay:new Date().getHours()
 }
-
 );
 
 
-
-
-
-/*
-==============================
- SEO DATA
-==============================
-*/
-
-
-const locationText =
-
-[
-city.name,
-city.district,
-city.state
-
-]
-.filter(Boolean)
-.join(", ");
-
-
-
-
-const seo={
-
-
-title:
-
-`${category.name} in ${locationText} | Best Verified Services - ServDial`,
-
-
-
-description:
-
-`Find verified ${category.name} services in ${locationText}. View ratings, reviews, contact numbers, photos and trusted businesses on ServDial.`,
-
-
-
-canonical:
-
-`${baseUrl}/${city.slug}/${category.slug}`
-
-
-};
-
-
-
-
+const locationText = normalizeLocation(
+  city.name,
+  city.district,
+  city.state
+);
 
 
 return res.json({
 
-
 success:true,
-
 
 data:ranked,
 
 
-subCategories,
+subCategories:[],
 
-seo,
+
+seo:{
+
+
+title:
+`Businesses in ${locationText} | ServDial`,
+
+
+description:
+`Find trusted local businesses in ${locationText}. Explore restaurants, hotels, electricians, plumbers, salons and more on ServDial.`,
+
+
+canonical:
+`${baseUrl}/${city.slug}/all`
+
+},
+
 
 city:{
+
 
 name:city.name,
 slug:city.slug,
@@ -548,33 +372,27 @@ state:city.state
 },
 
 
-category:{
-
-name:category.name,
-slug:category.slug,
-isParent:
-!category.parentCategory
-
-},
-
+category:null,
 
 
 meta:{
 
-total: ranked.length,
+
+total:ranked.length,
 
 page,
 
 limit,
 
 hasMore:
-ranked.length === limit
+ranked.length===limit
 
 }
 
 
-
 });
+
+}
 }
 catch(error){
 
@@ -595,9 +413,6 @@ message:
 
 });
 
-
 }
-
-
 
 };
