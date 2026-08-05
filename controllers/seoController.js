@@ -246,6 +246,52 @@ getCache(
 `category:slug:${categorySlug}`
 );
 
+if(!category){
+
+category =
+await Category.findOne({
+
+status:"active",
+
+$or:[
+{
+slug:categorySlug
+},
+{
+"slugHistory.slug":categorySlug
+}
+
+]
+
+})
+.lean();
+
+
+if(!category){
+
+return res.status(404).json({
+
+success:false,
+
+message:
+"Category not found"
+
+});
+
+}
+
+
+setCache(
+
+`category:slug:${categorySlug}`,
+
+category,
+
+60*60*6
+
+);
+
+}
 
 /*
 ==============================
@@ -255,18 +301,18 @@ getCache(
 
 if(categorySlug === "all") {
 
+/*
+==============================
+ NORMAL CITY CATEGORY PAGE
+==============================
+*/
 
-const page =
-Number(req.query.page) || 1;
-
-const limit =
-Number(req.query.limit) || 20;
 
 const businesses = await Business.find({
 
-cityId: city._id,
+  cityId: city._id,
 
-status:"approved"
+  status:"approved"
 
 })
 
@@ -293,6 +339,7 @@ categoryName
 
 district
 state
+country
 pincode
 
 averageRating
@@ -327,22 +374,42 @@ timeOfDay:new Date().getHours()
 );
 
 
-const locationText = normalizeLocation(
-  city.name,
-  city.district,
-  city.state
+
+const locationText =
+normalizeLocation(
+city.name,
+city.district,
+city.state,
+city.country
 );
+
 
 
 return res.json({
 
 success:true,
 
+
 data:ranked,
 
 
-subCategories:[],
+city:{
 
+name:city.name,
+
+slug:city.slug,
+
+district:city.district,
+
+state:city.state,
+
+country:city.country
+},
+
+
+category:null,
+
+subCategories:[],
 
 seo:{
 
@@ -352,48 +419,229 @@ title:
 
 
 description:
-`Find trusted local businesses in ${locationText}. Explore restaurants, hotels, electricians, plumbers, salons and more on ServDial.`,
+`Find trusted local businesses in ${locationText} on ServDial.`,
 
 
 canonical:
 `${baseUrl}/${city.slug}/all`
 
-},
-
-
-city:{
-
-
-name:city.name,
-slug:city.slug,
-district:city.district,
-state:city.state
 
 },
 
+faq:[
 
-category:null,
+{
 
+question:
+`What businesses are available in ${locationText}?`,
+
+answer:
+`ServDial helps you find verified businesses in ${locationText} with ratings, reviews and contact details.`
+
+}
+
+],
 
 meta:{
 
 
 total:ranked.length,
 
-page,
+page:1,
 
-limit,
+limit:ranked.length,
 
-hasMore:
-ranked.length===limit
+hasMore:false
+
+}
+
+});
+
+}
+
+
+
+
+/*
+==============================
+ NORMAL CITY CATEGORY PAGE
+==============================
+*/
+
+
+const businesses = await Business.find({
+
+cityId:city._id,
+
+categoryId:category._id,
+
+status:"approved"
+
+})
+
+.select(
+`
+_id
+name
+slug
+description
+logo
+images
+phone
+whatsapp
+website
+address
+
+cityId
+citySlug
+cityName
+
+categoryId
+categorySlug
+categoryName
+
+district
+state
+country
+pincode
+
+averageRating
+totalReviews
+
+location
+businessHours
+
+views
+clicks
+`
+)
+
+.populate(
+"categoryId",
+"name slug"
+)
+
+.lean();
+
+
+
+const ranked = rankBusinesses(
+
+businesses,
+
+{
+
+userLocation:null,
+
+userPreferences:null,
+searchIntent:null,
+
+timeOfDay:new Date().getHours()
+
+}
+
+);
+
+
+
+const locationText = normalizeLocation(
+
+city.name,
+city.district,
+
+city.state,
+city.country
+);
+
+
+
+return res.json({
+
+success:true,
+
+
+data:ranked,
+
+
+city:{
+
+name:city.name,
+slug:city.slug,
+
+district:city.district,
+
+state:city.state,
+country:city.country
+},
+
+
+category:{
+
+name:category.name,
+
+slug:category.slug
+},
+
+
+subCategories:[],
+
+
+seo:{
+
+
+title:
+`${category.name} in ${locationText} | ServDial`,
+
+
+description:
+`Find verified ${category.name} businesses in ${locationText}. Compare ratings, reviews, contact details and trusted services on ServDial.`,
+
+
+canonical:
+`${baseUrl}/${city.slug}/${category.slug}`
+
+},
+
+
+faq:[
+
+
+{
+question:
+`What are the best ${category.name} services in ${locationText}?`,
+
+answer:
+`ServDial helps you find verified ${category.name} businesses in ${locationText} with contact details, ratings and reviews.`
+},
+
+
+{
+question:
+`How can I contact a ${category.name} in ${locationText}?`,
+
+answer:
+`You can contact listed businesses directly through phone or WhatsApp from their ServDial profile.`
+}
+
+
+],
+
+meta:{
+
+total:ranked.length,
+
+hasMore:false
 
 }
 
 
 });
 
+
+
 }
-}
+
+
 catch(error){
 
 
