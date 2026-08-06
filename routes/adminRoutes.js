@@ -10,6 +10,7 @@ import {
   changePassword,
   getAdmins,
   getUsers,
+  deleteUser,
 } from "../controllers/adminController.js";
 
 import {
@@ -40,6 +41,10 @@ router.get("/analytics", getAnalytics);
 ====================================================== */
 router.get("/users", getUsers);
 
+router.delete(
+  "/users/:id",
+  deleteUser
+);
 /* ======================================================
    ADMINS (SUPERADMIN ONLY)
 ====================================================== */

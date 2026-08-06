@@ -65,7 +65,8 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   citySlug
   categorySlug
   location
-`;
+  createdAt
+  `;
   const safeLocation =
     lat && lng ? { lat: Number(lat), lng: Number(lng) } : {};
 
@@ -247,7 +248,6 @@ console.log(
   const [
     rankedFeatured,
     rankedTopRated,
-    rankedLatest,
     rankedRecommended,
   ] = await Promise.all([
     rankBusinesses(
@@ -266,14 +266,7 @@ console.log(
       req.user?._id || null,
       cityDoc?._id || null
     ),
-    rankBusinesses(
-      latestRaw,
-      safeLocation,
-      "",
-      safeContext,
-      req.user?._id || null,
-      cityDoc?._id || null
-    ),
+    
     rankBusinesses(
       recommendedRaw,
       safeLocation,
@@ -292,30 +285,6 @@ console.log(
       : null,
   }));
 
-  console.log("🔥 HOMEPAGE FEATURED PLAN CHECK:", 
-  rankedFeatured.map(b => ({
-    name: b.name,
-    plan: b.plan,
-    isFeatured: b.isFeatured
-  }))
-);
-
-console.log(
-  "🔥 PROD FINAL FEATURED:",
-  rankedFeatured.map(b => ({
-    name: b.name,
-    plan: b.plan
-  }))
-);
-
-console.log(
-  "🔥 PROD FINAL RECOMMENDED:",
-  rankedRecommended.map(b => ({
-    name: b.name,
-    plan: b.plan
-  }))
-);
-
   // ================= RESPONSE =================
   res.json({
     success: true,
@@ -323,7 +292,7 @@ console.log(
       categories,
       featuredBusinesses: rankedFeatured.slice(0, 8),
       topRatedBusinesses: rankedTopRated.slice(0, 8),
-      latestBusinesses: rankedLatest.slice(0, 8),
+      latestBusinesses: latestRaw.slice(0, 8),
       nearbyBusinesses: formattedNearby.slice(0, 8),
       recommendedBusinesses: rankedRecommended.slice(0, 8),
       cities,

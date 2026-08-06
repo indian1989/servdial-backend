@@ -150,7 +150,7 @@ import healthRoutes from "./routes/health.js";
 
 import bannerRoutes from "./routes/bannerRoutes.js";
 import adminBannerRoutes from "./routes/adminBannerRoutes.js";
-
+import geocodeRoutes from "./routes/geocodeRoutes.js";
 
 
 
@@ -331,6 +331,7 @@ app.use(
   providerRoutes
 );
 
+// LOCATION SERVICES
 
 app.use(
   "/api/location",
@@ -338,7 +339,10 @@ app.use(
 );
 
 
-
+app.use(
+  "/api/geocode",
+  geocodeRoutes
+);
 
 
 // =================================================

@@ -1,3 +1,7 @@
+import dotenv from "dotenv";
+
+dotenv.config();
+
 import asyncHandler from "express-async-handler";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -34,6 +38,35 @@ const transporter = nodemailer.createTransport({
   auth:{
     user:process.env.EMAIL_USER,
     pass:process.env.EMAIL_PASS
+  }
+
+});
+
+transporter.verify((error) => {
+
+  if(error){
+
+    console.log(
+      "❌ SMTP ERROR:",
+      error.message
+    );
+
+    console.log(
+      "EMAIL_USER:",
+      process.env.EMAIL_USER
+    );
+
+    console.log(
+      "EMAIL_PASS LENGTH:",
+      process.env.EMAIL_PASS?.length
+    );
+
+  }else{
+
+    console.log(
+      "✅ SMTP READY"
+    );
+
   }
 
 });
@@ -485,16 +518,6 @@ throw new Error(
 
 }
 
-
-if(!otpRecord){
-
-res.status(400);
-
-throw new Error(
-"Invalid or expired OTP"
-);
-
-}
 
 // Create User
 

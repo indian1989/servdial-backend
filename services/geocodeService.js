@@ -51,6 +51,7 @@ export const geocodeAddress = async ({
   city,
   district,
   state,
+  country,
   pincode,
 }) => {
 
@@ -73,7 +74,9 @@ export const geocodeAddress = async ({
     const query = `
       ${address || ""},
       ${city || ""},
+      ${district || ""},
       ${state || ""},
+      ${country || ""},
       ${pincode || ""},
       India
     `;
