@@ -5,9 +5,7 @@ dotenv.config();
 import asyncHandler from "express-async-handler";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
 import nodemailer from "nodemailer";
-import axios from "axios";
 
 import User from "../models/User.js";
 import OtpVerification from "../models/OtpVerification.js";
@@ -27,7 +25,20 @@ const generateToken = (id) => {
 
 };
 
+const generateResetToken = (email)=>{
 
+return jwt.sign(
+{
+email,
+type:"password_reset"
+},
+process.env.JWT_SECRET,
+{
+expiresIn:"10m"
+}
+);
+
+};
 
 // ================= EMAIL TRANSPORTER =================
 
@@ -41,37 +52,6 @@ const transporter = nodemailer.createTransport({
   }
 
 });
-
-transporter.verify((error) => {
-
-  if(error){
-
-    console.log(
-      "❌ SMTP ERROR:",
-      error.message
-    );
-
-    console.log(
-      "EMAIL_USER:",
-      process.env.EMAIL_USER
-    );
-
-    console.log(
-      "EMAIL_PASS LENGTH:",
-      process.env.EMAIL_PASS?.length
-    );
-
-  }else{
-
-    console.log(
-      "✅ SMTP READY"
-    );
-
-  }
-
-});
-
-
 
 // ================= GENERATE OTP =================
 
@@ -87,40 +67,32 @@ const generateOTP = () => {
 
 // ================= SEND EMAIL OTP =================
 
-const sendEmailOTP = async(email,otp)=>{
+  const sendEmailOTP = async(
+  email,
+  otp,
+  subject
+  )=>{
 
 
- await transporter.sendMail({
+  await transporter.sendMail({
 
   from:process.env.EMAIL_USER,
 
   to:email,
 
-  subject:"ServDial Email Verification OTP",
+  subject,
 
   text:
   `
-  Your ServDial verification OTP is ${otp}.
+  Your ServDial OTP is ${otp}
 
-  This OTP is valid for 5 minutes.
+  OTP valid for 5 minutes.
   `
 
- });
+  });
 
-};
 
-// ================= SEND PHONE OTP =================
-
-const sendPhoneOTP = async(phone, otp)=>{
-
-  // SMS gateway integration later
-  // Example: MSG91 / Twilio / Fast2SMS
-
-  console.log(
-    `Phone OTP for ${phone}: ${otp}`
-  );
-
-};
+  };
 
 
 // =================================================
@@ -196,7 +168,8 @@ await OtpVerification.create({
 
 await sendEmailOTP(
  email,
- otp
+ otp,
+ "ServDial Email Verification OTP"
 );
 
 
@@ -214,79 +187,6 @@ res.json({
 
 
 // =================================================
-// SEND PHONE OTP
-// =================================================
-
-export const sendPhoneVerificationOTP =
-asyncHandler(async(req,res)=>{
-
-
-let { phone } = req.body;
-
-
-if(!phone){
-
-res.status(400);
-
-throw new Error(
-"Phone number required"
-);
-
-}
-
-
-phone = phone.trim();
-
-
-
-const otp = generateOTP();
-
-
-
-await OtpVerification.deleteMany({
-
-email: phone,
-
-type:"phone_verification"
-
-});
-
-
-
-await OtpVerification.create({
-
-email: phone,
-
-otp,
-
-type:"phone_verification",
-
-expiresAt:
-Date.now()+5*60*1000
-
-});
-
-
-
-await sendPhoneOTP(
-phone,
-otp
-);
-
-
-
-res.json({
-
-success:true,
-
-message:"Phone OTP sent successfully"
-
-});
-
-
-});
-
-// =================================================
 // VERIFY OTP
 // =================================================
 
@@ -294,36 +194,21 @@ export const verifyOTP =
 asyncHandler(async(req,res)=>{
 
 
-const {
+let {
 email,
-phone,
 otp,
 type
 }=req.body;
 
 
-
-const identifier =
-email || phone;
+email=email.trim().toLowerCase();
 
 
 
-if(!identifier || !otp || !type){
-
-res.status(400);
-
-throw new Error(
-"OTP details required"
-);
-
-}
-
-
-
-const otpRecord =
+const record =
 await OtpVerification.findOne({
 
-email:identifier,
+email,
 
 otp,
 
@@ -337,15 +222,21 @@ $gt:Date.now()
 
 
 
-if(!otpRecord){
+if(!record){
 
 res.status(400);
 
 throw new Error(
-"Invalid or expired OTP"
+"Invalid OTP"
 );
 
 }
+
+
+
+await OtpVerification.deleteOne({
+_id:record._id
+});
 
 
 
@@ -353,7 +244,7 @@ res.json({
 
 success:true,
 
-message:"OTP verified successfully"
+message:"OTP verified"
 
 });
 
@@ -371,33 +262,29 @@ asyncHandler(async(req,res)=>{
 let {
 
 name,
-businessName,
 email,
 phone,
 password,
-category,
-city,
 role="user",
-emailOtp,
-phoneOtp
+
+businessName,
+categoryId,
+cityId,
+
+emailOtp
 
 }=req.body;
 
 
 
+// Required validation
+
 if(
-
 !name ||
-
 !email ||
-
 !phone ||
-
 !password ||
-
-!emailOtp ||
-!phoneOtp
-
+!emailOtp
 ){
 
 res.status(400);
@@ -406,23 +293,19 @@ throw new Error(
 "Please provide all required fields"
 );
 
-
 }
-
-
 
 
 
 // Provider validation
 
 if(
-
-role==="provider"
-
-&&
-
-(!businessName || !category || !city)
-
+role==="provider" &&
+(
+!businessName ||
+!categoryId ||
+!cityId
+)
 ){
 
 res.status(400);
@@ -435,53 +318,78 @@ throw new Error(
 
 
 
-
+// Normalize data
 
 email =
-email.trim().toLowerCase();
+email
+.trim()
+.toLowerCase();
 
 
-// Check existing user
+phone =
+phone
+.trim()
+.replace(/\D/g,"")
+.slice(-10);
 
-const userExists =
+
+
+// Check duplicate user
+
+const existingUser =
 await User.findOne({
 
 $or:[
- {email},
- {phone}
+
+{
+email
+},
+
+{
+phone
+}
+
 ]
 
 });
 
-if(userExists){
+
+if(existingUser){
 
 res.status(400);
 
 throw new Error(
-"User with this email or phone already exists"
+"Email or phone already registered"
 );
 
 }
 
-// Verify EMAIL OTP
 
-const emailOtpRecord =
+
+// Verify Email OTP
+
+const otpRecord =
 await OtpVerification.findOne({
 
 email,
 
-otp: emailOtp,
+otp:emailOtp,
 
 type:"email_verification",
 
 expiresAt:{
- $gt:Date.now()
+$gt:Date.now()
 }
 
 });
 
+await OtpVerification.deleteOne({
+_id:otp._id
+});
 
-if(!emailOtpRecord){
+
+
+if(!otpRecord){
 
 res.status(400);
 
@@ -491,32 +399,7 @@ throw new Error(
 
 }
 
-// Verify PHONE OTP
-const phoneOtpRecord =
-await OtpVerification.findOne({
 
-email: phone,
-
-otp: phoneOtp,
-
-type:"phone_verification",
-
-expiresAt:{
- $gt:Date.now()
-}
-
-});
-
-
-if(!phoneOtpRecord){
-
-res.status(400);
-
-throw new Error(
-"Invalid or expired phone OTP"
-);
-
-}
 
 
 // Create User
@@ -524,13 +407,14 @@ throw new Error(
 const user =
 await User.create({
 
-name:name.trim(),
+name:
+name.trim(),
 
 email,
 
 phone,
 
-password:password.trim(),
+password,
 
 role,
 
@@ -538,20 +422,31 @@ role,
 companyName:
 role==="provider"
 ?
-businessName
+businessName.trim()
 :
 undefined,
 
 
-city:
+categoryId:
 role==="provider"
 ?
-city
+categoryId
 :
 undefined,
 
+
+cityId:
+role==="provider"
+?
+cityId
+:
+undefined,
+
+
 isEmailVerified:true,
-isPhoneVerified:true,
+
+isPhoneVerified:false,
+
 isVerified:true
 
 
@@ -559,30 +454,17 @@ isVerified:true
 
 
 
+// Remove used OTP
 
-// save provider category later in provider profile
-// currently User model doesn't contain category
+await OtpVerification.deleteOne({
 
-
-// remove OTP
-
-await OtpVerification.deleteMany({
-
-$or:[
-
-{
-email,
-type:"email_verification"
-},
-
-{
-email:phone,
-type:"phone_verification"
-}
-
-]
+_id:otpRecord._id
 
 });
+
+
+
+// Response
 
 res.status(201).json({
 
@@ -610,13 +492,10 @@ role:user.role
 token:
 generateToken(user._id)
 
-
 });
 
 
-
 });
-
 
 // =================================================
 // LOGIN
@@ -627,32 +506,36 @@ asyncHandler(async(req,res)=>{
 
 
 let {
-
 emailOrPhone,
-
 password
-
 }=req.body;
 
 
 
-if(
-!emailOrPhone ||
-!password
-){
+if(!emailOrPhone || !password){
 
 res.status(400);
 
 throw new Error(
-"Please provide email/phone and password"
+"Login details required"
 );
 
 }
 
 
 
-emailOrPhone =
-emailOrPhone.trim().toLowerCase();
+if(emailOrPhone.includes("@")){
+
+emailOrPhone=
+emailOrPhone.toLowerCase();
+
+}
+else{
+
+emailOrPhone=
+emailOrPhone.replace(/\D/g,"").slice(-10);
+
+}
 
 
 
@@ -676,8 +559,6 @@ phone:emailOrPhone
 
 
 
-
-
 if(!user){
 
 res.status(401);
@@ -690,47 +571,23 @@ throw new Error(
 
 
 
-
-if(!user.isVerified){
-
-res.status(401);
-
-throw new Error(
-"Please verify your email first"
-);
-
-}
-
-
-
-
-const isMatch =
+const match =
 await bcrypt.compare(
-password.trim(),
+password,
 user.password
 );
 
 
 
-if(!isMatch){
+if(!match){
 
 res.status(401);
 
 throw new Error(
-"Invalid credentials"
+"Wrong password"
 );
 
 }
-
-
-
-
-
-user.lastLogin=new Date();
-
-await user.save();
-
-
 
 
 
@@ -738,50 +595,35 @@ res.json({
 
 success:true,
 
-message:"Login successful",
-
-
 user:{
-
 _id:user._id,
-
 name:user.name,
-
 email:user.email,
-
 phone:user.phone,
-
 role:user.role
-
 },
-
 
 token:
 generateToken(user._id)
 
+});
+
 
 });
 
 
-
-});
-
-
-
-
-
-
-
-
 // =================================================
-// FORGOT PASSWORD
+// SEND FORGOT PASSWORD OTP
 // =================================================
 
-export const forgotPassword =
+export const sendForgotPasswordOTP =
 asyncHandler(async(req,res)=>{
 
 
-let {email}=req.body;
+let {
+email
+}=req.body;
+
 
 
 if(!email){
@@ -789,28 +631,39 @@ if(!email){
 res.status(400);
 
 throw new Error(
-"Email required"
+"Email is required"
 );
 
 }
 
 
 
-email=email.trim().toLowerCase();
+email =
+email
+.trim()
+.toLowerCase();
 
 
+
+// Check user exists
 
 const user =
-await User.findOne({email});
+await User.findOne({
+email
+});
 
 
+
+// Security: don't reveal email exists
 
 if(!user){
 
 return res.json({
 
+success:true,
+
 message:
-"If email exists reset link sent"
+"OTP sent successfully"
 
 });
 
@@ -818,75 +671,171 @@ message:
 
 
 
+// Generate OTP
 
-const resetToken =
-crypto.randomBytes(32).toString("hex");
-
-
-
-user.resetPasswordToken =
-resetToken;
-
-
-user.resetPasswordExpire =
-Date.now()+10*60*1000;
+const otp =
+generateOTP();
 
 
 
-await user.save();
+// Remove old reset OTP
 
+await OtpVerification.deleteMany({
 
+email,
 
-
-
-const resetUrl =
-`${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-
-
-
-
-await transporter.sendMail({
-
-from:
-process.env.EMAIL_USER,
-
-to:user.email,
-
-subject:
-"ServDial Password Reset",
-
-text:
-
-`
-Reset your password:
-
-${resetUrl}
-
-This link expires in 10 minutes.
-`
+type:"password_reset"
 
 });
 
 
+
+// Save new OTP
+
+await OtpVerification.create({
+
+email,
+
+otp,
+
+type:"password_reset",
+
+expiresAt:
+Date.now()+5*60*1000
+
+});
+
+
+
+// Send Email
+
+await sendEmailOTP(
+
+email,
+
+otp,
+
+"ServDial Password Reset OTP"
+
+);
 
 
 
 res.json({
 
+success:true,
+
 message:
-"Reset link sent"
+"OTP sent successfully"
+
+});
+
+
+});
+
+
+// =================================================
+// VERIFY FORGOT PASSWORD OTP
+// =================================================
+
+export const verifyForgotPasswordOTP =
+asyncHandler(async(req,res)=>{
+
+
+let {
+
+email,
+
+otp
+
+}=req.body;
+
+
+
+if(
+!email ||
+!otp
+){
+
+res.status(400);
+
+throw new Error(
+"Email and OTP required"
+);
+
+}
+
+
+
+email =
+email
+.trim()
+.toLowerCase();
+
+
+
+// Find OTP
+
+const otpRecord =
+await OtpVerification.findOne({
+
+email,
+
+otp,
+
+type:"password_reset",
+
+expiresAt:{
+$gt:Date.now()
+}
 
 });
 
 
 
+if(!otpRecord){
+
+res.status(400);
+
+throw new Error(
+"Invalid or expired OTP"
+);
+
+}
+
+
+
+// Generate temporary reset token
+
+const resetToken =
+generateResetToken(email);
+
+
+
+// Remove OTP after verification
+
+await OtpVerification.deleteOne({
+
+_id:otpRecord._id
+
 });
 
 
 
+res.json({
+
+success:true,
+
+message:
+"OTP verified successfully",
 
 
+resetToken
 
+});
+
+
+});
 
 
 // =================================================
@@ -897,44 +846,121 @@ export const resetPassword =
 asyncHandler(async(req,res)=>{
 
 
-const {token}=req.params;
+const {
 
+resetToken,
 
-const {password}=req.body;
+password,
 
+confirmPassword
 
-
-const user =
-await User.findOne({
-
-resetPasswordToken:token,
-
-resetPasswordExpire:{
-$gt:Date.now()
-}
-
-});
+}=req.body;
 
 
 
-if(!user){
+if(
+!resetToken ||
+!password ||
+!confirmPassword
+){
 
 res.status(400);
 
 throw new Error(
-"Invalid or expired token"
+"All fields are required"
 );
 
 }
 
 
 
-user.password=password;
+// Password match check
+
+if(password !== confirmPassword){
+
+res.status(400);
+
+throw new Error(
+"Passwords do not match"
+);
+
+}
 
 
-user.resetPasswordToken=undefined;
 
-user.resetPasswordExpire=undefined;
+// Verify reset token
+
+let decoded;
+
+
+try{
+
+decoded =
+jwt.verify(
+resetToken,
+process.env.JWT_SECRET
+);
+
+
+}
+catch(error){
+
+res.status(400);
+
+throw new Error(
+"Invalid or expired reset token"
+);
+
+}
+
+
+
+// Check token type
+
+if(
+decoded.type !== "password_reset"
+){
+
+res.status(400);
+
+throw new Error(
+"Invalid reset token"
+);
+
+}
+
+
+
+const email =
+decoded.email;
+
+
+
+// Find user
+
+const user =
+await User.findOne({
+email
+});
+
+
+
+if(!user){
+
+res.status(404);
+
+throw new Error(
+"User not found"
+);
+
+}
+
+
+
+// Update password
+
+user.password =
+password;
 
 
 
@@ -942,20 +968,29 @@ await user.save();
 
 
 
+// Remove any old reset OTP
+
+await OtpVerification.deleteMany({
+
+email,
+
+type:"password_reset"
+
+});
+
+
+
 res.json({
 
+success:true,
+
 message:
-"Password reset successful"
+"Password updated successfully"
 
 });
 
 
 });
-
-
-
-
-
 
 
 // =================================================

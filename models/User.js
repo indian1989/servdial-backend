@@ -48,6 +48,16 @@ const userSchema = new mongoose.Schema(
     default: false
   },
 
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  
+  isPhoneVerified: {
+  type: Boolean,
+  default: false
+},
+
   isActive: {
     type: Boolean,
     default: true
@@ -73,15 +83,6 @@ const userSchema = new mongoose.Schema(
   city: {
     type: String,
     index: true
-  },
-
-  // password reset
-  resetPasswordToken: {
-    type: String
-  },
-
-  resetPasswordExpire: {
-    type: Date
   },
 
 },

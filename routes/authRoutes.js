@@ -1,33 +1,95 @@
 import express from "express";
+
 import {
   registerUser,
   loginUser,
   getUserProfile,
-  forgotPassword,
-  resetPassword,
+
   sendRegistrationOTP,
-  sendPhoneVerificationOTP,
   verifyOTP,
+
+  sendForgotPasswordOTP,
+  verifyForgotPasswordOTP,
+  resetPassword
+
 } from "../controllers/authController.js";
+
 
 import { protect } from "../middleware/authMiddleware.js";
 
+
 const router = express.Router();
 
-// Email OTP
-router.post("/send-registration-otp", sendRegistrationOTP);
-
-// Phone OTP
-router.post("/send-phone-otp", sendPhoneVerificationOTP);
 
 // ================= PUBLIC ROUTES =================
-router.post("/verify-otp", verifyOTP);
-router.post("/register", registerUser);
-router.post("/login", loginUser);
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password/:token", resetPassword);
+
+
+// Registration Email OTP
+router.post(
+  "/send-registration-otp",
+  sendRegistrationOTP
+);
+
+
+// Verify OTP
+router.post(
+  "/verify-otp",
+  verifyOTP
+);
+
+
+// Register
+router.post(
+  "/register",
+  registerUser
+);
+
+
+// Login
+router.post(
+  "/login",
+  loginUser
+);
+
+
+
+// ================= FORGOT PASSWORD =================
+
+
+// Step 1
+// Email -> Send OTP
+router.post(
+  "/send-forgot-password-otp",
+  sendForgotPasswordOTP
+);
+
+
+// Step 2
+// Verify OTP
+router.post(
+  "/verify-forgot-password-otp",
+  verifyForgotPasswordOTP
+);
+
+
+// Step 3
+// Update Password
+router.post(
+  "/reset-password",
+  resetPassword
+);
+
+
+
 
 // ================= PROTECTED ROUTES =================
-router.get("/profile", protect, getUserProfile);
+
+router.get(
+  "/profile",
+  protect,
+  getUserProfile
+);
+
+
 
 export default router;
