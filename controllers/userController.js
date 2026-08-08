@@ -82,3 +82,142 @@ export const changePassword = asyncHandler(async (req, res) => {
 
   res.json({ message: "Password updated successfully" });
 });
+
+
+// ================= SAVE BUSINESS =================
+
+export const saveBusiness = asyncHandler(async(req,res)=>{
+
+const userId = req.user._id;
+const { businessId } = req.body;
+
+
+if(!businessId){
+  res.status(400);
+  throw new Error("Business ID required");
+}
+
+
+const user = await User.findById(userId);
+
+
+if(!user){
+  res.status(404);
+  throw new Error("User not found");
+}
+
+
+if(user.savedBusinesses.includes(businessId)){
+
+return res.json({
+ success:true,
+ saved:true,
+ message:"Already saved"
+});
+
+}
+
+
+user.savedBusinesses.push(businessId);
+
+await user.save();
+
+
+res.json({
+ success:true,
+ saved:true,
+ message:"Business saved"
+});
+
+
+});
+
+
+// ================= CHECK SAVED BUSINESS =================
+
+export const checkSavedBusiness = async(req,res)=>{
+
+try{
+
+const {businessId}=req.params;
+
+
+const user = await User.findById(req.user._id);
+
+
+const saved =
+user.savedBusinesses.includes(businessId);
+
+
+res.json({
+success:true,
+saved
+});
+
+
+}catch(error){
+
+res.status(500).json({
+success:false,
+message:error.message
+});
+
+}
+
+};
+
+
+// ================= REMOVE SAVED =================
+
+export const removeSavedBusiness = asyncHandler(async(req,res)=>{
+
+const {businessId}=req.body;
+
+
+await User.findByIdAndUpdate(
+req.user._id,
+{
+ $pull:{
+  savedBusinesses:businessId
+ }
+}
+);
+
+
+res.json({
+ success:true,
+ saved:false,
+ message:"Removed from saved"
+});
+
+
+});
+
+// ================= GET SAVED =================
+
+export const getSavedBusinesses = asyncHandler(async(req,res)=>{
+
+
+const user = await User.findById(req.user._id)
+.populate({
+ path:"savedBusinesses",
+ populate:[
+  {
+   path:"categoryId"
+  },
+  {
+   path:"cityId"
+  }
+ ]
+});
+
+
+res.json({
+
+success:true,
+data:user.savedBusinesses || []
+
+});
+
+
+});

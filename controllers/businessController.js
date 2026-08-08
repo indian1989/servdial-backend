@@ -1408,23 +1408,23 @@ const update={};
 switch(type){
 
 case "call":
-update.phoneClicks={$inc:1};
+update.phoneClicks=1;
 break;
 
 case "whatsapp":
-update.whatsappClicks={$inc:1};
+update.whatsappClicks=1;
 break;
 
 case "direction":
-update.directionClicks={$inc:1};
+update.directionClicks=1;
 break;
 
 case "share":
-update.shareClicks={$inc:1};
+update.shareClicks=1;
 break;
 
 case "booking":
-update.bookingClicks={$inc:1};
+update.bookingClicks=1;
 break;
 
 default:

@@ -100,6 +100,151 @@ export const getAnalytics = asyncHandler(async (req, res) => {
   });
 });
 
+
+// ======================================================
+// UPDATE ADMIN LEAD STATUS
+// ======================================================
+
+export const updateAdminLeadStatus = asyncHandler(
+  async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const allowedStatuses = [
+      "new",
+      "contacted",
+      "follow_up",
+      "converted",
+      "closed",
+      "cancelled",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid lead status",
+      });
+    }
+
+    const lead = await Lead.findById(id);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    // ================================
+    // STATUS
+    // ================================
+
+    lead.status = status;
+
+    // ================================
+    // CONTACT TRACKING
+    // ================================
+
+    if (
+      status === "contacted" ||
+      status === "converted"
+    ) {
+      if (!lead.lastContactedAt) {
+        lead.lastContactedAt = new Date();
+      }
+    }
+
+    // ================================
+    // CLOSED TRACKING
+    // ================================
+
+    if (status === "closed") {
+      lead.closedAt = new Date();
+      lead.cancelledAt = null;
+    }
+
+    // ================================
+    // CANCELLED TRACKING
+    // ================================
+
+    if (status === "cancelled") {
+      lead.cancelledAt = new Date();
+      lead.closedAt = null;
+    }
+
+    // ================================
+    // REOPEN / OTHER STATUS
+    // ================================
+
+    if (
+      status !== "closed" &&
+      status !== "cancelled"
+    ) {
+      lead.closedAt = null;
+      lead.cancelledAt = null;
+    }
+
+    await lead.save();
+
+    const updatedLead = await Lead.findById(lead._id)
+      .populate(
+        "business",
+        "name slug cityId cityName owner"
+      )
+      .populate(
+        "userId",
+        "name email phone"
+      );
+
+    res.status(200).json({
+      success: true,
+      message: "Lead status updated successfully",
+      lead: updatedLead,
+    });
+  }
+);
+
+
+// ======================================================
+// UPDATE ADMIN LEAD NOTES
+// ======================================================
+
+export const updateAdminLeadNotes = asyncHandler(
+  async (req, res) => {
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    const lead = await Lead.findById(id);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: "Lead not found",
+      });
+    }
+
+    lead.notes = notes || "";
+
+    await lead.save();
+
+    const updatedLead = await Lead.findById(lead._id)
+      .populate(
+        "business",
+        "name slug cityId cityName owner"
+      )
+      .populate(
+        "userId",
+        "name email phone"
+      );
+
+    res.status(200).json({
+      success: true,
+      message: "Lead notes updated successfully",
+      lead: updatedLead,
+    });
+  }
+);
+
 /* ======================================================
    REPORTS
 ====================================================== */

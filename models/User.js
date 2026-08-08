@@ -85,6 +85,13 @@ const userSchema = new mongoose.Schema(
     index: true
   },
 
+  savedBusinesses: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Business"
+  }
+],
+
 },
 
 {

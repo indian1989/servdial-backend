@@ -11,6 +11,8 @@ import {
   getAdmins,
   getUsers,
   deleteUser,
+  updateAdminLeadStatus,
+  updateAdminLeadNotes,
 } from "../controllers/adminController.js";
 
 import {
@@ -23,50 +25,107 @@ const router = express.Router();
 /* ======================================================
    SECURITY LAYER
 ====================================================== */
+
 router.use(protect);
-router.use(authorizeRoles("admin", "superadmin"));
+
+router.use(
+  authorizeRoles("admin", "superadmin")
+);
+
 
 /* ======================================================
    DASHBOARD
 ====================================================== */
-router.get("/dashboard", getDashboardStats);
+
+router.get(
+  "/dashboard",
+  getDashboardStats
+);
+
 
 /* ======================================================
    ANALYTICS
 ====================================================== */
-router.get("/analytics", getAnalytics);
+
+router.get(
+  "/analytics",
+  getAnalytics
+);
+
 
 /* ======================================================
-   USERS (ADMIN + SUPERADMIN)
+   USERS
 ====================================================== */
-router.get("/users", getUsers);
+
+router.get(
+  "/users",
+  getUsers
+);
 
 router.delete(
   "/users/:id",
   deleteUser
 );
+
+
 /* ======================================================
-   ADMINS (SUPERADMIN ONLY)
+   ADMINS
+   SUPERADMIN ONLY
 ====================================================== */
+
 router.get(
   "/admins",
   authorizeRoles("superadmin"),
   getAdmins
 );
 
+
+/* ======================================================
+   LEADS
+   ADMIN + SUPERADMIN
+====================================================== */
+
+// Update lead status
+router.put(
+  "/leads/:id/status",
+  updateAdminLeadStatus
+);
+
+// Update lead notes
+router.put(
+  "/leads/:id/notes",
+  updateAdminLeadNotes
+);
+
+
 /* ======================================================
    ACCOUNT MANAGEMENT
 ====================================================== */
-router.put("/change-password", changePassword);
+
+router.put(
+  "/change-password",
+  changePassword
+);
+
 
 /* ======================================================
    SYSTEM SETTINGS
 ====================================================== */
-router.get("/system-settings", getSystemSettings);
+
+router.get(
+  "/system-settings",
+  getSystemSettings
+);
+
 
 /* ======================================================
    ACTIVITY LOGS
 ====================================================== */
-router.get("/activity-logs", getActivityLogs);
+
+router.get(
+  "/activity-logs",
+  getActivityLogs
+);
+
 
 export default router;

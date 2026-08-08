@@ -12,6 +12,10 @@ import {
   getProviderBusinesses,
   getProviderBusinessById,
   getProviderLeads,
+  updateProviderLeadStatus,
+  updateProviderLeadNotes,
+  closeProviderLead,
+  cancelProviderLead,
   getProviderReviews,
   getProviderAnalytics,
   getProviderSettings,
@@ -51,8 +55,30 @@ router.post("/businesses/claim", claimBusiness);
 router.put("/businesses/:id/hours", updateBusinessHours);
 router.put("/businesses/:id/media", updateBusinessMedia);
 
-/* ================= LEADS & REVIEWS ================= */
+// ================= LEADS & REVIEWS =================
+
 router.get("/leads", getProviderLeads);
+
+router.put(
+  "/leads/:id/status",
+  updateProviderLeadStatus
+);
+
+router.put(
+  "/leads/:id/notes",
+  updateProviderLeadNotes
+);
+
+router.put(
+  "/leads/:id/close",
+  closeProviderLead
+);
+
+router.put(
+  "/leads/:id/cancel",
+  cancelProviderLead
+);
+
 router.get("/reviews", getProviderReviews);
 
 /* ================= ANALYTICS ================= */
