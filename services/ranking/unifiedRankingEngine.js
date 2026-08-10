@@ -2,38 +2,76 @@
 
 //
 // Unified Ranking Engine
-// PURE: no DB access, no slug logic, no side-effects
+// PURE:
+// - No DB access
+// - No slug logic
+// - No API logic
+// - No side effects
+//
+// Responsibility:
+// - Calculate ranking score
+// - Normalize ranking signals
+// - Sort businesses
+// - Preserve stable order
 //
 
-// =============================
-// ⚙️ WEIGHTS (TUNE LATER)
-// =============================
+// =========================================================
+// ⚙️ RANKING WEIGHTS
+// =========================================================
+
 const WEIGHTS = {
   views: 0.25,
   clicks: 0.35,
   rating: 0.25,
   priority: 0.15,
+
+  // Featured is an additional boost,
+  // not part of the 100% weighted score.
   featuredBoost: 0.5,
 };
 
-// =============================
-// 🧠 SAFE VALUE HELPER
-// =============================
-const safeNumber = (val) => {
-  return typeof val === "number" && !isNaN(val) ? val : 0;
+// =========================================================
+// 🧠 SAFE NUMBER
+// =========================================================
+
+const safeNumber = (value) => {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : 0;
 };
 
-// =============================
-// 🧠 NORMALIZE HELPER
-// =============================
+// =========================================================
+// 🧠 NORMALIZE VALUE
+// =========================================================
+
 const normalize = (value, max) => {
-  if (!max || max <= 0) return 0;
-  return value / max;
+  if (!max || max <= 0) {
+    return 0;
+  }
+
+  return Math.min(
+    Math.max(value / max, 0),
+    1
+  );
 };
 
-// =============================
-// 📊 GET MAX VALUES
-// =============================
+// =========================================================
+// 🧠 PRIORITY NORMALIZE
+// =========================================================
+
+const normalizePriority = (value) => {
+  const priority = safeNumber(value);
+
+  return Math.min(
+    Math.max(priority / 100, 0),
+    1
+  );
+};
+
+// =========================================================
+// 📊 GET MAXIMUM SIGNAL VALUES
+// =========================================================
+
 const getMaxValues = (items) => {
   let maxViews = 0;
   let maxClicks = 0;
@@ -42,75 +80,170 @@ const getMaxValues = (items) => {
   for (const item of items) {
     const views = safeNumber(item.views);
     const clicks = safeNumber(item.clicks);
-    const rating = safeNumber(item.averageRating); // ✅ FIXED
+    const rating = safeNumber(item.averageRating);
 
-    if (views > maxViews) maxViews = views;
-    if (clicks > maxClicks) maxClicks = clicks;
-    if (rating > maxRating) maxRating = rating;
+    if (views > maxViews) {
+      maxViews = views;
+    }
+
+    if (clicks > maxClicks) {
+      maxClicks = clicks;
+    }
+
+    if (rating > maxRating) {
+      maxRating = rating;
+    }
   }
 
-  return { maxViews, maxClicks, maxRating };
+  return {
+    maxViews,
+    maxClicks,
+    maxRating,
+  };
 };
 
-// =============================
-// 🧠 SCORE CALCULATOR
-// =============================
-const calculateScore = (item, max, context) => {
+// =========================================================
+// 🧮 CALCULATE BUSINESS SCORE
+// =========================================================
+
+const calculateScore = (item, max, context = {}) => {
   const views = safeNumber(item.views);
   const clicks = safeNumber(item.clicks);
-  const rating = safeNumber(item.averageRating); // ✅ FIXED
+  const rating = safeNumber(item.averageRating);
+  const priority = safeNumber(item.priorityScore);
 
-  const viewsScore = normalize(views, max.maxViews);
-  const clicksScore = normalize(clicks, max.maxClicks);
-  const ratingScore = normalize(rating, max.maxRating);
-  const priorityScore = safeNumber(item.priorityScore); const priorityNormalized = priorityScore / 100;
+  // -------------------------------------------------------
+  // NORMALIZED SIGNALS
+  // -------------------------------------------------------
+
+  const viewsScore = normalize(
+    views,
+    max.maxViews
+  );
+
+  const clicksScore = normalize(
+    clicks,
+    max.maxClicks
+  );
+
+  const ratingScore = normalize(
+    rating,
+    max.maxRating
+  );
+
+  const priorityScore = normalizePriority(
+    priority
+  );
+
+  // -------------------------------------------------------
+  // BASE SCORE
+  // -------------------------------------------------------
 
   let score =
     viewsScore * WEIGHTS.views +
     clicksScore * WEIGHTS.clicks +
-    ratingScore * WEIGHTS.rating;
-    priorityNormalized * WEIGHTS.priority;
-    
-  // 🔥 FEATURE BOOST
-  if (item.isFeatured) {
+    ratingScore * WEIGHTS.rating +
+    priorityScore * WEIGHTS.priority;
+
+  // -------------------------------------------------------
+  // ⭐ FEATURED BOOST
+  // -------------------------------------------------------
+
+  if (item.isFeatured === true) {
     score += WEIGHTS.featuredBoost;
   }
 
-  // 🔮 FUTURE: context-based personalization
-  // Example:
-  // if (context?.userLocation && item.cityId === context.userLocation) {
-  //   score += 0.1;
-  // }
+  // -------------------------------------------------------
+  // 🔮 FUTURE CONTEXT
+  // -------------------------------------------------------
+  //
+  // Context intentionally does not affect ranking yet.
+  //
+  // Future examples:
+  //
+  // - user location
+  // - city match
+  // - category preference
+  // - search intent
+  // - distance
+  // - personalization
+  //
+  // These should be added here later,
+  // without adding database access.
+  //
+
+  void context;
 
   return score;
 };
 
-// =============================
-// 🚀 MAIN FUNCTION
-// =============================
-export const rankBusinesses = (businesses, context = {}) => {
-  if (!Array.isArray(businesses) || businesses.length === 0) {
+// =========================================================
+// 🚀 MAIN RANKING FUNCTION
+// =========================================================
+
+export const rankBusinesses = (
+  businesses,
+  context = {}
+) => {
+  // -------------------------------------------------------
+  // SAFETY
+  // -------------------------------------------------------
+
+  if (
+    !Array.isArray(businesses) ||
+    businesses.length === 0
+  ) {
     return [];
   }
 
-  // 1. Normalize scale
-  const max = getMaxValues(businesses);
+  // -------------------------------------------------------
+  // 1. GET NORMALIZATION VALUES
+  // -------------------------------------------------------
 
-  // 2. Score
-  const scored = businesses.map((b, index) => ({
-    ...b,
-    _score: calculateScore(b, max, context),
-    _index: index, // ✅ for stable sort
-  }));
+  const max = getMaxValues(
+    businesses
+  );
 
-  // 3. Sort (stable)
+  // -------------------------------------------------------
+  // 2. CALCULATE SCORES
+  // -------------------------------------------------------
+
+  const scored = businesses.map(
+    (business, index) => ({
+      ...business,
+
+      _score: calculateScore(
+        business,
+        max,
+        context
+      ),
+
+      // Used for stable sorting.
+      _index: index,
+    })
+  );
+
+  // -------------------------------------------------------
+  // 3. SORT BY SCORE
+  // -------------------------------------------------------
+
   scored.sort((a, b) => {
-    if (b._score === a._score) {
-      return a._index - b._index; // preserve original order
+    // Higher score first.
+    if (b._score !== a._score) {
+      return b._score - a._score;
     }
-    return b._score - a._score;
+
+    // Same score:
+    // preserve original database/search order.
+    return a._index - b._index;
   });
 
-  // 4. Clean response
-  return scored.map(({ _score, _index, ...rest }) => rest);
+  // -------------------------------------------------------
+  // 4. REMOVE INTERNAL FIELDS
+  // -------------------------------------------------------
+
+  return scored.map(
+    ({ _score, _index, ...business }) =>
+      business
+  );
 };

@@ -76,6 +76,50 @@ const logNormalize = (value, divisor = 5) => {
   );
 };
 
+// =========================================================
+// 🔎 EXACT NAME MATCH
+// =========================================================
+
+const normalizeText = (value = "") => {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+};
+
+const getNameMatchScore = (business, context = {}) => {
+  const query = normalizeText(
+    context?.textSearch ||
+    context?.rawQuery ||
+    context?.query ||
+    ""
+  );
+
+  const name = normalizeText(
+    business?.name || ""
+  );
+
+  if (!query || !name) {
+    return 0;
+  }
+
+  // 🥇 Exact business name
+  if (name === query) {
+    return 1;
+  }
+
+  // 🥈 Business name starts with query
+  if (name.startsWith(query)) {
+    return 0.85;
+  }
+
+  // 🥉 Business name contains complete query
+  if (name.includes(query)) {
+    return 0.70;
+  }
+
+  return 0;
+};
 
 /* =========================================================
    📊 SIGNAL NORMALIZATION
@@ -343,7 +387,6 @@ const computeScore = (
   const weights =
     getWeights(context);
 
-
   let score =
     signals.rating * weights.rating +
     signals.reviews * weights.reviews +
@@ -357,10 +400,6 @@ const computeScore = (
     signals.trusted * weights.trusted +
     signals.premium * weights.premium;
 
-
-  /**
-   * Keep final score predictable.
-   */
   return clamp01(score);
 };
 
@@ -443,11 +482,40 @@ export const rankBusinesses = (
             );
 
 
-          const finalScore =
-            computeScore(
-              signals,
-              context
-            );
+          const baseScore =
+  computeScore(
+    signals,
+    context
+  );
+
+const nameMatch =
+  getNameMatchScore(
+    business,
+    context
+  );
+
+let finalScore =
+  baseScore;
+
+// =====================================================
+// 🥇 EXACT NAME MATCH PRIORITY
+// =====================================================
+
+if (nameMatch === 1) {
+  finalScore = 0.98;
+}
+
+// =====================================================
+// 🥈 PARTIAL NAME MATCH
+// =====================================================
+
+else if (nameMatch > 0) {
+  finalScore =
+    Math.max(
+      finalScore,
+      0.85 + (nameMatch * 0.10)
+    );
+}
 
 
           return {
@@ -467,18 +535,19 @@ export const rankBusinesses = (
              * Can be removed from API response later if required.
              */
             _ranking: {
-              rating: signals.rating,
-              reviews: signals.reviews,
-              views: signals.views,
-              clicks: signals.clicks,
-              distance: signals.distance,
-              trending: signals.trending,
-              vector: signals.vector,
-              relevance: signals.relevance,
-              feature: signals.feature,
-              trusted: signals.trusted,
-              premium: signals.premium,
-            },
+  rating: signals.rating,
+  reviews: signals.reviews,
+  views: signals.views,
+  clicks: signals.clicks,
+  distance: signals.distance,
+  trending: signals.trending,
+  vector: signals.vector,
+  relevance: signals.relevance,
+  feature: signals.feature,
+  trusted: signals.trusted,
+  premium: signals.premium,
+  nameMatch,
+},
           };
 
         } catch (error) {
