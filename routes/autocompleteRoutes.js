@@ -1,3 +1,4 @@
+// backend/routes/autocompleteRoutes.js
 import express from "express";
 import { getSuggestions } from "../controllers/autocompleteController.js";
 

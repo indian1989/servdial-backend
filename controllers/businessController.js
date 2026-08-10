@@ -516,24 +516,71 @@ export const updateBusinessHours = asyncHandler(async (req, res) => {
 ========================= */
 
 export const getBusinesses = asyncHandler(async (req, res) => {
-
-  console.log(
-    "🔥🔥🔥 GET BUSINESSES CONTROLLER HIT 🔥🔥🔥"
-  );
-
-  const businesses = await Business.find({})
+  const {
+    city,
+    category,
+    page = 1,
+    limit = 20,
+  } = req.query;
+  
+  const query = {
+    status: "approved",
+    isDeleted: false,
+  };
+  
+  if (city) {
+    const cityDoc = await City.findOne({
+      slug: city,
+      status: "active",
+    }).select("_id");
+    
+    if (cityDoc) {
+      query.cityId = cityDoc._id;
+    }
+  }
+  
+  if (category) {
+    const categoryDoc = await Category.findOne({
+      slug: category,
+      status: "active",
+    }).select("_id");
+    
+    if (categoryDoc) {
+      query.categoryId = categoryDoc._id;
+    }
+  }
+  
+  const skip =
+  (Number(page) - 1) * Number(limit);
+  
+  const [businesses, total] =
+  await Promise.all([
+    Business.find(query)
     .select("+location")
-    .populate("cityId", "name slug latitude longitude")
+    .populate( "cityId",
+      "name slug latitude longitude"
+    )
     .populate(
       "categoryId",
       "name slug uiType features"
-    );
-
+    )
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(Number(limit))
+    .lean(),
+    
+    Business.countDocuments(query),
+  ]);
   res.json({
     success: true,
-    data: businesses
+    data: businesses,
+    meta: {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      pages: Math.ceil(total / Number(limit)),
+    },
   });
-
 });
 
 /* =========================
@@ -1079,77 +1126,80 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
 // ================= GET BUSINESS BY SLUG =================
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
   const { slug } = req.params;
-
+  
   if (!slug) {
     return res.status(400).json({
       success: false,
       message: "Slug is required",
     });
   }
-
+  
   const business = await Business.findOne({
     slug,
     status: "approved",
     isDeleted: false,
   })
-    .populate("cityId", "name slug")
-    .populate(
-  "categoryId",
-  "name slug uiType features"
-)
-    .lean();
-
+  .populate("cityId", "name slug state district")
+  .populate( "categoryId", "name slug uiType features"
+  )
+  .lean();
+  
   if (!business) {
     return res.status(404).json({
       success: false,
       message: "Business not found",
     });
   }
-
+  
   const language =
-(
-  req.query.lang ||
-  req.headers["accept-language"]?.split(",")[0]?.split("-")[0] ||
-  "en"
-).toLowerCase();
-
-const supportedLanguages = [
-  "en",
-  "hi",
-  "bn",
-  "mr",
-  "ta",
-  "te",
-  "gu"
-];
-
-
-const finalLanguage =
-supportedLanguages.includes(language)
-?
-language
-:
-"en";
-
-
-business.faq = generateBusinessFAQ({
-  business,
-  language
-});
-
-  // 🔥 OPTIONAL: fetch reviews here if needed
-  const reviews = await Review.find({ businessId: business._id })
-    .sort({ createdAt: -1 })
-    .limit(20)
-    .lean();
-
-  res.json({
-  success: true,
-  data: {
+  (
+    req.query.lang ||
+    req.headers["accept-language"]
+    ?.split(",")[0]
+    ?.split("-")[0] ||
+    "en"
+  ).toLowerCase();
+  
+  const supportedLanguages = [
+    "en",
+    "hi",
+    "bn",
+    "mr",
+    "ta",
+    "te",
+    "gu",
+  ];
+  
+  const finalLanguage =
+  supportedLanguages.includes(language)
+  ? language
+  : "en";
+  
+  business.faq = generateBusinessFAQ({
     business,
-    reviews,
-  },
-});
+    language: finalLanguage,
+  });
+  
+  const reviews = await Review.find({
+    businessId: business._id,
+    status: "approved",
+  })
+  .sort({ createdAt: -1 })
+  .limit(20)
+  .lean();
+  
+  res.setHeader(
+    "Cache-Control",
+    "public, max-age=300, stale-while-revalidate=600"
+  );
+  
+  res.json({
+    success: true,
+    data: {
+      business,
+      reviews,
+    },
+  });
 });
 
 // ================= GET BUSINESS COUNT =================
@@ -1337,20 +1387,10 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
   }));
 
 
-
-
-
-  const ranked = await rankBusinesses(
-    normalized,
-    {},
-    "",
-    {},
-    null,
-    base.cityId
-  );
-
-
-
+const ranked = rankBusinesses(
+  normalized,
+  { intent: { type: "similar" } }
+);
 
   res.json({
 
@@ -1367,28 +1407,23 @@ export const getSimilarBusinesses = asyncHandler(async (req, res) => {
 // ================= Track BUSINESS VIEW =================
 export const trackBusinessView = asyncHandler(async (req, res) => {
   const { id } = req.params;
-
-  // ✅ Validate ID
+  
   if (!isValidObjectId(id)) {
     return res.status(400).json({
       success: false,
       message: "Invalid business id",
     });
   }
-
-  const updated = await Business.findByIdAndUpdate(
+  await Business.findByIdAndUpdate(
     id,
-    { $inc: { views: 1 } },
-    { new: true }
+    {
+      $inc: { views: 1 },
+      $set: { lastViewedAt: new Date()
+      },
+    },
+    { new: false }
   );
-
-  if (!updated) {
-    return res.status(404).json({
-      success: false,
-      message: "Business not found",
-    });
-  }
-
+  
   res.json({
     success: true,
     data: null,
@@ -1396,61 +1431,45 @@ export const trackBusinessView = asyncHandler(async (req, res) => {
 });
 
 // ================= TRACK BUSINESS ANALYTICS =========================
-export const trackBusinessAnalytics = asyncHandler(async (req,res)=>{
-
-const {id}=req.params;
-const {type}=req.body;
-
-
-const update={};
-
-
-switch(type){
-
-case "call":
-update.phoneClicks=1;
-break;
-
-case "whatsapp":
-update.whatsappClicks=1;
-break;
-
-case "direction":
-update.directionClicks=1;
-break;
-
-case "share":
-update.shareClicks=1;
-break;
-
-case "booking":
-update.bookingClicks=1;
-break;
-
-default:
-return res.status(400).json({
-success:false,
-message:"Invalid analytics type"
-});
-
-}
-
-
-const business = await Business.findByIdAndUpdate(
-id,
-{
-$inc:update
-},
-{new:true}
-);
-
-
-res.json({
-success:true,
-data:null
-});
-
-
+export const trackBusinessAnalytics = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { type } = req.body;
+  
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid business id",
+    });
+  }
+  
+  const fieldMap = {
+    call: "phoneClicks",
+    whatsapp: "whatsappClicks",
+    direction: "directionClicks",
+    share: "shareClicks",
+    booking: "bookingClicks",
+  };
+  
+  const field = fieldMap[type];
+  if (!field) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid analytics type",
+    });
+  }
+  
+  await Business.findByIdAndUpdate(
+    id,
+    {
+      $inc: { [field]: 1 },
+    },
+    { new: false }
+  );
+  
+  res.json({
+    success: true,
+    data: null,
+  });
 });
 
 /* =========================
@@ -1459,47 +1478,32 @@ data:null
 
 export const getLatestBusinesses = asyncHandler(async (req, res) => {
   const { city, limit = 12 } = req.query;
-
+  
   const filter = {
     status: "approved",
     isDeleted: false,
   };
-
-  // ================= CITY RESOLVE =================
+  
   if (city) {
     const cityDoc = await City.findOne({
       slug: city,
+      status: "active",
     }).select("_id");
-
+    
     if (cityDoc) {
       filter.cityId = cityDoc._id;
     }
   }
-
-  // ================= FETCH =================
-  const rawBusinesses = await Business.find(filter)
-    .populate("cityId", "name slug")
-    .populate(
-  "categoryId",
-  "name slug uiType features"
-)
-    .sort({ createdAt: -1 })
-    .limit(Number(limit))
-    .lean();
-
-  // ================= RANK =================
-  const ranked = await rankBusinesses(
-    rawBusinesses,
-    {},
-    "",
-    { intent: "latest" },
-    req.user?._id || null,
-    filter.cityId || null
-  );
-
-  // ================= RESPONSE =================
+  
+  const businesses = await Business.find(filter)
+  .populate("cityId", "name slug")
+  .populate( "categoryId", "name slug uiType features" )
+  .sort({ createdAt: -1 })
+  .limit(Number(limit))
+  .lean();
+  
   res.json({
     success: true,
-    data: ranked,
+    data: businesses,
   });
 });

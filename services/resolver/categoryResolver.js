@@ -1,74 +1,144 @@
+// backend/services/resolver/categoryResolver.js
+
 import Category from "../../models/Category.js";
 import memoryCache from "../../utils/memoryCache.js";
 
 /**
  * =========================================================
- * 🧠 CATEGORY RESOLVER (FINAL SSOT VERSION)
+ * 🧠 CATEGORY RESOLVER — FINAL SSOT VERSION
  * =========================================================
+ *
  * RESPONSIBILITY:
- * - slug → category resolution
- * - slugHistory fallback
- * - parent → leaf expansion
- * - cache management
+ *
+ * - Resolve category slug → category
+ * - Support slugHistory
+ * - Normalize category slug
+ * - Expand parent category → leaf categories
+ * - Support nested category trees
+ * - Cache resolved category data
  *
  * MUST NOT:
- * - know routes
- * - rank businesses
- * - query businesses
+ *
+ * - Query businesses
+ * - Rank businesses
+ * - Parse search queries
+ * - Perform semantic mapping
+ * - Know routes
+ *
  * =========================================================
  */
 
-const CACHE_TTL = 60 * 60 * 6;
+const CACHE_TTL = 60 * 60 * 6; // 6 hours
 
 /* =========================================================
-   🧠 RESOLVE CATEGORY BY SLUG
-   ========================================================= */
+   NORMALIZE CATEGORY SLUG
+========================================================= */
+
+const normalizeCategorySlug = (value = "") => {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+};
+
+/* =========================================================
+   CACHE KEYS
+========================================================= */
+
+const categorySlugCacheKey = (slug) =>
+  `category:slug:${slug}`;
+
+const categoryChildrenCacheKey = (id) =>
+  `category:children:${String(id)}`;
+
+const categoryLeafCacheKey = (id) =>
+  `category:leaf:${String(id)}`;
+
+/* =========================================================
+   RESOLVE CATEGORY BY SLUG
+========================================================= */
+
+/**
+ * Resolution order:
+ *
+ * 1. Exact canonical slug
+ * 2. slugHistory
+ *
+ * Category name fallback is intentionally NOT used here.
+ *
+ * Search architecture should resolve categories through
+ * canonical slugs wherever possible.
+ */
 
 export const resolveCategoryBySlug = async (
   slug
 ) => {
-  if (!slug) return null;
+  if (!slug) {
+    return null;
+  }
 
-  const normalizedSlug = slug.trim();
+  const normalizedSlug =
+    normalizeCategorySlug(slug);
+
+  if (!normalizedSlug) {
+    return null;
+  }
 
   const cacheKey =
-    `category:slug:${normalizedSlug}`;
+    categorySlugCacheKey(
+      normalizedSlug
+    );
 
-  // =====================================================
-  // CACHE
-  // =====================================================
+  /* =======================================================
+     CACHE
+  ======================================================= */
 
-  const cached = memoryCache.get(cacheKey);
+  const cached =
+    memoryCache.get(cacheKey);
 
   if (cached) {
     return cached;
   }
 
-  // =====================================================
-  // PRIMARY SLUG MATCH
-  // =====================================================
+  /* =======================================================
+     1️⃣ EXACT SLUG
+  ======================================================= */
 
-  let category = await Category.findOne({
-    slug: normalizedSlug,
-  }).lean();
+  let category =
+    await Category.findOne({
+      slug: normalizedSlug,
+      status: "active",
+    })
+      .lean();
 
-  // =====================================================
-  // SLUG HISTORY FALLBACK
-  // =====================================================
+  /* =======================================================
+     2️⃣ SLUG HISTORY
+  ======================================================= */
 
   if (!category) {
-    category = await Category.findOne({
-      "slugHistory.slug": normalizedSlug,
-    }).lean();
+    category =
+      await Category.findOne({
+        "slugHistory.slug": normalizedSlug,
+        status: "active",
+      })
+        .lean();
   }
+
+  /* =======================================================
+     NOT FOUND
+  ======================================================= */
 
   if (!category) {
     return null;
   }
 
-  // =====================================================
-  // CACHE STORE
-  // =====================================================
+  /* =======================================================
+     CACHE
+  ======================================================= */
 
   memoryCache.set(
     cacheKey,
@@ -76,97 +146,294 @@ export const resolveCategoryBySlug = async (
     CACHE_TTL
   );
 
+  /*
+   * If a historical slug was used, also cache the
+   * canonical current slug.
+   */
+
+  if (category.slug) {
+    const canonicalSlug =
+      normalizeCategorySlug(
+        category.slug
+      );
+
+    if (
+      canonicalSlug &&
+      canonicalSlug !== normalizedSlug
+    ) {
+      memoryCache.set(
+        categorySlugCacheKey(
+          canonicalSlug
+        ),
+        category,
+        CACHE_TTL
+      );
+    }
+  }
+
   return category;
 };
 
 /* =========================================================
-   🌳 GET CHILD CATEGORY IDS (RECURSIVE SAFE)
-   ========================================================= */
+   GET DIRECT CHILDREN
+========================================================= */
 
-export const getLeafCategoryIds = async (
+/**
+ * Returns direct active children of a category.
+ *
+ * This function does NOT recursively expand children.
+ */
+
+const getDirectChildren = async (
   parentId
 ) => {
-  if (!parentId) return [];
+  if (!parentId) {
+    return [];
+  }
 
   const cacheKey =
-    `category:parent:${parentId}`;
+    categoryChildrenCacheKey(
+      parentId
+    );
 
-  // =====================================================
-  // CACHE
-  // =====================================================
-
-  const cached = memoryCache.get(cacheKey);
+  const cached =
+    memoryCache.get(cacheKey);
 
   if (cached) {
     return cached;
   }
 
-  // =====================================================
-  // FETCH DIRECT CHILDREN
-  // =====================================================
+  const children =
+    await Category.find({
+      parentCategory: parentId,
+      status: "active",
+    })
+      .select("_id name slug parentCategory status")
+      .lean();
 
-  const children = await Category.find({
-    parentCategory: parentId,
-    status: "active",
-  })
-    .select("_id")
-    .lean();
+  memoryCache.set(
+    cacheKey,
+    children,
+    CACHE_TTL
+  );
 
-  // =====================================================
-  // NO CHILDREN = SELF IS LEAF
-  // =====================================================
+  return children;
+};
+
+/* =========================================================
+   GET LEAF CATEGORY IDS
+========================================================= */
+
+/**
+ * Recursively expands a category tree.
+ *
+ * Example:
+ *
+ * Services
+ *   └── Home Services
+ *         ├── Plumbing
+ *         └── Electrical
+ *
+ * Resolving "Services" returns:
+ *
+ * [
+ *   PlumbingId,
+ *   ElectricalId
+ * ]
+ *
+ * If the requested category itself has no children:
+ *
+ * [
+ *   categoryId
+ * ]
+ *
+ * =========================================================
+ *
+ * visited:
+ *
+ * Protects against accidental circular category
+ * references in the database.
+ */
+
+export const getLeafCategoryIds = async (
+  parentId,
+  visited = new Set()
+) => {
+  if (!parentId) {
+    return [];
+  }
+
+  const parentKey =
+    String(parentId);
+
+  /* =======================================================
+     CIRCULAR REFERENCE PROTECTION
+  ======================================================= */
+
+  if (visited.has(parentKey)) {
+    console.warn(
+      "⚠️ CATEGORY CYCLE DETECTED:",
+      parentKey
+    );
+
+    return [];
+  }
+
+  visited.add(parentKey);
+
+  /* =======================================================
+     CACHE
+  ======================================================= */
+
+  /*
+   * Only use the normal cache when this is the root
+   * invocation. Recursive calls must independently
+   * evaluate their own children.
+   */
+
+  const isRootCall =
+    visited.size === 1;
+
+  const cacheKey =
+    categoryLeafCacheKey(
+      parentKey
+    );
+
+  if (isRootCall) {
+    const cached =
+      memoryCache.get(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+  }
+
+  /* =======================================================
+     FETCH DIRECT CHILDREN
+  ======================================================= */
+
+  const children =
+    await getDirectChildren(
+      parentId
+    );
+
+  /* =======================================================
+     NO CHILDREN = LEAF
+  ======================================================= */
 
   if (!children.length) {
     const result = [parentId];
 
-    memoryCache.set(
-      cacheKey,
-      result,
-      CACHE_TTL
-    );
+    if (isRootCall) {
+      memoryCache.set(
+        cacheKey,
+        result,
+        CACHE_TTL
+      );
+    }
 
     return result;
   }
 
-  // =====================================================
-  // INCLUDE ALL CHILD IDS
-  // =====================================================
+  /* =======================================================
+     RECURSIVE EXPANSION
+  ======================================================= */
 
-  const leafIds = children.map(
-    (c) => c._id
-  );
+  const leafIds = [];
 
-  memoryCache.set(
-    cacheKey,
-    leafIds,
-    CACHE_TTL
-  );
+  for (const child of children) {
+    const childLeafIds =
+      await getLeafCategoryIds(
+        child._id,
+        new Set(visited)
+      );
 
-  return leafIds;
+    leafIds.push(
+      ...childLeafIds
+    );
+  }
+
+  /* =======================================================
+     REMOVE DUPLICATES
+  ======================================================= */
+
+  const uniqueIds = [
+    ...new Map(
+      leafIds.map((id) => [
+        String(id),
+        id,
+      ])
+    ).values(),
+  ];
+
+  /* =======================================================
+     CACHE ROOT RESULT
+  ======================================================= */
+
+  if (isRootCall) {
+    memoryCache.set(
+      cacheKey,
+      uniqueIds,
+      CACHE_TTL
+    );
+  }
+
+  return uniqueIds;
 };
 
 /* =========================================================
-   🧠 RESOLVE FULL CATEGORY CONTEXT
-   ========================================================= */
+   RESOLVE FULL CATEGORY CONTEXT
+========================================================= */
+
+/**
+ * Returns:
+ *
+ * {
+ *   category,
+ *   primaryCategoryId,
+ *   leafCategoryIds
+ * }
+ */
 
 export const resolveCategoryContext = async (
   slug
 ) => {
   const category =
-    await resolveCategoryBySlug(slug);
+    await resolveCategoryBySlug(
+      slug
+    );
 
   if (!category) {
     return null;
   }
 
   const leafCategoryIds =
-    await getLeafCategoryIds(category._id);
+    await getLeafCategoryIds(
+      category._id
+    );
 
   return {
     category,
 
-    primaryCategoryId: category._id,
+    /*
+     * The category explicitly requested/resolved.
+     */
+    primaryCategoryId:
+      category._id,
 
+    /*
+     * Actual leaf categories used by business
+     * search.
+     */
     leafCategoryIds,
   };
+};
+
+/* =========================================================
+   OPTIONAL HELPERS
+========================================================= */
+
+export {
+  normalizeCategorySlug,
+  getDirectChildren,
 };

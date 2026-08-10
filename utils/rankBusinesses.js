@@ -1,69 +1,597 @@
-const clamp01 = (n) => Math.max(0, Math.min(1, n || 0));
+// backend/utils/rankBusinesses.js
 
-const normalize = (b) => ({
-  rating: clamp01((b.averageRating || 0) / 5),
-  views: clamp01(
-  Math.log10(Number(b.views || 0) + 1) / 5
-),
-  clicks: clamp01(b.clickScore || 0),
-  distance: clamp01(b.distanceScore ?? 1),
-  trending: clamp01(b.trendingScore || 0),
-  vector: clamp01(b.vectorScore || 0),
-  feature: b.isFeatured ? 1 : 0
-});
+/**
+ * =========================================================
+ * 🌍 WORLDWIDE BUSINESS RANKING ENGINE
+ * =========================================================
+ *
+ * RESPONSIBILITY:
+ * - Normalize ranking signals
+ * - Apply intent-aware ranking
+ * - Rank businesses consistently
+ * - Keep ranking independent from DB queries
+ *
+ * MUST NOT:
+ * - Query database
+ * - Resolve city/category
+ * - Parse search query
+ * - Modify business data
+ *
+ * RANKING SIGNALS:
+ * - Rating
+ * - Reviews
+ * - Views
+ * - Clicks
+ * - Distance
+ * - Trending
+ * - Vector/Semantic relevance
+ * - Featured status
+ *
+ * Designed for:
+ * - Local search
+ * - City search
+ * - Worldwide directory search
+ * - Nearby search
+ * - Quality search
+ * - Popular search
+ * - Emergency search
+ * - Future AI/vector ranking
+ * =========================================================
+ */
 
-const computeScore = (s, context) => {
-  const intent = context?.sortBy ?? context?.intent ?? "default";
-  const isNearby = !!context?.intent?.isNearMe;
 
-  const weights = {
-    rating: intent === "rating" ? 0.35 : 0.25,
-    views: 0.10,
-    clicks: 0.15,
-    distance: isNearby ? 0.25 : 0.10,
-    trending: 0.15,
-    vector: 0.10,
-    feature: 0.10
-  };
+/* =========================================================
+   🔢 HELPERS
+========================================================= */
 
-  return (
-    s.rating * weights.rating +
-    s.views * weights.views +
-    s.clicks * weights.clicks +
-    s.distance * weights.distance +
-    s.trending * weights.trending +
-    s.vector * weights.vector +
-    s.feature * weights.feature
+/**
+ * Clamp number between 0 and 1.
+ */
+const clamp01 = (value) => {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(1, number));
+};
+
+
+/**
+ * Safe logarithmic normalization.
+ *
+ * Prevents huge view/review/click counts from dominating
+ * the ranking.
+ */
+const logNormalize = (value, divisor = 5) => {
+  const number = Number(value || 0);
+
+  if (!Number.isFinite(number) || number <= 0) {
+    return 0;
+  }
+
+  return clamp01(
+    Math.log10(number + 1) / divisor
   );
 };
 
-export const rankBusinesses = (businesses = [], context = {}) => {
-  if (!Array.isArray(businesses)) return [];
 
-  const enriched = businesses
-    .filter(Boolean)
-    .map((b) => {
-      try {
-        const signals = normalize(b);
-        const finalScore = computeScore(signals, context);
+/* =========================================================
+   📊 SIGNAL NORMALIZATION
+========================================================= */
 
-        return {
-          ...b,
-          finalScore: Number(finalScore || 0),
-        };
-      } catch (err) {
-        console.error("🔥 RANK ERROR:", err.message);
-        return {
-          ...b,
-          finalScore: 0,
-        };
+const normalizeSignals = (business = {}) => {
+
+  const rating = clamp01(
+    Number(business.averageRating || 0) / 5
+  );
+
+
+  const reviews = logNormalize(
+    business.reviewCount ??
+    business.totalReviews ??
+    business.reviewsCount ??
+    0,
+    3
+  );
+
+
+  const views = logNormalize(
+    business.views || 0,
+    5
+  );
+
+
+  const clicks = clamp01(
+    business.clickScore ??
+    business.clicksScore ??
+    0
+  );
+
+
+  const distance = clamp01(
+    business.distanceScore ??
+    0
+  );
+
+
+  const trending = clamp01(
+    business.trendingScore || 0
+  );
+
+
+  const vector = clamp01(
+    business.vectorScore ??
+    business.semanticScore ??
+    0
+  );
+
+
+  const relevance = clamp01(
+    business.relevanceScore ??
+    business.searchScore ??
+    0
+  );
+
+
+  const feature =
+    business.isFeatured ? 1 : 0;
+
+
+  const trusted =
+    business.isTrustedPartner ? 1 : 0;
+
+
+  const premium =
+    business.isPremiumPartner ? 1 : 0;
+
+
+  return {
+    rating,
+    reviews,
+    views,
+    clicks,
+    distance,
+    trending,
+    vector,
+    relevance,
+    feature,
+    trusted,
+    premium,
+  };
+};
+
+
+/* =========================================================
+   🧠 INTENT NORMALIZATION
+========================================================= */
+
+const getIntentType = (context = {}) => {
+
+  /**
+   * parseSearchIntent returns:
+   *
+   * {
+   *   sortBy,
+   *   isNearMe,
+   *   isEmergency,
+   *   ...
+   * }
+   *
+   * intentDetector returns:
+   *
+   * {
+   *   type,
+   *   score,
+   *   scores
+   * }
+   */
+
+  if (context?.sortBy) {
+    return context.sortBy;
+  }
+
+
+  if (context?.intent?.type) {
+    return context.intent.type;
+  }
+
+
+  if (typeof context?.intent === "string") {
+    return context.intent;
+  }
+
+
+  return "default";
+};
+
+
+/* =========================================================
+   ⚖️ BASE WEIGHTS
+========================================================= */
+
+const BASE_WEIGHTS = {
+  rating: 0.22,
+  reviews: 0.08,
+  views: 0.10,
+  clicks: 0.12,
+  distance: 0.10,
+  trending: 0.10,
+  vector: 0.10,
+  relevance: 0.08,
+  feature: 0.04,
+  trusted: 0.03,
+  premium: 0.03,
+};
+
+
+/* =========================================================
+   🎯 INTENT-AWARE WEIGHTS
+========================================================= */
+
+const getWeights = (context = {}) => {
+
+  const weights = {
+    ...BASE_WEIGHTS,
+  };
+
+
+  const intent =
+    getIntentType(context);
+
+
+  const isNearby =
+    Boolean(
+      context?.isNearMe ||
+      context?.parsed?.isNearMe ||
+      context?.filters?.isNearMe
+    );
+
+
+  const isEmergency =
+    Boolean(
+      context?.isEmergency ||
+      context?.parsed?.isEmergency ||
+      context?.filters?.isEmergency ||
+      intent === "emergency"
+    );
+
+
+  /* =======================================================
+     ⭐ QUALITY / RATING
+  ======================================================= */
+
+  if (
+    intent === "rating" ||
+    intent === "quality"
+  ) {
+    weights.rating += 0.15;
+    weights.reviews += 0.05;
+    weights.feature -= 0.03;
+    weights.premium -= 0.02;
+  }
+
+
+  /* =======================================================
+     📈 POPULAR
+  ======================================================= */
+
+  if (
+    intent === "popular" ||
+    intent === "trending"
+  ) {
+    weights.views += 0.08;
+    weights.clicks += 0.06;
+    weights.trending += 0.08;
+  }
+
+
+  /* =======================================================
+     📍 NEARBY
+  ======================================================= */
+
+  if (
+    intent === "local" ||
+    isNearby
+  ) {
+    weights.distance += 0.18;
+    weights.rating += 0.04;
+  }
+
+
+  /* =======================================================
+     🚨 EMERGENCY
+  ======================================================= */
+
+  if (isEmergency) {
+    weights.distance += 0.20;
+    weights.rating += 0.05;
+    weights.relevance += 0.05;
+
+    weights.premium -= 0.05;
+    weights.feature -= 0.05;
+  }
+
+
+  /* =======================================================
+     🔎 SEARCH RELEVANCE
+  ======================================================= */
+
+  if (
+    context?.textSearch ||
+    context?.rawQuery
+  ) {
+    weights.relevance += 0.08;
+    weights.vector += 0.06;
+  }
+
+
+  return weights;
+};
+
+
+/* =========================================================
+   🧮 SCORE
+========================================================= */
+
+const computeScore = (
+  signals,
+  context = {}
+) => {
+
+  const weights =
+    getWeights(context);
+
+
+  let score =
+    signals.rating * weights.rating +
+    signals.reviews * weights.reviews +
+    signals.views * weights.views +
+    signals.clicks * weights.clicks +
+    signals.distance * weights.distance +
+    signals.trending * weights.trending +
+    signals.vector * weights.vector +
+    signals.relevance * weights.relevance +
+    signals.feature * weights.feature +
+    signals.trusted * weights.trusted +
+    signals.premium * weights.premium;
+
+
+  /**
+   * Keep final score predictable.
+   */
+  return clamp01(score);
+};
+
+
+/* =========================================================
+   📍 DISTANCE FALLBACK
+========================================================= */
+
+const prepareBusiness = (
+  business,
+  context
+) => {
+
+  const normalized =
+    normalizeSignals(business);
+
+
+  /**
+   * If backend search provides actual distance,
+   * convert it into a proximity score.
+   *
+   * Smaller distance = higher score.
+   */
+  if (
+    business.distance != null &&
+    Number.isFinite(Number(business.distance))
+  ) {
+
+    const maxDistance =
+      Number(
+        context?.filters?.distance ||
+        context?.distance ||
+        10
+      );
+
+
+    if (maxDistance > 0) {
+
+      normalized.distance =
+        clamp01(
+          1 -
+          Number(business.distance) /
+          maxDistance
+        );
+
+    }
+
+  }
+
+
+  return normalized;
+};
+
+
+/* =========================================================
+   🚀 MAIN RANKER
+========================================================= */
+
+export const rankBusinesses = (
+  businesses = [],
+  context = {}
+) => {
+
+  if (!Array.isArray(businesses)) {
+    return [];
+  }
+
+
+  const enriched =
+    businesses
+      .filter(Boolean)
+      .map((business) => {
+
+        try {
+
+          const signals =
+            prepareBusiness(
+              business,
+              context
+            );
+
+
+          const finalScore =
+            computeScore(
+              signals,
+              context
+            );
+
+
+          return {
+            ...business,
+
+            /**
+             * Internal ranking score.
+             */
+            finalScore:
+              Number(
+                finalScore.toFixed(6)
+              ),
+
+            /**
+             * Optional debug information.
+             *
+             * Can be removed from API response later if required.
+             */
+            _ranking: {
+              rating: signals.rating,
+              reviews: signals.reviews,
+              views: signals.views,
+              clicks: signals.clicks,
+              distance: signals.distance,
+              trending: signals.trending,
+              vector: signals.vector,
+              relevance: signals.relevance,
+              feature: signals.feature,
+              trusted: signals.trusted,
+              premium: signals.premium,
+            },
+          };
+
+        } catch (error) {
+
+          console.error(
+            "🔥 BUSINESS RANKING ERROR:",
+            error.message
+          );
+
+
+          return {
+            ...business,
+            finalScore: 0,
+          };
+
+        }
+
+      });
+
+
+  /* =======================================================
+     🏆 SORT
+  ======================================================= */
+
+  return enriched.sort(
+    (a, b) => {
+
+      const scoreDifference =
+        (b.finalScore || 0) -
+        (a.finalScore || 0);
+
+
+      if (scoreDifference !== 0) {
+        return scoreDifference;
       }
-    });
 
-  return enriched.sort((a, b) => {
-    const diff = (b.finalScore || 0) - (a.finalScore || 0);
-    if (diff !== 0) return diff;
 
-    return (b.views || 0) - (a.views || 0);
-  });
+      /**
+       * Tie breaker #1:
+       * Higher rating.
+       */
+      const ratingDifference =
+        Number(b.averageRating || 0) -
+        Number(a.averageRating || 0);
+
+
+      if (ratingDifference !== 0) {
+        return ratingDifference;
+      }
+
+
+      /**
+       * Tie breaker #2:
+       * More reviews.
+       */
+      const reviewDifference =
+        Number(
+          b.reviewCount ??
+          b.totalReviews ??
+          0
+        ) -
+        Number(
+          a.reviewCount ??
+          a.totalReviews ??
+          0
+        );
+
+
+      if (reviewDifference !== 0) {
+        return reviewDifference;
+      }
+
+
+      /**
+       * Tie breaker #3:
+       * More views.
+       */
+      return (
+        Number(b.views || 0) -
+        Number(a.views || 0)
+      );
+
+    }
+  );
+};
+
+
+/* =========================================================
+   🔍 OPTIONAL DEBUG EXPORT
+========================================================= */
+
+export const getBusinessRankingSignals = (
+  business = {},
+  context = {}
+) => {
+
+  const signals =
+    prepareBusiness(
+      business,
+      context
+    );
+
+
+  return {
+    signals,
+
+    weights:
+      getWeights(context),
+
+    finalScore:
+      computeScore(
+        signals,
+        context
+      ),
+  };
 };
