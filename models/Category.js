@@ -60,10 +60,12 @@ uiType: {
   type: String,
   enum: [
     "service",
+    "sell-service",
     "restaurant",
-    "hotel",
+    "booking",
     "appointment",
     "shopping",
+    "consultation",
   ],
   default: "service",
   index: true,
