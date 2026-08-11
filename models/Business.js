@@ -520,6 +520,28 @@ leadCount:{
     tags: [String],
     keywords: [String],
 
+    seo: {
+  title: {
+    type: String,
+    trim: true,
+  },
+
+  description: {
+    type: String,
+    trim: true,
+  },
+
+  keywords: {
+    type: [String],
+    default: [],
+  },
+
+  h1: {
+    type: String,
+    trim: true,
+  },
+},
+
     // ================= FEATURED =================
     isFeatured: { type: Boolean, default: false },
     featurePriority: { type: Number, default: 0 },

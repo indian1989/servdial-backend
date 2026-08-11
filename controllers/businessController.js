@@ -11,7 +11,7 @@ import { rankBusinesses } from "../services/ranking/unifiedRankingEngine.js";
 import { pingGoogleSitemap } from "../utils/pingSitemap.js";
 import { geocodeAddress } from "../services/geocodeService.js";
 import generateBusinessFAQ from "../utils/generateBusinessFAQ.js";
-
+import generateMeta from "../utils/seoMeta.js";
 
 import slugify from "../utils/slugify.js";
 
@@ -333,6 +333,20 @@ export const createBusiness = asyncHandler(async (req, res) => {
     });
 
 
+    // ================= SEO AUTO GENERATION =================
+
+    const seoMeta = generateMeta({
+  city: city.name,
+  category: category.name,
+  businessName: name,
+  area: safeAddress.area,
+  description: description || "",
+  isVerified: false,
+
+  citySlug: city.slug,
+  categorySlug: category.slug,
+  businessSlug: slug,
+});
 
 
 
@@ -399,6 +413,12 @@ export const createBusiness = asyncHandler(async (req, res) => {
         description || "",
 
 
+        seo: {
+          title: seoMeta.title,
+          description: seoMeta.description,
+          keywords: seoMeta.keywords,
+          h1: seoMeta.h1,
+        },
 
       location:
         addressLocation?.location ||
@@ -817,9 +837,8 @@ export const updateBusiness = asyncHandler(async (req, res) => {
 
 
   /* ================= CITY RESOLVE ================= */
-
-
   let city = null;
+  let category = null;  
 
 
   if(updates.cityId){
@@ -877,60 +896,45 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   }
 
 
-
-
-
-
-
-  /* ================= CATEGORY RESOLVE ================= */
-
-
-  if(updates.categoryId){
-
-
-    if(!isValidObjectId(updates.categoryId)){
-
-      return res.status(400).json({
-
-        success:false,
-
-        message:"Invalid categoryId",
-
-      });
-
-    }
-
-
-
-    const category =
-      await Category.findById(
-        updates.categoryId
-      );
-
-
-
-    if(!category){
-
-      return res.status(404).json({
-
-        success:false,
-
-        message:"Category not found",
-
-      });
-
-    }
-
-
-    updates.categorySlug =
-      category.slug;
-
+    if (!category) {
+    category = await Category.findById(
+      business.categoryId
+    );
   }
 
 
+ // ================= CATEGORY RESOLVE =================
 
+if (updates.categoryId) {
 
+  if (!isValidObjectId(updates.categoryId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid categoryId",
+    });
+  }
 
+  category = await Category.findById(
+    updates.categoryId
+  );
+
+  if (!category) {
+    return res.status(404).json({
+      success: false,
+      message: "Category not found",
+    });
+  }
+
+  updates.categorySlug =
+    category.slug;
+
+} else {
+
+  category = await Category.findById(
+    business.categoryId
+  );
+
+}
 
   /* ================= HOURS ================= */
 
@@ -953,6 +957,61 @@ export const updateBusiness = asyncHandler(async (req, res) => {
     updates.district ||
     updates.state ||
     updates.pincode;
+
+    // ================= SEO AUTO GENERATION =================
+
+    const finalCity =
+      city?.name ||
+      business.cityName ||
+      "";
+
+    const finalCategory =
+  category?.name ||
+  "";
+
+    const finalAddress =
+      updates.address ||
+      business.address ||
+      {};
+
+    const seoMeta = generateMeta({
+  city: finalCity,
+  category: finalCategory,
+  businessName: updates.name || business.name,
+
+  area: finalAddress?.area || "",
+
+  description:
+    updates.description !== undefined
+      ? updates.description
+      : business.description || "",
+
+  isVerified:
+    updates.isVerified !== undefined
+      ? updates.isVerified
+      : business.isVerified || false,
+
+  citySlug:
+    city?.slug ||
+    business.citySlug ||
+    "",
+
+  categorySlug:
+    category?.slug ||
+    business.categorySlug ||
+    "",
+
+  businessSlug:
+    business.slug ||
+    "",
+});
+
+    updates.seo = {
+      title: seoMeta.title,
+      description: seoMeta.description,
+      keywords: seoMeta.keywords,
+      h1: seoMeta.h1,
+    };
 
   if(addressChanged){
 
