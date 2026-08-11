@@ -57,7 +57,7 @@ const buildKeywords = ({
   if (location) {
     keywords.push(
       `${cat} in ${location}`,
-      `Best ${cat} in ${location}`
+      `Best ${cat} in ${location}`,
       `${location} ${cat}`,
       `${cat} near ${location}`
     );
@@ -71,9 +71,9 @@ const buildKeywords = ({
       `${name} ${c}`,
       `${name} ${cat}`,
       `${name} phone number`,
-      `${name} address`
-      `${name} reveiw`
-      `${name} photo`
+      `${name} address`,
+      `${name} review`,
+      `${name} photo`,
       `${name} image`
     );
   }
