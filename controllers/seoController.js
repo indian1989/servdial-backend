@@ -241,57 +241,13 @@ city,
 */
 
 
-let category =
-getCache(
-`category:slug:${categorySlug}`
-);
+let category = null;
 
-if(!category){
-
-category =
-await Category.findOne({
-
-status:"active",
-
-$or:[
-{
-slug:categorySlug
-},
-{
-"slugHistory.slug":categorySlug
-}
-
-]
-
-})
-.lean();
+// Skip category lookup for /all page
+if (categorySlug !== "all") {
+  category = getCache(`category:slug:${categorySlug}`); if (!category) { category = await Category.findOne({ status: "active", $or: [ { slug: categorySlug }, { "slugHistory.slug": categorySlug } ] }).lean(); if (!category) { return res.status(404).json({ success: false, message: "Category not found" }); } setCache(`category:slug:${categorySlug}`, category, 60 * 60 * 6); } }
 
 
-if(!category){
-
-return res.status(404).json({
-
-success:false,
-
-message:
-"Category not found"
-
-});
-
-}
-
-
-setCache(
-
-`category:slug:${categorySlug}`,
-
-category,
-
-60*60*6
-
-);
-
-}
 
 /*
 ==============================
@@ -310,9 +266,14 @@ if(categorySlug === "all") {
 
 const businesses = await Business.find({
 
-  cityId: city._id,
+  status:"approved",
 
-  status:"approved"
+  $or: [
+    { cityId: city._id },
+    { citySlug: city.slug },
+    { cityName: city.name.toLowerCase() }
+
+  ]
 
 })
 
@@ -462,67 +423,17 @@ hasMore:false
 
 
 
-/*
-==============================
- NORMAL CITY CATEGORY PAGE
-==============================
-*/
-
-
-const businesses = await Business.find({
-
-cityId:city._id,
-
-categoryId:category._id,
-
-status:"approved"
-
-})
-
-.select(
-`
-_id
-name
-slug
-description
-logo
-images
-phone
-whatsapp
-website
-address
-
-cityId
-citySlug
-cityName
-
-categoryId
-categorySlug
-categoryName
-
-district
-state
-country
-pincode
-
-averageRating
-totalReviews
-
-location
-businessHours
-
-views
-clicks
-`
-)
-
-.populate(
-"categoryId",
-"name slug"
-)
-
-.lean();
-
+// ================= PARENT + LEAF CATEGORY SUPPORT =================
+let businesses = []; let subCategories = []; if (category.parentCategory) {
+  
+  // LEAF CATEGORY → direct businesses
+  businesses = await Business.find({ cityId: city._id, categoryId: category._id, status: "approved" }) .populate("categoryId", "name slug") .lean(); } else {
+    
+  // PARENT CATEGORY → fetch children
+  subCategories = await Category.find({ parentCategory: category._id, status: "active" }) .select("name slug") .lean(); const childIds = subCategories.map((c) => c._id);
+  
+  // Fetch businesses from all child categories
+  businesses = await Business.find({ cityId: city._id, categoryId: { $in: childIds }, status: "approved" }) .populate("categoryId", "name slug") .lean(); }
 
 
 const ranked = rankBusinesses(
@@ -583,7 +494,7 @@ slug:category.slug
 },
 
 
-subCategories:[],
+subCategories,
 
 
 seo:{

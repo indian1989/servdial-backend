@@ -9,41 +9,65 @@ router.get("/", async (req, res) => {
   try {
     const { city } = req.query;
 
-    if (!city) {
-      return res.json({ success: true, data: [] });
-    }
-
-    const cityDoc = await resolveCity(city);
-
-    if (!cityDoc) {
-      return res.status(404).json({
-        success: false,
-        message: "City not found",
-      });
-    }
-
-    const raw = await Business.find({
+    let query = {
       status: "approved",
       isDeleted: false,
-      cityId: cityDoc._id,
-    })
-      .select(`
+    };
+    
+    if (city) {
+      const cityDoc = await resolveCity(city);
+      
+      if (!cityDoc) {
+        return res.status(404).json({
+          success: false,
+          message: "City not found",
+        });
+      }
+      query.cityId = cityDoc._id;
+    }
+
+  const raw = await Business.find(query)
+  .select(`
   name
   slug
+  logo
+  images
+  address
+
+  cityName
+  district
+  state
+
+  categoryId
+  categorySlug
+  categoryName
+
+  phone
+  whatsapp
+
   averageRating
   totalReviews
+
   views
+  phoneClicks
+  whatsappClicks
+
   isFeatured
   featurePriority
   isVerified
   plan
   isTrustedPartner
   isPremiumPartner
+
+  businessHours
+  location
+
   cityId
 `)
-      .populate("cityId", "name slug")
-      .limit(50)
-      .lean();
+  .populate("cityId", "name slug")
+  .populate("categoryId", "name slug")
+  .limit(50)
+  .lean();
 
     const ranked = rankBusinesses(raw, {
       intent: {
