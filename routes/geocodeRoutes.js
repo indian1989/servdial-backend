@@ -6,6 +6,9 @@ const router = express.Router();
 
 router.post("/", async(req,res)=>{
 
+    console.log("🔥 GEOCODE POST HIT");
+  console.log("📍 BODY:", req.body);
+  
   try {
 
     const result = await geocodeAddress(req.body);

@@ -1,18 +1,43 @@
 // backend/models/Category.js
+
 import mongoose from "mongoose";
 import slugify from "../utils/slugify.js";
 
+
+/* =========================================================
+   SLUG HISTORY
+========================================================= */
+
 const slugHistorySchema = new mongoose.Schema(
   {
-    slug: { type: String, lowercase: true, trim: true },
-    changedAt: { type: Date, default: Date.now },
+    slug: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+
+    changedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  { _id: false }
+  {
+    _id: false,
+  }
 );
+
+
+/* =========================================================
+   CATEGORY SCHEMA
+========================================================= */
 
 const categorySchema = new mongoose.Schema(
   {
-    /* ================= BASIC ================= */
+
+    /* =====================================================
+       BASIC
+    ===================================================== */
+
     name: {
       type: String,
       required: true,
@@ -28,7 +53,9 @@ const categorySchema = new mongoose.Schema(
       trim: true,
     },
 
-    slugHistory: [slugHistorySchema],
+    slugHistory: [
+      slugHistorySchema,
+    ],
 
     description: {
       type: String,
@@ -36,7 +63,11 @@ const categorySchema = new mongoose.Schema(
       trim: true,
     },
 
-    /* ================= HIERARCHY ================= */
+
+    /* =====================================================
+       HIERARCHY
+    ===================================================== */
+
     parentCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
@@ -51,45 +82,109 @@ const categorySchema = new mongoose.Schema(
       index: true,
     },
 
-    /* ================= MEDIA ================= */
-    icon: { type: String, default: "" },
-    image: { type: String, default: "" },
 
-/* ================= UI ================= */
-uiType: {
-  type: String,
-  enum: [
-    "service",
-    "sell-service",
-    "restaurant",
-    "booking",
-    "appointment",
-    "shopping",
-    "consultation",
-  ],
-  default: "service",
-  index: true,
-},
+    /* =====================================================
+       MEDIA
+    ===================================================== */
 
-features: [
-  {
-    type: String,
-    enum: [
-      "pricing",
-      "appointment_booking",
-      "room_booking",
-      "table_booking",
-      "food_menu",
-      "party_booking",
-      "catalog",
-      "lead_form"
-    ]
-  }
-],
+    icon: {
+      type: String,
+      default: "",
+    },
 
-    /* ================= SEO ================= */
-    seoTitle: String,
-    seoDescription: String,
+    image: {
+      type: String,
+      default: "",
+    },
+
+
+    /* =====================================================
+       UI TYPE
+    ===================================================== */
+
+    uiType: {
+      type: String,
+
+      enum: [
+        "service",
+        "sell-service",
+        "restaurant",
+        "booking",
+        "appointment",
+        "shopping",
+        "consultation",
+      ],
+
+      default: "service",
+
+      index: true,
+    },
+
+
+    /* =====================================================
+       CATEGORY FEATURES
+       
+       These features control which business fields/components
+       are shown on BusinessForm.
+    ===================================================== */
+
+    features: [
+      {
+        type: String,
+
+        enum: [
+
+          /* ================= BUSINESS DATA ================= */
+
+          "pricing",
+          "services",
+          "catalog",
+
+
+          /* ================= RESTAURANT / MENU ================= */
+
+          "food_menu",
+
+
+          /* ================= BOOKING ================= */
+
+          "appointment_booking",
+          "table_booking",
+          "room_booking",
+          "party_booking",
+
+
+          /* ================= ENGAGEMENT ================= */
+
+          "faq",
+          "offers",
+          "business_hours",
+
+
+          /* ================= LEAD / INQUIRY ================= */
+
+          "lead_form",
+
+        ],
+
+        trim: true,
+      },
+    ],
+
+
+    /* =====================================================
+       SEO
+    ===================================================== */
+
+    seoTitle: {
+      type: String,
+      default: "",
+    },
+
+    seoDescription: {
+      type: String,
+      default: "",
+    },
 
     keywords: [
       {
@@ -99,11 +194,21 @@ features: [
       },
     ],
 
-    /* ================= STATUS ================= */
+
+    /* =====================================================
+       STATUS
+    ===================================================== */
+
     status: {
       type: String,
-      enum: ["active", "inactive"],
+
+      enum: [
+        "active",
+        "inactive",
+      ],
+
       default: "active",
+
       index: true,
     },
 
@@ -118,18 +223,28 @@ features: [
       default: false,
     },
 
-    /* ================= ANALYTICS ================= */
+
+    /* =====================================================
+       ANALYTICS
+    ===================================================== */
+
     searchCount: {
       type: Number,
       default: 0,
     },
+
   },
+
   {
     timestamps: true,
   }
 );
 
-/* ================= TEXT SEARCH ================= */
+
+/* =========================================================
+   TEXT SEARCH INDEX
+========================================================= */
+
 categorySchema.index(
   {
     name: "text",
@@ -145,66 +260,204 @@ categorySchema.index(
   }
 );
 
-/* ================= COMPOUND INDEXES ================= */
-categorySchema.index({ parentCategory: 1, status: 1, order: 1 });
-categorySchema.index({ parentCategory: 1, level: 1 });
 
-/* ================= UNIQUE INDEX ================= */
-categorySchema.index(
-  { slug: 1 },
-  { unique: true }
-);
+/* =========================================================
+   COMPOUND INDEXES
+========================================================= */
 
-/* ================= PRE SAVE ================= */
-categorySchema.pre("save", async function (next) {
-  try {
-    this.name = this.name?.trim().replace(/\s+/g, " ");
-
-    if (this.keywords?.length) {
-      this.keywords = this.keywords.map((k) =>
-        k.toLowerCase().trim()
-      );
-    }
-
-    // slug generate only on create
-    if (this.isNew && this.name) {
-      let baseSlug = slugify(this.name);
-      let slug = baseSlug;
-      let counter = 1;
-
-      while (
-        await mongoose.models.Category.findOne({ slug })
-      ) {
-        slug = `${baseSlug}-${counter++}`;
-      }
-
-      this.slug = slug;
-    }
-
-    // slug history (safe tracking)
-    if (!this.isNew && this.isModified("slug")) {
-      const old = await mongoose.models.Category.findById(this._id);
-
-      if (old?.slug && old.slug !== this.slug) {
-        this.slugHistory = this.slugHistory || [];
-
-        this.slugHistory.push({
-          slug: old.slug,
-          changedAt: new Date(),
-        });
-      }
-    }
-
-    // SEO defaults
-    if (!this.seoTitle) this.seoTitle = this.name;
-    if (!this.seoDescription) {
-      this.seoDescription = this.description || `${this.name} services`;
-    }
-
-    next();
-  } catch (err) {
-    next(err);
-  }
+categorySchema.index({
+  parentCategory: 1,
+  status: 1,
+  order: 1,
 });
 
-export default mongoose.model("Category", categorySchema);
+categorySchema.index({
+  parentCategory: 1,
+  level: 1,
+});
+
+
+/* =========================================================
+   UNIQUE SLUG INDEX
+========================================================= */
+
+categorySchema.index(
+  {
+    slug: 1,
+  },
+  {
+    unique: true,
+  }
+);
+
+
+/* =========================================================
+   PRE SAVE
+========================================================= */
+
+categorySchema.pre(
+  "save",
+  async function (next) {
+
+    try {
+
+      /* ===================================================
+         NORMALIZE NAME
+      =================================================== */
+
+      this.name =
+        this.name
+          ?.trim()
+          .replace(/\s+/g, " ");
+
+
+      /* ===================================================
+         NORMALIZE KEYWORDS
+      =================================================== */
+
+      if (this.keywords?.length) {
+
+        this.keywords =
+          this.keywords.map(
+            (keyword) =>
+              keyword
+                .toLowerCase()
+                .trim()
+          );
+
+      }
+
+
+      /* ===================================================
+         NORMALIZE FEATURES
+
+         - lowercase
+         - trim
+         - remove duplicates
+      =================================================== */
+
+      if (this.features?.length) {
+
+        this.features = [
+          ...new Set(
+            this.features
+              .map((feature) =>
+                String(feature)
+                  .trim()
+                  .toLowerCase()
+              )
+              .filter(Boolean)
+          ),
+        ];
+
+      }
+
+
+      /* ===================================================
+         SLUG GENERATION
+
+         Only generate automatically when creating
+         a new category.
+      =================================================== */
+
+      if (
+        this.isNew &&
+        this.name
+      ) {
+
+        const baseSlug =
+          slugify(this.name);
+
+        let slug =
+          baseSlug;
+
+        let counter = 1;
+
+        while (
+          await mongoose.models.Category.findOne({
+            slug,
+          })
+        ) {
+
+          slug =
+            `${baseSlug}-${counter++}`;
+
+        }
+
+        this.slug =
+          slug;
+      }
+
+
+      /* ===================================================
+         SLUG HISTORY
+      =================================================== */
+
+      if (
+        !this.isNew &&
+        this.isModified("slug")
+      ) {
+
+        const old =
+          await mongoose.models.Category.findById(
+            this._id
+          );
+
+        if (
+          old?.slug &&
+          old.slug !== this.slug
+        ) {
+
+          this.slugHistory =
+            this.slugHistory || [];
+
+          this.slugHistory.push({
+            slug: old.slug,
+            changedAt: new Date(),
+          });
+
+        }
+
+      }
+
+
+      /* ===================================================
+         SEO DEFAULTS
+      =================================================== */
+
+      if (!this.seoTitle) {
+
+        this.seoTitle =
+          this.name;
+
+      }
+
+      if (!this.seoDescription) {
+
+        this.seoDescription =
+          this.description ||
+          `${this.name} services`;
+
+      }
+
+
+      next();
+
+    } catch (err) {
+
+      next(err);
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   MODEL
+========================================================= */
+
+export default mongoose.model(
+  "Category",
+  categorySchema
+);

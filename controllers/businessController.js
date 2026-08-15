@@ -58,6 +58,9 @@ export const createBusiness = asyncHandler(async (req, res) => {
     address,
     phone,
     whatsapp,
+    landline,
+    alternatePhone,
+    phoneCode,
     website,
     description,
     location,
@@ -66,6 +69,23 @@ export const createBusiness = asyncHandler(async (req, res) => {
     businessHours,
     district,
     state,
+    services,
+    serviceTypes,
+    serviceCoverage,
+    foodType,
+    pricing,
+    catalog,
+    menu,
+    faq,
+    offers,
+    tags,
+    restaurantBooking,
+    partyBooking,
+    boost,
+    isFeatured,
+    isVerified,
+    country,
+    countryCode,
   } = req.body;
 
 
@@ -120,19 +140,87 @@ export const createBusiness = asyncHandler(async (req, res) => {
   }
 
 
+    // ================= COUNTRY PHONE CODE =================
+const cleanPhoneCode = String(phoneCode || "+91")
+.replace(/[^\d+]/g, "")
+.trim();
 
-  const cleanPhone =
-    String(phone).replace(/\D/g,"");
+const normalizedPhoneCode = cleanPhoneCode.startsWith("+")
+ ? cleanPhoneCode
+ : `+${cleanPhoneCode}`;
 
+// ================= MAIN MOBILE =================
+const cleanPhone = String(phone || "")
+  .replace(/\D/g, "")
+  .slice(-10);
 
-  if(cleanPhone.length !== 10){
+if (cleanPhone.length !== 10) {
+  return res.status(400).json({
+    success: false,
+    message: "Main mobile number must be 10 digits",
+  });
+}
 
-    return res.status(400).json({
-      success:false,
-      message:"Phone must be 10 digits",
-    });
+// Store with country code
+const fullPhone = `${normalizedPhoneCode}${cleanPhone}`;
 
-  }
+// ================= WHATSAPP =================
+const cleanWhatsapp = whatsapp
+  ? String(whatsapp).replace(/\D/g, "").slice(-10)
+  : cleanPhone;
+
+if (cleanWhatsapp.length !== 10) {
+  return res.status(400).json({
+    success: false,
+    message: "WhatsApp number must be 10 digits",
+  });
+}
+
+const fullWhatsapp =
+  `${normalizedPhoneCode}${cleanWhatsapp}`;
+
+// ================= LANDLINE (OPTIONAL) =================
+const cleanLandline = landline
+  ? String(landline).replace(/\D/g, "")
+  : "";
+
+if (
+  cleanLandline &&
+  (cleanLandline.length < 6 ||
+   cleanLandline.length > 12)
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Landline number must be between 6 and 12 digits",
+  });
+}
+
+const fullLandline = cleanLandline
+  ? `${normalizedPhoneCode}${cleanLandline}`
+  : "";
+
+// ================= EXTRA MOBILE (OPTIONAL) =================
+const cleanAlternatePhone = alternatePhone
+  ? String(alternatePhone)
+      .replace(/\D/g, "")
+      .slice(-10)
+  : "";
+
+if (
+  cleanAlternatePhone &&
+  cleanAlternatePhone.length !== 10
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Alternate mobile number must be 10 digits",
+  });
+}
+
+const fullAlternatePhone = cleanAlternatePhone
+  ? `${normalizedPhoneCode}${cleanAlternatePhone}`
+  : "";
 
 
 
@@ -255,45 +343,46 @@ export const createBusiness = asyncHandler(async (req, res) => {
 
   // fallback city location
 
-  if(!safeLocation){
+  let finalLocation = safeLocation;
 
-    const cityLat =
-      Number(city.latitude);
+// Try address geocoding only if GPS / map location not provided
+if (!finalLocation) {
+  const addressLocation = await geocodeAddress({
+    address: fullAddress,
+    city: city.name,
+    district,
+    state,
+    pincode: cleanPincode,
+    country: country || "India",
+  });
 
-    const cityLng =
-      Number(city.longitude);
-
-
-
-    if(
-      !isNaN(cityLat) &&
-      !isNaN(cityLng)
-    ){
-
-      safeLocation={
-        type:"Point",
-        coordinates:[
-          cityLng,
-          cityLat
-        ],
-      };
-
-    }
-
+  if (addressLocation?.location) {
+    finalLocation = addressLocation.location;
   }
+}
 
+// Last fallback: city center
+if (!finalLocation) {
+  const cityLat = Number(city.latitude);
+  const cityLng = Number(city.longitude);
 
-
-  if(!safeLocation){
-
-    return res.status(400).json({
-      success:false,
-      message:"Valid location required",
-    });
-
+  if (
+    !isNaN(cityLat) &&
+    !isNaN(cityLng)
+  ) {
+    finalLocation = {
+      type: "Point",
+      coordinates: [cityLng, cityLat],
+    };
   }
+}
 
-
+if (!finalLocation) {
+  return res.status(400).json({
+    success: false,
+    message: "Valid location required",
+  });
+}
 
 
   /* ================= CREATE ================= */
@@ -309,28 +398,6 @@ export const createBusiness = asyncHandler(async (req, res) => {
     req.user?.role === "superadmin"
       ? "approved"
       : "pending";
-
-
-
-
-
-  /* ================= GEOCODE ================= */
-
-
-  const addressLocation =
-    await geocodeAddress({
-
-      address: fullAddress,
-
-      city: city.name,
-
-      district,
-
-      state,
-
-      pincode: cleanPincode,
-
-    });
 
 
     // ================= SEO AUTO GENERATION =================
@@ -391,18 +458,24 @@ export const createBusiness = asyncHandler(async (req, res) => {
       state:
         state || city.state || "",
 
+        // Country info
+      country: country || "India",
+      countryCode: countryCode || "IN",
+
 
       pincode:
         cleanPincode,
 
+      // Phone dialing code
+      phoneCode: normalizedPhoneCode,
 
+      phone: fullPhone,
 
-      phone:
-        cleanPhone,
+      whatsapp: fullWhatsapp,
 
+      landline: fullLandline,
 
-      whatsapp:
-        whatsapp || "",
+      alternatePhone: fullAlternatePhone,
 
 
       website:
@@ -412,6 +485,14 @@ export const createBusiness = asyncHandler(async (req, res) => {
       description:
         description || "",
 
+      foodType: foodType || "",
+      pricing: Array.isArray(pricing) ? pricing : [],
+      catalog: Array.isArray(catalog) ? catalog : [],
+      menu: Array.isArray(menu) ? menu : [],
+      faq: Array.isArray(faq) ? faq : [],
+      offers: Array.isArray(offers) ? offers : [],
+      tags: Array.isArray(tags) ? tags : [],
+
 
         seo: {
           title: seoMeta.title,
@@ -420,10 +501,7 @@ export const createBusiness = asyncHandler(async (req, res) => {
           h1: seoMeta.h1,
         },
 
-      location:
-        addressLocation?.location ||
-        safeLocation,
-
+      location: finalLocation,
 
 
       logo:
@@ -436,21 +514,81 @@ export const createBusiness = asyncHandler(async (req, res) => {
           : [],
 
 
+       services:
+        Array.isArray(services)
+          ? services
+              .filter(
+                (service) =>
+                  service &&
+                  typeof service.name === "string" &&
+                  service.name.trim()
+              )
+              .map((service) => ({
+                name: service.name.trim(),
+                description:
+                  typeof service.description === "string"
+                    ? service.description.trim()
+                    : "",
+              }))
+          : [],
+
+          // SERVICE TYPES
+        serviceTypes:
+          Array.isArray(serviceTypes)
+            ? serviceTypes
+            : [],
+
+        // SERVICE COVERAGE
+        serviceCoverage:
+          serviceCoverage || {
+            type: "city",
+            mode: "selected",
+            cities: [],
+            states: [],
+            countries: [],
+          },
+
+
+  restaurantBooking:
+  restaurantBooking || {
+    enabled: false,
+    totalTables: "",
+    seatingCapacity: "",
+    advanceBookingDays: "",
+  },
+  
+  partyBooking:
+  partyBooking || {
+    enabled: false,
+    bookingTypes: [],
+    minGuests: "",
+    maxGuests: "",
+    advanceAmount: "",
+    bookingNotice: "24h",
+    timeSlots: [],
+    contactNumber: "",
+    whatsappBooking: false,
+    notes: "",
+  },
 
       businessHours:
         normalizeBusinessHours(
           businessHours || {}
         ),
 
-
+  boost: Boolean(boost),
+  
+  isFeatured: Boolean(isFeatured),
+  isVerified:
+    req.user?.role === "admin" ||
+    req.user?.role === "superadmin"
+    ? true
+    : Boolean(isVerified),
 
       status,
 
 
     });
-
-
-
 
 
   const populatedBusiness =
@@ -803,40 +941,58 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   }
 
 
-
-
-
-  /* ================= PHONE ================= */
-
-
-  if(updates.phone){
-
-    updates.phone =
-      String(updates.phone)
-      .replace(/\D/g,"");
-
-
-    if(updates.phone.length !==10){
-
-      return res.status(400).json({
-
-        success:false,
-
-        message:"Invalid phone number",
-
-      });
-
+    // ================= PHONE UPDATE =================
+    if (updates.phone) {
+      const cleanPhone = String(updates.phone)
+      .replace(/\D/g, "")
+      .slice(-10);
+      if (cleanPhone.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid phone number",
+        });
+      }
+      
+      const phoneCode = String(
+        updates.phoneCode || business.phoneCode || "+91"
+      ).replace(/[^\d+]/g, "");
+      
+      const normalizedCode = phoneCode.startsWith("+")
+      ? phoneCode
+      : `+${phoneCode}`;
+      
+      updates.phone = `${normalizedCode}${cleanPhone}`;
     }
 
-  }
+    // WhatsApp update
+    if (updates.whatsapp) {
+      const clean = String(updates.whatsapp).replace(/\D/g, "").slice(-10);
+      if (clean.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid WhatsApp number",
+        });
+      }
+      
+      const code = updates.phoneCode || business.phoneCode || "+91";
+      updates.whatsapp = `${code}${clean}`;
+    }
+    
+    // Alternate mobile update
+    if (updates.alternatePhone) {
+      const clean = String(updates.alternatePhone).replace(/\D/g, "").slice(-10);
+      if (clean.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid alternate mobile number",
+        });
+      }
+      
+      const code = updates.phoneCode || business.phoneCode || "+91";
+      updates.alternatePhone = `${code}${clean}`;
+    }
 
-
-
-
-
-
-
-  /* ================= CITY RESOLVE ================= */
+    /* ================= CITY RESOLVE ================= */
   let city = null;
   let category = null;  
 
@@ -855,8 +1011,6 @@ export const updateBusiness = asyncHandler(async (req, res) => {
       });
 
     }
-
-
 
     city =
       await City.findById(
@@ -1071,15 +1225,35 @@ if (updates.categoryId) {
 
 
 
-    if(addressLocation?.location){
-
-      updates.location =
-        addressLocation.location;
-
+    if (!updates.location && addressLocation?.location) {
+      updates.location = addressLocation.location;
     }
 
   }
 
+  if (updates.pricing && !Array.isArray(updates.pricing)) {
+    updates.pricing = [];
+  }
+  
+  if (updates.menu && !Array.isArray(updates.menu)) {
+    updates.menu = [];
+  }
+  
+  if (updates.catalog && !Array.isArray(updates.catalog)) {
+    updates.catalog = [];
+  }
+  
+  if (updates.faq && !Array.isArray(updates.faq)) {
+    updates.faq = [];
+  }
+  
+  if (updates.offers && !Array.isArray(updates.offers)) {
+    updates.offers = [];
+  }
+  
+  if (updates.tags && !Array.isArray(updates.tags)) {
+    updates.tags = [];
+  }
   /* ================= UPDATE ================= */
 
 

@@ -215,6 +215,7 @@ export const createCategory = async (req, res) => {
   order = 0,
   description = "",
   uiType = "service",
+  features = [],
 } = req.body;
 
     const slug = slugify(name);
@@ -230,6 +231,8 @@ export const createCategory = async (req, res) => {
 
     const level = parentCategory ? 1 : 0;
 
+    const finalFeatures = [...new Set([...(features || []), "offers"])];
+
 const category = await Category.create({
   name,
   slug,
@@ -238,6 +241,7 @@ const category = await Category.create({
   order,
   description,
   uiType,
+  features: finalFeatures,
 });
 
     resetCategoryCache();
@@ -277,6 +281,7 @@ export const updateCategory = async (req, res) => {
   parentCategory,
   isTrending,
   uiType,
+  features,
 } = req.body;
 
     if (name && name !== category.name) {
@@ -313,6 +318,14 @@ export const updateCategory = async (req, res) => {
 if (uiType !== undefined) {
   category.uiType = uiType;
 }
+
+    // Always preserve existing features and ensure offers is present
+    category.features = [
+      ...new Set([
+        ...(features ?? category.features ?? []),
+        "offers",
+      ]),
+    ];
 
     if (isTrending !== undefined)
       category.isTrending = isTrending;

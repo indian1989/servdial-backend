@@ -1,6 +1,5 @@
 // backend/models/Business.js
 import mongoose from "mongoose";
-import slugify from "../utils/slugify.js";
 
 // ================= HELPER =================
 const normalizeText = (val) => {
@@ -11,11 +10,6 @@ const normalizeText = (val) => {
 const normalizeCity = (val) => {
   if (!val) return val;
   return val.toString().trim().toLowerCase().replace(/\s+/g, " ");
-};
-
-const normalizePhone = (val) => {
-  if (!val) return val;
-  return val.toString().replace(/\D/g, ""); // keep only numbers
 };
 
 // ================= SCHEMA =================
@@ -315,11 +309,50 @@ countryCode:{
 
     // ================= CONTACT =================
     phone: {
-      type: String,
-      required: true,
-    },
+  type: String,
+  required: true,
+},
 
-    phoneVerified: {
+phoneCountryCode: {
+  type: String,
+  trim: true,
+  default: "+91",
+},
+
+whatsapp: {
+  type: String,
+  trim: true,
+},
+
+whatsappCountryCode: {
+  type: String,
+  trim: true,
+  default: "+91",
+},
+
+alternatePhone: {
+  type: String,
+  trim: true,
+},
+
+alternatePhoneCountryCode: {
+  type: String,
+  trim: true,
+  default: "+91",
+},
+
+landline: {
+  type: String,
+  trim: true,
+},
+
+landlineCountryCode: {
+  type: String,
+  trim: true,
+  default: "+91",
+},
+
+phoneVerified: {
   type: Boolean,
   default: false,
 },
@@ -331,24 +364,21 @@ documentVerified:{
 
 phoneVerifiedAt: Date,
 
-    whatsapp: String,
-    email: String,
-    website: String,
+email: {
+  type: String,
+  trim: true,
+  lowercase: true,
+},
 
-    
-    services:[
-  {
-    name:{
-      type:String,
-      trim:true,
-    },
+website: {
+  type: String,
+  trim: true,
+},
 
-    description:{
-      type:String,
-      default:"",
-    }
-  }
-],
+boost: {
+  type: Boolean,
+  default: false,
+},
 
 pricing:[
  {
@@ -395,13 +425,44 @@ faq:[
 
 offers: [
   {
-    title: String,
+    title: {
+      type: String,
+      trim: true,
+      maxlength: 150,
+    },
 
-    description: String,
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
 
-    image: String,
+    image: {
+      type: String,
+      trim: true,
+      default: "",
+    },
 
-    expiryDate: Date,
+    expiryDate: {
+      type: Date,
+    },
+
+    // Optional structured offer data
+    discountPercent: {
+      type: Number,
+      min: 0,
+      max: 100,
+    },
+
+    // Backward compatibility / future use
+    validTill: {
+      type: Date,
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
 ],
 
@@ -422,6 +483,82 @@ bookingSettings: {
   },
 },
 
+// ================= RESTAURANT BOOKING =================
+
+restaurantBooking: {
+  enabled: {
+    type: Boolean,
+    default: false,
+  },
+
+  totalTables: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+
+  seatingCapacity: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+
+  advanceBookingDays: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+},
+
+// ================= ROOM BOOKING =================
+
+roomBooking: {
+  enabled: {
+    type: Boolean,
+    default: false,
+  },
+
+  totalRooms: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+
+  advanceBookingDays: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+},
+
+// ================= PARTY BOOKING =================
+
+partyBooking: {
+  enabled: {
+    type: Boolean,
+    default: false,
+  },
+
+  capacity: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+
+  advanceBookingDays: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+},
+
+// ================= FOOD =================
+
+foodType: {
+  type: String,
+  trim: true,
+  lowercase: true,
+},
 
 menu: {
   type: [
@@ -637,7 +774,11 @@ businessSchema.pre("save", async function (next) {
     // ================= BASIC NORMALIZATION =================
     this.name = normalizeText(this.name);
     this.description = normalizeText(this.description);
-    this.address = normalizeText(this.address);
+if (this.address) {
+    this.address.street = normalizeText(this.address.street);
+    this.address.area = normalizeText(this.address.area);
+    this.address.landmark = normalizeText(this.address.landmark);
+  }
 
     if (this.district) this.district = normalizeText(this.district);
     if (this.state) this.state = normalizeText(this.state);
@@ -667,7 +808,7 @@ if (this.isModified("cityId")) {
   }
 
   // SEO Cache
-  this.cityName = cityDoc.name.toLowerCase().trim();
+  this.cityName = normalizeCity(cityDoc.name);
   this.citySlug = cityDoc.slug;
 
   // Display Data
@@ -695,40 +836,21 @@ if (this.isModified("categoryId")) {
       this.cityName = normalizeCity(this.cityName);
     }
 
-    // ================= PHONE =================
-    if (this.phone) {
-  this.phone = normalizePhone(this.phone);
+// ================= PHONE =================
+// Phone formatting & validation handled in controller
+// Model only ensures required field through schema
 
-  if (this.phone.length !== 10) {
-    throw new Error("Phone must be 10 digits");
-  }
-}
-    if (this.whatsapp) this.whatsapp = normalizePhone(this.whatsapp);
-
-    // ================= SLUG GENERATION =================
-    if (!this.slug && this.name) {
-      let baseSlug = slugify(this.name);
-      let slug = baseSlug;
-      let counter = 1;
-
-      while (await mongoose.models.Business.findOne({ slug })) {
-        slug = `${baseSlug}-${counter++}`;
-      }
-
-      this.slug = slug;
-    }
 
     // ================= SLUG HISTORY =================
 if (!this.isNew && this.isModified("slug")) {
   this.slugHistory = this.slugHistory || [];
 
-  if (this._originalSlug && this._originalSlug !== this.slug) {
+  if (
+    this._originalSlug &&
+    this._originalSlug !== this.slug &&
+    !this.slugHistory.includes(this._originalSlug)
+  ) {
     this.slugHistory.push(this._originalSlug);
-  }
-
-  // also keep first slug
-  if (!this.slugHistory.includes(this.slug)) {
-    this.slugHistory.push(this.slug);
   }
 }
 
@@ -806,7 +928,6 @@ businessSchema.index({
 });
 
 // ⚡ UNIQUE
-businessSchema.index({ slug: 1 }, { unique: true });
 
 businessSchema.index({ location: "2dsphere" });
 
