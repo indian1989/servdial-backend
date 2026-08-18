@@ -90,6 +90,16 @@ categoryId: {
     type: Date
   },
 
+  // =========================
+// BANNER CLICK TRACKING
+// =========================
+
+clicks: {
+  type: Number,
+  default: 0,
+  min: 0,
+},
+
   // System toggle (admin and superadmin can disable even approved banner)
   isActive: {
     type: Boolean,

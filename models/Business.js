@@ -380,18 +380,78 @@ boost: {
   default: false,
 },
 
-pricing:[
- {
-   name:{
-     type:String,
-     trim:true,
-   },
+// ================= SERVICE PRICING =================
 
-   price:{
-     type:Number,
-     default:0,
-   }
- }
+pricing: [
+  {
+    name: {
+      type: String,
+      trim: true,
+      required: true,
+    },
+
+    description: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    // Regular / MRP / Original price
+    originalPrice: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+
+    // Actual starting / offer price
+    price: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+
+    // Pricing unit
+    pricingUnit: {
+      type: String,
+      enum: [
+        "per_visit",
+        "per_service",
+        "per_job",
+        "per_hour",
+        "per_day",
+        "per_month",
+        "per_piece",
+        "per_item",
+        "per_set",
+        "per_unit",
+        "per_sq_ft",
+        "per_sq_meter",
+        "per_kg",
+        "per_km",
+        "per_person",
+        "per_room",
+        "per_session",
+        "per_consultation",
+        "per_appointment",
+        "per_project",
+        "custom",
+      ],
+      default: "per_service",
+    },
+
+    // Used only when pricingUnit === "custom"
+    customPricingUnit: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    // Optional explicit price-on-request mode
+    priceOnRequest: {
+      type: Boolean,
+      default: false,
+    },
+  },
 ],
 
 catalog:[

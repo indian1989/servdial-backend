@@ -467,7 +467,7 @@ if (!finalLocation) {
         cleanPincode,
 
       // Phone dialing code
-      phoneCode: normalizedPhoneCode,
+      phoneCountryCode: normalizedPhoneCode,
 
       phone: fullPhone,
 

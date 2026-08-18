@@ -8,6 +8,7 @@ import Category from "../models/Category.js";
 import City from "../models/City.js";
 import User from "../models/User.js";
 import Lead from "../models/Lead.js";
+import Banner from "../models/Banner.js";
 
 /* ======================================================
    GET ADMIN BUSINESSES (OPTIONAL LIST VIEW ONLY)
@@ -84,18 +85,547 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
 
 /* ======================================================
    ANALYTICS
+   SINGLE SOURCE FOR ADMIN ANALYTICS
 ====================================================== */
 export const getAnalytics = asyncHandler(async (req, res) => {
-  const totalUsers = await User.countDocuments();
-  const totalBusinesses = await Business.countDocuments();
-  const totalLeads = await Lead.countDocuments();
+  const now = new Date();
+
+  /* =====================================================
+     1. BASIC COUNTS
+  ===================================================== */
+
+  const [
+    totalUsers,
+    totalProviders,
+    totalAdmins,
+    totalCities,
+    totalCategories,
+    totalBusinesses,
+    totalLeads,
+
+    pendingBusinesses,
+    featuredBusinesses,
+
+    totalBanners,
+    approvedBanners,
+    pendingBanners,
+    rejectedBanners,
+
+    paidBanners,
+    unpaidBanners,
+
+    activeBanners,
+    inactiveBanners,
+
+    expiredBanners,
+    scheduledBanners,
+
+    providerBanners,
+    adminBanners,
+    superadminBanners,
+
+    bannerClicksResult,
+
+    businessByCategory,
+    businessByCity,
+    businessByStatus,
+    bannersByPlacement,
+  ] = await Promise.all([
+
+    /* ================= USERS ================= */
+
+    User.countDocuments({
+      role: "user",
+    }),
+
+    User.countDocuments({
+      role: "provider",
+    }),
+
+    User.countDocuments({
+      role: {
+        $in: ["admin", "superadmin"],
+      },
+    }),
+
+    /* ================= LOCATION ================= */
+
+    City.countDocuments(),
+
+    Category.countDocuments(),
+
+    /* ================= BUSINESSES ================= */
+
+    Business.countDocuments(),
+
+    /* ================= LEADS ================= */
+
+    Lead.countDocuments(),
+
+    /* ================= BUSINESS STATUS ================= */
+
+    Business.countDocuments({
+      status: "pending",
+    }),
+
+    Business.countDocuments({
+      isFeatured: true,
+    }),
+
+    /* =================================================
+       BANNERS
+    ================================================= */
+
+    Banner.countDocuments(),
+
+    Banner.countDocuments({
+      status: "approved",
+    }),
+
+    Banner.countDocuments({
+      status: "pending",
+    }),
+
+    Banner.countDocuments({
+      status: "rejected",
+    }),
+
+    /* ================= PAYMENT ================= */
+
+    Banner.countDocuments({
+      paymentStatus: "paid",
+    }),
+
+    Banner.countDocuments({
+      paymentStatus: {
+        $ne: "paid",
+      },
+    }),
+
+    /* ================= ACTIVE ================= */
+
+    Banner.countDocuments({
+      status: "approved",
+      isActive: true,
+
+      $or: [
+        {
+          paymentStatus: "paid",
+        },
+        {
+          role: {
+            $in: ["admin", "superadmin"],
+          },
+        },
+      ],
+
+      $and: [
+        {
+          $or: [
+            {
+              startDate: {
+                $lte: now,
+              },
+            },
+            {
+              startDate: null,
+            },
+            {
+              startDate: {
+                $exists: false,
+              },
+            },
+          ],
+        },
+        {
+          $or: [
+            {
+              endDate: {
+                $gte: now,
+              },
+            },
+            {
+              endDate: null,
+            },
+            {
+              endDate: {
+                $exists: false,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+
+    Banner.countDocuments({
+      isActive: false,
+    }),
+
+    /* ================= EXPIRED ================= */
+
+    Banner.countDocuments({
+      endDate: {
+        $lt: now,
+      },
+    }),
+
+    /* ================= SCHEDULED ================= */
+
+    Banner.countDocuments({
+      startDate: {
+        $gt: now,
+      },
+    }),
+
+    /* ================= BANNER ROLES ================= */
+
+    Banner.countDocuments({
+      role: "provider",
+    }),
+
+    Banner.countDocuments({
+      role: "admin",
+    }),
+
+    Banner.countDocuments({
+      role: "superadmin",
+    }),
+
+    /* ================= CLICKS ================= */
+
+    Banner.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalClicks: {
+            $sum: {
+              $ifNull: ["$clicks", 0],
+            },
+          },
+        },
+      },
+    ]),
+
+    /* =================================================
+       BUSINESS BY CATEGORY
+    ================================================= */
+
+    Business.aggregate([
+      {
+        $group: {
+          _id: "$categoryId",
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+
+      {
+        $lookup: {
+          from: "categories",
+          localField: "_id",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$category",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+
+          category: {
+            $ifNull: [
+              "$category.name",
+              "Uncategorized",
+            ],
+          },
+
+          count: 1,
+        },
+      },
+
+      {
+        $sort: {
+          count: -1,
+        },
+      },
+    ]),
+
+    /* =================================================
+       BUSINESS BY CITY
+    ================================================= */
+
+    Business.aggregate([
+      {
+        $group: {
+          _id: "$cityId",
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+
+      {
+        $lookup: {
+          from: "cities",
+          localField: "_id",
+          foreignField: "_id",
+          as: "city",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$city",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+
+          city: {
+            $ifNull: [
+              "$city.name",
+              "Unknown City",
+            ],
+          },
+
+          count: 1,
+        },
+      },
+
+      {
+        $sort: {
+          count: -1,
+        },
+      },
+    ]),
+
+    /* =================================================
+       BUSINESS BY STATUS
+    ================================================= */
+
+    Business.aggregate([
+      {
+        $group: {
+          _id: {
+            $ifNull: [
+              "$status",
+              "unknown",
+            ],
+          },
+
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+
+          status: "$_id",
+
+          count: 1,
+        },
+      },
+
+      {
+        $sort: {
+          count: -1,
+        },
+      },
+    ]),
+
+    /* =================================================
+       BANNER BY PLACEMENT
+    ================================================= */
+
+    Banner.aggregate([
+      {
+        $group: {
+          _id: "$placement",
+
+          count: {
+            $sum: 1,
+          },
+
+          clicks: {
+            $sum: {
+              $ifNull: [
+                "$clicks",
+                0,
+              ],
+            },
+          },
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+
+          placement: "$_id",
+
+          count: 1,
+
+          clicks: 1,
+        },
+      },
+
+      {
+        $sort: {
+          count: -1,
+        },
+      },
+    ]),
+  ]);
+
+
+  /* =====================================================
+     CLICKS
+  ===================================================== */
+
+  const totalBannerClicks =
+    bannerClicksResult?.[0]?.totalClicks || 0;
+
+
+  /* =====================================================
+     USERS TOTAL
+  ===================================================== */
+
+  const totalUsersIncludingAdmins =
+    totalUsers +
+    totalProviders +
+    totalAdmins;
+
+
+  /* =====================================================
+     BUSINESS ACTIVE
+  ===================================================== */
+
+  const activeBusinesses = Math.max(
+    totalBusinesses -
+      pendingBusinesses,
+    0
+  );
+
+
+  /* =====================================================
+     RESPONSE
+  ===================================================== */
 
   res.json({
     success: true,
+
     data: {
-      totalUsers,
-      totalBusinesses,
-      totalLeads,
+
+      /* ================= USERS ================= */
+
+      users: {
+        total: totalUsersIncludingAdmins,
+
+        regular: totalUsers,
+
+        providers: totalProviders,
+
+        admins: totalAdmins,
+      },
+
+
+      /* ================= BUSINESSES ================= */
+
+      businesses: {
+        total: totalBusinesses,
+
+        active: activeBusinesses,
+
+        pending: pendingBusinesses,
+
+        featured: featuredBusinesses,
+
+        status: businessByStatus,
+      },
+
+
+      /* ================= LOCATION ================= */
+
+      cities: {
+        total: totalCities,
+      },
+
+
+      categories: {
+        total: totalCategories,
+      },
+
+
+      /* ================= LEADS ================= */
+
+      leads: {
+        total: totalLeads,
+      },
+
+
+      /* ================= BANNERS ================= */
+
+      banners: {
+
+        total: totalBanners,
+
+        approved: approvedBanners,
+
+        pending: pendingBanners,
+
+        rejected: rejectedBanners,
+
+        paid: paidBanners,
+
+        unpaid: unpaidBanners,
+
+        active: activeBanners,
+
+        inactive: inactiveBanners,
+
+        expired: expiredBanners,
+
+        scheduled: scheduledBanners,
+
+        provider: providerBanners,
+
+        admin: adminBanners,
+
+        superadmin: superadminBanners,
+
+        clicks: totalBannerClicks,
+
+        byPlacement: bannersByPlacement,
+      },
+
+
+      /* ================= CHART DATA ================= */
+
+      businessByCategory,
+
+      businessByCity,
+
+      businessByStatus,
+
+    },
+
+
+    meta: {
+      generatedAt: now,
     },
   });
 });

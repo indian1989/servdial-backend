@@ -269,6 +269,61 @@ export const getBanners = async (req, res) => {
 };
 
 /* =========================
+   TRACK BANNER CLICK
+   PUBLIC
+========================= */
+
+export const trackBannerClick = async (req, res) => {
+  try {
+    const { bannerId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(bannerId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid banner ID",
+      });
+    }
+
+    const banner = await Banner.findOneAndUpdate(
+      {
+        _id: bannerId,
+        status: "approved",
+        isActive: true,
+      },
+      {
+        $inc: { clicks: 1 },
+      },
+      {
+        new: true,
+      }
+    ).select("_id clicks");
+
+    if (!banner) {
+      return res.status(404).json({
+        success: false,
+        message: "Banner not found or inactive",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        bannerId: banner._id,
+        clicks: banner.clicks,
+      },
+    });
+
+  } catch (error) {
+    console.error("Track Banner Click Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to track banner click",
+    });
+  }
+};
+
+/* =========================
    GET ALL BANNERS (ADMIN)
 ========================= */
 export const getAllBanners = async (req, res) => {
