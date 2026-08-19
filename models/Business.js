@@ -29,6 +29,10 @@ slug: {
   index: true,
 },
 
+// =========================================================
+// 🔗 BUSINESS SLUG HISTORY
+// =========================================================
+
 slugHistory: [
   {
     type: String,
@@ -926,6 +930,114 @@ if (this.featuredUntil && this.featuredUntil < new Date()) {
   }
 });
 
+// =========================================================
+// 🔗 SLUG HISTORY FOR findOneAndUpdate / findByIdAndUpdate
+// =========================================================
+//
+// IMPORTANT:
+// pre("save") does NOT run for findByIdAndUpdate().
+//
+// updateBusiness() currently uses findByIdAndUpdate(),
+// therefore slug history must also be captured here.
+//
+// =========================================================
+
+businessSchema.pre(
+  "findOneAndUpdate",
+  async function (next) {
+    try {
+
+      const update = this.getUpdate() || {};
+
+      // ---------------------------------------------------
+      // Extract new slug
+      // ---------------------------------------------------
+
+      const newSlug =
+        update.slug ||
+        update.$set?.slug ||
+        "";
+
+      if (!newSlug) {
+        return next();
+      }
+
+      const normalizedNewSlug =
+        String(newSlug)
+          .trim()
+          .toLowerCase();
+
+      // ---------------------------------------------------
+      // Find current business
+      // ---------------------------------------------------
+
+      const currentBusiness =
+        await this.model
+          .findOne(this.getQuery())
+          .select("slug slugHistory")
+          .lean();
+
+      if (!currentBusiness) {
+        return next();
+      }
+
+      const oldSlug =
+        String(currentBusiness.slug || "")
+          .trim()
+          .toLowerCase();
+
+      // ---------------------------------------------------
+      // No slug change
+      // ---------------------------------------------------
+
+      if (
+        !oldSlug ||
+        oldSlug === normalizedNewSlug
+      ) {
+        return next();
+      }
+
+      // ---------------------------------------------------
+      // Ensure $addToSet exists
+      // ---------------------------------------------------
+
+      update.$addToSet =
+        update.$addToSet || {};
+
+      // ---------------------------------------------------
+      // Preserve old slug
+      // ---------------------------------------------------
+
+      update.$addToSet.slugHistory = oldSlug;
+
+      // ---------------------------------------------------
+      // Always normalize new slug
+      // ---------------------------------------------------
+
+      if (update.$set) {
+
+        update.$set.slug =
+          normalizedNewSlug;
+
+      } else {
+
+        update.slug =
+          normalizedNewSlug;
+
+      }
+
+      this.setUpdate(update);
+
+      next();
+
+    } catch (error) {
+
+      next(error);
+
+    }
+  }
+);
+
 // ================= GLOBAL QUERY FILTER =================
 businessSchema.pre(/^find/, function (next) {
   const options = this.getOptions?.() || {};
@@ -980,16 +1092,23 @@ businessSchema.index({
   parentCategoryId: 1,
 });
 
-// 🚀 SEO ROUTING
+// ================= SEO ROUTING =================
+
 businessSchema.index({
   citySlug: 1,
   categorySlug: 1,
   slug: 1,
 });
 
-// ⚡ UNIQUE
+businessSchema.index({
+  slugHistory: 1,
+});
 
-businessSchema.index({ location: "2dsphere" });
+// ================= GEO =================
+
+businessSchema.index({
+  location: "2dsphere",
+});
 
 // ================= EXPORT =================
 export default mongoose.model("Business", businessSchema);

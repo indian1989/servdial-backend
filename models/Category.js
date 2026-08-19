@@ -352,6 +352,20 @@ categorySchema.pre(
 
       }
 
+      /* ===================================================
+   NORMALIZE SLUG
+=================================================== */
+
+if (this.slug) {
+
+  this.slug =
+    this.slug
+      .toString()
+      .trim()
+      .toLowerCase();
+
+}
+
 
       /* ===================================================
          SLUG GENERATION
@@ -393,32 +407,110 @@ categorySchema.pre(
          SLUG HISTORY
       =================================================== */
 
-      if (
-        !this.isNew &&
-        this.isModified("slug")
-      ) {
+    
+/* ===================================================
+   SLUG HISTORY
 
-        const old =
-          await mongoose.models.Category.findById(
-            this._id
-          );
+   When an existing category slug changes:
+   old slug is preserved so old SEO URLs can
+   resolve to the current category.
 
-        if (
-          old?.slug &&
-          old.slug !== this.slug
-        ) {
+   Example:
 
-          this.slugHistory =
-            this.slugHistory || [];
+   old:
+   restaurant
 
-          this.slugHistory.push({
-            slug: old.slug,
-            changedAt: new Date(),
-          });
+   new:
+   restaurants
 
-        }
+   slugHistory:
+   [
+     {
+       slug: "restaurant",
+       changedAt: ...
+     }
+   ]
+=================================================== */
 
-      }
+if (
+  !this.isNew &&
+  this.isModified("slug")
+) {
+
+  const oldCategory =
+    await mongoose.models.Category
+      .findById(this._id)
+      .select("slug slugHistory")
+      .lean();
+
+  const oldSlug =
+    oldCategory?.slug
+      ?.toLowerCase()
+      ?.trim();
+
+  const newSlug =
+    this.slug
+      ?.toLowerCase()
+      ?.trim();
+
+
+  /* ===============================================
+     Only save a real slug change
+  =============================================== */
+
+  if (
+    oldSlug &&
+    newSlug &&
+    oldSlug !== newSlug
+  ) {
+
+    const existingHistory =
+      Array.isArray(this.slugHistory)
+        ? this.slugHistory
+        : [];
+
+
+    /* =============================================
+       Avoid duplicate history entries
+    ============================================= */
+
+    const alreadyExists =
+      existingHistory.some(
+        (item) =>
+          item?.slug === oldSlug
+      );
+
+
+    if (!alreadyExists) {
+
+      this.slugHistory = [
+        ...existingHistory,
+
+        {
+          slug: oldSlug,
+          changedAt: new Date(),
+        },
+      ];
+
+    }
+
+
+    /* =============================================
+       Safety:
+       Never keep the NEW current slug inside
+       slugHistory.
+    ============================================= */
+
+    this.slugHistory =
+      this.slugHistory.filter(
+        (item) =>
+          item?.slug &&
+          item.slug !== newSlug
+      );
+
+  }
+
+}
 
 
       /* ===================================================

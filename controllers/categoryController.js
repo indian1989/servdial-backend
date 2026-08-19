@@ -91,68 +91,126 @@ export const getCategoryTree = async (req, res) => {
 
 /* ================= GET BY SLUG ================= */
 
-export const getCategoryBySlug = async(req,res)=>{
+/* ================= GET BY SLUG ================= */
 
+export const getCategoryBySlug = async (req, res) => {
   try {
+    const value = req.params.slug?.toLowerCase().trim();
 
-    const value = req.params.slug;
-
-
-    let category;
-
-
-    if(
-      mongoose.Types.ObjectId.isValid(value)
-    ){
-
-      category = await Category.findById(value);
-
-    } 
-    else {
-
-      category = await Category.findOne({
-        slug:value
-      });
-
-    }
-
-
-    if(!category){
-      return res.status(404).json({
-        success:false,
-        message:"Category not found"
+    if (!value) {
+      return res.status(400).json({
+        success: false,
+        message: "Category slug is required",
       });
     }
 
+    let category = null;
+    let isOldSlug = false;
 
-    res.json({
-      success:true,
-      data:category
+    /* =====================================================
+       1. CURRENT SLUG
+    ===================================================== */
+
+    category = await Category.findOne({
+      slug: value,
+      status: "active",
     });
 
+    /* =====================================================
+       2. OLD SLUG FROM SLUG HISTORY
+    ===================================================== */
 
-  } catch(err){
+    if (!category) {
+      category = await Category.findOne({
+        "slugHistory.slug": value,
+        status: "active",
+      });
 
+      if (category) {
+        isOldSlug = true;
+      }
+    }
+
+    /* =====================================================
+       3. NOT FOUND
+    ===================================================== */
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    /* =====================================================
+       4. OLD → CURRENT SLUG
+    ===================================================== */
+
+    return res.json({
+      success: true,
+
+      data: category,
+
+      redirect: isOldSlug,
+
+      canonicalSlug: category.slug,
+    });
+
+  } catch (err) {
     console.error(
-      "getCategoryBySlug error",
+      "getCategoryBySlug error:",
       err
     );
 
-    res.status(500).json({
-      success:false,
-      message:"Server error"
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
     });
-
   }
-
 };
 
 /* ================= GET CHILDREN ================= */
 export const getCategoryWithChildren = async (req, res) => {
   try {
-    const parent = await Category.findOne({
-      slug: req.params.slug,
+    const value = req.params.slug?.toLowerCase().trim();
+
+    if (!value) {
+      return res.status(400).json({
+        success: false,
+        message: "Category slug is required",
+      });
+    }
+
+    let parent = null;
+    let isOldSlug = false;
+
+    /* =====================================================
+       1. CURRENT SLUG
+    ===================================================== */
+
+    parent = await Category.findOne({
+      slug: value,
+      status: "active",
     }).lean();
+
+    /* =====================================================
+       2. OLD SLUG FROM SLUG HISTORY
+    ===================================================== */
+
+    if (!parent) {
+      parent = await Category.findOne({
+        "slugHistory.slug": value,
+        status: "active",
+      }).lean();
+
+      if (parent) {
+        isOldSlug = true;
+      }
+    }
+
+    /* =====================================================
+       3. NOT FOUND
+    ===================================================== */
 
     if (!parent) {
       return res.status(404).json({
@@ -161,21 +219,40 @@ export const getCategoryWithChildren = async (req, res) => {
       });
     }
 
+    /* =====================================================
+       4. CHILDREN
+    ===================================================== */
+
     const children = await Category.find({
       parentCategory: parent._id,
-    }).lean();
+      status: "active",
+    })
+      .sort({ order: 1, name: 1 })
+      .lean();
 
-    res.json({
+    /* =====================================================
+       5. RESPONSE
+    ===================================================== */
+
+    return res.json({
       success: true,
+
       data: {
         parent,
         children,
       },
-    });
-  } catch (err) {
-    console.error("getCategoryWithChildren:", err);
 
-    res.status(500).json({
+      redirect: isOldSlug,
+      canonicalSlug: parent.slug,
+    });
+
+  } catch (err) {
+    console.error(
+      "getCategoryWithChildren:",
+      err
+    );
+
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch children",
     });
@@ -274,18 +351,26 @@ export const updateCategory = async (req, res) => {
     }
 
     const {
-  name,
- order,
-  status,
-  description,
-  parentCategory,
-  isTrending,
-  uiType,
-  features,
-} = req.body;
+      name,
+      order,
+      status,
+      description,
+      parentCategory,
+      isTrending,
+      uiType,
+      features,
+    } = req.body;
 
-    if (name && name !== category.name) {
-      const newSlug = slugify(name);
+    /* =====================================================
+       CATEGORY NAME + SLUG
+    ===================================================== */
+
+    if (name !== undefined && name.trim() !== category.name) {
+      const cleanName = name
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const newSlug = slugify(cleanName);
 
       const slugExists = await Category.findOne({
         slug: newSlug,
@@ -299,27 +384,61 @@ export const updateCategory = async (req, res) => {
         });
       }
 
-      category.name = name;
+      /* ===============================================
+         IMPORTANT
+
+         Save old slug BEFORE changing category.slug.
+         Category.js pre-save middleware will also
+         detect the slug modification and store the
+         previous slug in slugHistory.
+      =============================================== */
+
+      category.name = cleanName;
       category.slug = newSlug;
     }
 
-    if (order !== undefined) category.order = order;
-    if (status !== undefined) category.status = status;
-    if (description !== undefined)
+    /* =====================================================
+       BASIC FIELDS
+    ===================================================== */
+
+    if (order !== undefined) {
+      category.order = order;
+    }
+
+    if (status !== undefined) {
+      category.status = status;
+    }
+
+    if (description !== undefined) {
       category.description = description;
-    if (parentCategory !== undefined)
-      category.parentCategory = parentCategory || null;
-    
+    }
+
+    /* =====================================================
+       PARENT CATEGORY + LEVEL
+    ===================================================== */
+
     if (parentCategory !== undefined) {
-  category.parentCategory = parentCategory || null;
-  category.level = parentCategory ? 1 : 0;
-}
+      category.parentCategory =
+        parentCategory || null;
 
-if (uiType !== undefined) {
-  category.uiType = uiType;
-}
+      category.level =
+        parentCategory ? 1 : 0;
+    }
 
-    // Always preserve existing features and ensure offers is present
+    /* =====================================================
+       UI TYPE
+    ===================================================== */
+
+    if (uiType !== undefined) {
+      category.uiType = uiType;
+    }
+
+    /* =====================================================
+       FEATURES
+       Always preserve existing features.
+       "offers" remains mandatory.
+    ===================================================== */
+
     category.features = [
       ...new Set([
         ...(features ?? category.features ?? []),
@@ -327,27 +446,63 @@ if (uiType !== undefined) {
       ]),
     ];
 
-    if (isTrending !== undefined)
+    /* =====================================================
+       TRENDING
+    ===================================================== */
+
+    if (isTrending !== undefined) {
       category.isTrending = isTrending;
+    }
+
+    /* =====================================================
+       SAVE
+
+       IMPORTANT:
+       category.save() triggers Category.js
+       pre-save middleware.
+
+       If slug changed:
+       old slug → slugHistory[]
+    ===================================================== */
 
     await category.save();
 
+    /* =====================================================
+       CACHE RESET
+    ===================================================== */
+
     resetCategoryCache();
+
+    /* =====================================================
+       SEARCH ENGINE PING
+    ===================================================== */
+
     await pingSearchEngines();
 
-    res.json({
+    /* =====================================================
+       RESPONSE
+    ===================================================== */
+
+    return res.json({
       success: true,
       data: category,
+      canonicalSlug: category.slug,
+      slugHistory: category.slugHistory || [],
     });
-  } catch (err) {
-    console.error("updateCategory:", err);
 
-    res.status(500).json({
+  } catch (err) {
+    console.error(
+      "updateCategory:",
+      err
+    );
+
+    return res.status(500).json({
       success: false,
       message: "Failed to update category",
     });
   }
 };
+
 
 /* ================= DELETE ================= */
 export const deleteCategory = async (req, res) => {

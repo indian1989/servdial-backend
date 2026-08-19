@@ -32,16 +32,41 @@ const requireField = (field, name) => {
    SLUG GENERATOR (CONTROLLED)
 ========================= */
 
+/* =========================
+   SLUG GENERATOR (CONTROLLED)
+========================= */
+
 const generateBusinessSlug = async (name) => {
-  const base = slugify(name);
+
+  const base =
+    slugify(name) ||
+    "business";
+
   let slug = base;
   let counter = 1;
 
-  while (await Business.findOne({ slug })) {
-    slug = `${base}-${counter++}`;
+
+  while (
+    await Business.findOne({
+      $or: [
+        {
+          slug,
+        },
+        {
+          slugHistory: slug,
+        },
+      ],
+    })
+  ) {
+
+    slug =
+      `${base}-${counter++}`;
+
   }
 
+
   return slug;
+
 };
 
 /* =========================
@@ -859,16 +884,18 @@ export const updateBusiness = asyncHandler(async (req, res) => {
   );
 
 
+/* ================= HARD PROTECTION ================= */
 
-  /* ================= HARD PROTECTION ================= */
+// These fields are completely system-controlled.
+// Client must never modify them directly.
 
-  delete updates.slug;
-  delete updates.citySlug;
-  delete updates.categorySlug;
-  delete updates.status;
+delete updates.slug;
+delete updates.slugHistory;
 
+delete updates.citySlug;
+delete updates.categorySlug;
 
-
+delete updates.status;
 
   /* ================= ADDRESS NORMALIZE ================= */
 
@@ -1087,6 +1114,72 @@ if (updates.categoryId) {
   category = await Category.findById(
     business.categoryId
   );
+
+}
+
+/* ================= BUSINESS SLUG ================= */
+
+if (
+  updates.name !== undefined &&
+  updates.name.trim() !== business.name.trim()
+) {
+
+  const cleanName =
+    updates.name
+      .trim()
+      .replace(/\s+/g, " ");
+
+  const baseSlug =
+    slugify(cleanName) ||
+    "business";
+
+  let newSlug =
+    baseSlug;
+
+  let counter = 1;
+
+
+  // =====================================================
+  // 🔒 SLUG MUST NOT COLLIDE WITH
+  //
+  // 1. Another business current slug
+  // 2. Another business historical slug
+  //
+  // =====================================================
+
+  while (
+    await Business.findOne({
+
+      _id: {
+        $ne: business._id,
+      },
+
+      $or: [
+
+        {
+          slug: newSlug,
+        },
+
+        {
+          slugHistory: newSlug,
+        },
+
+      ],
+
+    })
+  ) {
+
+    newSlug =
+      `${baseSlug}-${counter++}`;
+
+  }
+
+
+  updates.name =
+    cleanName;
+
+  updates.slug =
+    newSlug;
 
 }
 
@@ -1358,41 +1451,111 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
 
 // ================= GET BUSINESS BY SLUG =================
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
-  const { slug } = req.params;
-  
-  if (!slug) {
+
+  const value =
+    req.params.slug
+      ?.toLowerCase()
+      .trim();
+
+  if (!value) {
     return res.status(400).json({
       success: false,
       message: "Slug is required",
     });
   }
-  
-  const business = await Business.findOne({
-    slug,
+
+
+  let business = null;
+  let isOldSlug = false;
+
+
+  /* =====================================================
+     1. CURRENT SLUG
+  ===================================================== */
+
+  business = await Business.findOne({
+    slug: value,
     status: "approved",
     isDeleted: false,
-  })
-  .populate("cityId", "name slug state district")
-  .populate( "categoryId", "name slug uiType features"
-  )
-  .lean();
-  
+  });
+
+
+  /* =====================================================
+     2. OLD SLUG
+  ===================================================== */
+
   if (!business) {
+
+    business = await Business.findOne({
+      slugHistory: value,
+      status: "approved",
+      isDeleted: false,
+    });
+
+    if (business) {
+      isOldSlug = true;
+    }
+  }
+
+
+  /* =====================================================
+     3. NOT FOUND
+  ===================================================== */
+
+  if (!business) {
+
     return res.status(404).json({
       success: false,
       message: "Business not found",
     });
+
   }
-  
+
+
+    /* =====================================================
+     4. OLD SLUG → CURRENT SLUG
+  ===================================================== */
+
+  if (isOldSlug) {
+
+  const populatedOldSlugBusiness =
+    await Business.findById(business._id)
+      .populate("cityId", "name slug")
+      .populate("categoryId", "name slug")
+      .lean();
+
+  return res.json({
+    success: true,
+
+    redirect: true,
+
+    oldSlug: value,
+
+    canonicalSlug: business.slug,
+
+    data: {
+      business: populatedOldSlugBusiness,
+      reviews: [],
+    },
+
+    message: "Business URL has moved",
+  });
+}
+
+  /* =====================================================
+     LANGUAGE
+  ===================================================== */
+
   const language =
-  (
-    req.query.lang ||
-    req.headers["accept-language"]
-    ?.split(",")[0]
-    ?.split("-")[0] ||
-    "en"
-  ).toLowerCase();
-  
+    (
+      req.query.lang ||
+      req.headers["accept-language"]
+        ?.split(",")[0]
+        ?.split("-")[0] ||
+      "en"
+    ).toLowerCase();
+
+
   const supportedLanguages = [
     "en",
     "hi",
@@ -1402,37 +1565,91 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     "te",
     "gu",
   ];
-  
+
+
   const finalLanguage =
-  supportedLanguages.includes(language)
-  ? language
-  : "en";
-  
-  business.faq = generateBusinessFAQ({
-    business,
-    language: finalLanguage,
-  });
-  
-  const reviews = await Review.find({
-    businessId: business._id,
-    status: "approved",
-  })
-  .sort({ createdAt: -1 })
-  .limit(20)
-  .lean();
-  
+    supportedLanguages.includes(language)
+      ? language
+      : "en";
+
+
+  /* =====================================================
+     POPULATE
+  ===================================================== */
+
+  const populatedBusiness =
+    await Business.findById(business._id)
+
+      .populate(
+        "cityId",
+        "name slug state district"
+      )
+
+      .populate(
+        "categoryId",
+        "name slug uiType features"
+      )
+
+      .lean();
+
+
+  /* =====================================================
+     FAQ
+  ===================================================== */
+
+  populatedBusiness.faq =
+    generateBusinessFAQ({
+      business: populatedBusiness,
+      language: finalLanguage,
+    });
+
+
+  /* =====================================================
+     REVIEWS
+  ===================================================== */
+
+  const reviews =
+    await Review.find({
+      businessId: populatedBusiness._id,
+      status: "approved",
+    })
+      .sort({
+        createdAt: -1,
+      })
+      .limit(20)
+      .lean();
+
+
+  /* =====================================================
+     CACHE
+  ===================================================== */
+
   res.setHeader(
     "Cache-Control",
     "public, max-age=300, stale-while-revalidate=600"
   );
-  
-  res.json({
+
+
+  /* =====================================================
+     RESPONSE
+  ===================================================== */
+
+  return res.json({
+
     success: true,
+
+    redirect: false,
+
+    canonicalSlug:
+      populatedBusiness.slug,
+
     data: {
-      business,
+      business: populatedBusiness,
       reviews,
     },
+
   });
+
 });
 
 // ================= GET BUSINESS COUNT =================
