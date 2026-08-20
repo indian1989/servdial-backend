@@ -163,7 +163,13 @@ export const staticSitemap = async (req, res) => {
     "/about",
     "/contact",
     "/privacy-policy",
-    "/terms"
+    "/terms",
+    "/advertise",
+    "/community-guidelines",
+    "/disclaimer",
+    "/provider-agreement",
+    "/refund-policy",
+    "/faq"
   ];
 
   const urls = pages
@@ -230,7 +236,7 @@ export const citySitemap = async (req, res) => {
       .map(
         (city) => `
 <url>
-<loc>${FRONTEND_URL}/city/${city.slug}</loc>
+<loc>${FRONTEND_URL}/${city.slug}</loc>
 <lastmod>${getLastMod(city.updatedAt)}</lastmod>
 <changefreq>daily</changefreq>
 <priority>0.8</priority>
@@ -369,7 +375,7 @@ if (cached) {
 <url>
 <loc>${FRONTEND_URL}/${item._id.citySlug}/${item._id.categorySlug}</loc>
 <lastmod>${getLastMod(item.updatedAt)}</lastmod>
-<changefreq>weekly</changefreq>
+<changefreq>daily</changefreq>
 <priority>0.9</priority>
 </url>`
       )

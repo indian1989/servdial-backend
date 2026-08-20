@@ -49,4 +49,8 @@ export const setCache = (key, value, ttl) =>
   memoryCache.set(key, value, ttl);
 export const delCache = (key) => memoryCache.del(key);
 
+export const clearCache = () => {
+  memoryCache.clear();
+  console.log("🧹 Memory cache cleared");
+};
 export default memoryCache;

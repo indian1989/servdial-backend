@@ -4,6 +4,7 @@ import Category from "../models/Category.js";
 import slugify from "../utils/slugify.js";
 import memoryCache from "../utils/memoryCache.js";
 import { pingSearchEngines } from "../services/seo/pingSearchEngines.js";
+import { generateCategoryKeywords } from "../utils/categoryKeywords.js";
 
 /* ================= CACHE RESET ================= */
 const resetCategoryCache = () => {
@@ -310,6 +311,11 @@ export const createCategory = async (req, res) => {
 
     const finalFeatures = [...new Set([...(features || []), "offers"])];
 
+const keywords = generateCategoryKeywords({
+  name,
+  slug,
+});
+
 const category = await Category.create({
   name,
   slug,
@@ -319,6 +325,7 @@ const category = await Category.create({
   description,
   uiType,
   features: finalFeatures,
+  keywords,
 });
 
     resetCategoryCache();
@@ -464,6 +471,15 @@ export const updateCategory = async (req, res) => {
        If slug changed:
        old slug → slugHistory[]
     ===================================================== */
+
+    /* =====================================================
+   AUTO GENERATE KEYWORDS
+===================================================== */
+
+category.keywords = generateCategoryKeywords({
+  name: category.name,
+  slug: category.slug,
+});
 
     await category.save();
 

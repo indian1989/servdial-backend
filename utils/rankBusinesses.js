@@ -286,20 +286,21 @@ const getWeights = (context = {}) => {
 
 
   const isNearby =
-    Boolean(
-      context?.isNearMe ||
-      context?.parsed?.isNearMe ||
-      context?.filters?.isNearMe
-    );
+  Boolean(
+    context?.searchIntent?.isNearMe ||
+    context?.isNearMe ||
+    context?.parsed?.isNearMe ||
+    context?.filters?.isNearMe
+  );
 
-
-  const isEmergency =
-    Boolean(
-      context?.isEmergency ||
-      context?.parsed?.isEmergency ||
-      context?.filters?.isEmergency ||
-      intent === "emergency"
-    );
+const isEmergency =
+  Boolean(
+    context?.searchIntent?.isEmergency ||
+    context?.isEmergency ||
+    context?.parsed?.isEmergency ||
+    context?.filters?.isEmergency ||
+    intent === "emergency"
+  );
 
 
   /* =======================================================

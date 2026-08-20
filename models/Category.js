@@ -109,7 +109,7 @@ const categorySchema = new mongoose.Schema(
         "service",
         "sell-service",
         "restaurant",
-        "booking",
+        "hotel",
         "appointment",
         "shopping",
         "consultation",

@@ -92,6 +92,10 @@ const STOP_WORDS = [
   "24 hour",
   "24 hours",
   "always open",
+  "emergency",
+"urgent",
+"immediate",
+"asap",
 
   // Personal/location noise
   "me",
@@ -163,23 +167,35 @@ const extractCityCandidate = (query = "") => {
     return null;
   }
 
+  /*
+   * Location phrases are intentionally restricted
+   * to the end of the query.
+   *
+   * Supported:
+   *
+   * in patna
+   * at patna
+   * near patna
+   * around patna
+   *
+   * We also allow "near me" / "around me" separately
+   * without treating them as a city.
+   */
+
   const match = normalized.match(
-    /\b(?:in|at|near)\s+([\p{L}\p{N}][\p{L}\p{N}\s-]*[\p{L}\p{N}])$/iu
+    /\b(?:in|at|near|around)\s+([\p{L}\p{N}][\p{L}\p{N}\s-]*[\p{L}\p{N}])$/iu
   );
 
   if (!match) {
     return null;
   }
 
-  const candidate = normalizeCityCandidate(match[1]);
+  const candidate =
+    normalizeCityCandidate(match[1]);
 
   if (!candidate) {
     return null;
   }
-
-  /* ===============================================
-     NEVER TREAT PERSONAL PROXIMITY AS CITY
-  =============================================== */
 
   const invalidCandidates = new Set([
     "me",
@@ -187,9 +203,14 @@ const extractCityCandidate = (query = "") => {
     "here",
     "near me",
     "around me",
+    "nearby",
   ]);
 
-  if (invalidCandidates.has(candidate)) {
+  if (
+    invalidCandidates.has(
+      candidate.toLowerCase()
+    )
+  ) {
     return null;
   }
 
@@ -204,23 +225,38 @@ const removeCityPhrase = (
   query = "",
   cityCandidate = null
 ) => {
-  if (!cityCandidate) {
-    return normalizeQuery(query);
+  const normalizedQuery =
+    normalizeQuery(query);
+
+  if (!normalizedQuery) {
+    return "";
   }
 
-  const normalizedQuery = normalizeQuery(query);
-  const normalizedCity = normalizeCityCandidate(cityCandidate);
+  /*
+   * No resolved/extracted city:
+   *
+   * Nothing to remove.
+   */
+  if (!cityCandidate) {
+    return normalizedQuery;
+  }
+
+  const normalizedCity =
+    normalizeCityCandidate(
+      cityCandidate
+    );
 
   if (!normalizedCity) {
     return normalizedQuery;
   }
 
-  const escapedCity = escapeRegex(normalizedCity);
+  const escapedCity =
+    escapeRegex(normalizedCity);
 
   return normalizedQuery
     .replace(
       new RegExp(
-        `\\b(?:in|at|near)\\s+${escapedCity}\\s*$`,
+        `\\b(?:in|at|near|around)\\s+${escapedCity}\\s*$`,
         "iu"
       ),
       " "

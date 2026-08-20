@@ -404,118 +404,161 @@ export const buildSearchContext = async (
   ======================================================= */
 
   const finalFilters = {
-    ...normalizedFilters,
+  ...normalizedFilters,
 
-    city:
-      city?.slug ||
-      null,
+  city:
+    city?.slug ||
+    null,
 
-    cityId:
-      city?._id ||
-      null,
+  cityId:
+    city?._id ||
+    null,
 
-    categorySlug:
-      categorySlug ||
-      null,
+  categorySlug:
+    categorySlug ||
+    null,
 
-    lat:
-      Number.isFinite(latitude)
-        ? latitude
-        : null,
+  lat:
+    Number.isFinite(latitude)
+      ? latitude
+      : null,
 
-    lng:
-      Number.isFinite(longitude)
-        ? longitude
-        : null,
+  lng:
+    Number.isFinite(longitude)
+      ? longitude
+      : null,
 
-    distance,
-  };
+  distance,
+
+  /*
+   * Behavioral search signals
+   */
+  sortBy:
+    sortBy || null,
+
+  minRating:
+    Number.isFinite(minRating)
+      ? minRating
+      : null,
+
+  pricePreference:
+    pricePreference || null,
+
+  openNow:
+    Boolean(openNow),
+
+  isNearMe:
+    Boolean(isNearMe),
+
+  isEmergency:
+    Boolean(isEmergency),
+};
 
   /* =======================================================
      FINAL CONTEXT
   ======================================================= */
 
   const context = {
-    rawQuery: cleanQuery,
+  rawQuery: cleanQuery,
 
-    cityId:
-      city?._id ||
+  cityId:
+    city?._id ||
+    null,
+
+  citySlug:
+    city?.slug ||
+    null,
+
+  categoryId,
+
+  categoryIds,
+
+  categorySlug:
+    categorySlug ||
+    null,
+
+  intent,
+
+  /*
+   * =======================================================
+   * SEARCH INTELLIGENCE
+   * =======================================================
+   *
+   * This is the canonical location for behavioral
+   * search signals.
+   */
+  searchIntent: {
+    sortBy,
+    minRating,
+    pricePreference,
+
+    openNow,
+    isNearMe,
+    isEmergency,
+  },
+
+  /*
+   * =======================================================
+   * TEXT SEARCH
+   * =======================================================
+   */
+  textSearch:
+    finalTextSearch,
+
+  /*
+   * =======================================================
+   * FINAL FILTERS
+   * =======================================================
+   */
+  filters:
+    finalFilters,
+
+  debug: {
+    hasCity:
+      !!city,
+
+    hasCategory:
+      !!categoryContext,
+
+    requestedCityCandidate:
+      parsed.cityCandidate ||
       null,
 
-    citySlug:
+    requestedCitySlug:
+      requestedCitySlug ||
+      null,
+
+    resolvedCitySlug:
       city?.slug ||
       null,
 
-    categoryId,
+    cityResolutionFailed,
 
-    categoryIds,
-
-    categorySlug:
+    requestedCategorySlug:
       categorySlug ||
       null,
 
-    intent,
+    resolvedCategorySlug:
+      categoryContext?.category?.slug ||
+      null,
+
+    semanticCategory:
+      semanticCategory ||
+      null,
 
     /*
-     * Behavioral search information remains
-     * available to ranking / search execution.
+     * Useful for future semantic ranking.
      */
-    searchIntent: {
-      sortBy,
-      minRating,
-      pricePreference,
+    semanticMatched:
+      !!semanticCategory,
 
-      openNow,
-      isNearMe,
-      isEmergency,
-    },
+    parsed,
 
-    textSearch:
-      finalTextSearch,
+    tokens,
 
-    filters:
-      finalFilters,
-
-    debug: {
-      hasCity:
-        !!city,
-
-      hasCategory:
-        !!categoryContext,
-
-      requestedCityCandidate:
-        parsed.cityCandidate ||
-        null,
-
-      requestedCitySlug:
-        requestedCitySlug ||
-        null,
-
-      resolvedCitySlug:
-        city?.slug ||
-        null,
-
-      cityResolutionFailed,
-
-      requestedCategorySlug:
-        categorySlug ||
-        null,
-
-      resolvedCategorySlug:
-        categoryContext?.category?.slug ||
-        null,
-
-      semanticCategory:
-        semanticCategory ||
-        null,
-
-      parsed,
-
-      tokens,
-
-      finalTextSearch,
-    },
-  };
+    finalTextSearch,
+  },
+};
 
   /* =======================================================
      DEBUG

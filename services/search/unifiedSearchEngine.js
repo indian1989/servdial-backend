@@ -3,56 +3,100 @@
 import Business from "../../models/Business.js";
 import { rankBusinesses } from "../../utils/rankBusinesses.js";
 
-/*
-=========================================================
-🔎 UNIFIED SEARCH ENGINE
-=========================================================
-
-RESPONSIBILITY:
-
-- execute already-resolved search context
-- build MongoDB business query
-- apply city/category/text/geo filters
-- fetch businesses
-- pass results to ranking layer
-
-MUST NOT:
-
-- resolve city
-- resolve category
-- parse natural-language query
-- perform semantic mapping
-- contain route logic
-- contain UI logic
-
-SEARCH FLOW:
-
-Request
-   ↓
-Search Controller
-   ↓
-Query Intelligence Engine
-   ↓
-Unified Search Engine  ← THIS FILE
-   ↓
-Rank Businesses
-   ↓
-Results
-
-=========================================================
-*/
+/**
+ * =========================================================
+ * 🌍 UNIFIED SEARCH ENGINE — FINAL SSOT VERSION
+ * =========================================================
+ *
+ * RESPONSIBILITY:
+ * ---------------------------------------------------------
+ * - Execute an already-resolved search context
+ * - Build MongoDB business query
+ * - Apply city filter
+ * - Apply category filter
+ * - Apply optional text filter
+ * - Apply geo/distance filter
+ * - Fetch businesses
+ * - Pass candidates to ranking engine
+ *
+ * MUST NOT:
+ * ---------------------------------------------------------
+ * - Resolve city
+ * - Resolve category
+ * - Parse natural-language query
+ * - Perform semantic mapping
+ * - Detect intent
+ * - Rank independently
+ * - Contain route/controller logic
+ * - Contain UI logic
+ *
+ * SEARCH FLOW:
+ *
+ * Request
+ *   ↓
+ * Search Controller
+ *   ↓
+ * Query Intelligence Engine
+ *   ↓
+ * Unified Search Engine
+ *   ↓
+ * MongoDB Filter
+ *   ↓
+ * Candidate Businesses
+ *   ↓
+ * rankBusinesses()
+ *   ↓
+ * Final Results
+ *
+ * SSOT RULES:
+ *
+ * City:
+ *   Business.cityId
+ *
+ * Category:
+ *   Business.categoryId
+ *
+ * Parent Category:
+ *   NOT used for business filtering
+ *
+ * Category expansion:
+ *   categoryResolver
+ *
+ * City resolution:
+ *   cityResolver
+ *
+ * Semantic mapping:
+ *   semanticMapper
+ *
+ * Intent:
+ *   intentDetector
+ *
+ * Ranking:
+ *   rankBusinesses
+ *
+ * =========================================================
+ */
 
 
 /* =========================================================
    🔧 SAFE NUMBER
 ========================================================= */
 
-const toNumber = (value, fallback = null) => {
-  if (value === undefined || value === null || value === "") {
+const toNumber = (
+  value,
+  fallback = null
+) => {
+
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
     return fallback;
   }
 
-  const number = Number(value);
+  const number =
+    Number(value);
 
   return Number.isFinite(number)
     ? number
@@ -64,56 +108,115 @@ const toNumber = (value, fallback = null) => {
    🔧 SAFE LIMIT
 ========================================================= */
 
-const normalizeLimit = (limit = 20) => {
-  const parsed = toNumber(limit, 20);
+const normalizeLimit = (
+  limit = 20
+) => {
+
+  const parsed =
+    toNumber(
+      limit,
+      20
+    );
 
   return Math.min(
-    Math.max(parsed, 1),
+    Math.max(
+      Math.floor(parsed),
+      1
+    ),
     100
   );
 };
 
 
 /* =========================================================
-   🔧 BUILD TEXT CONDITIONS
+   🔧 REGEX ESCAPE
 ========================================================= */
 
-const buildTextConditions = (textSearch = "") => {
-  const text = String(textSearch || "")
-    .trim();
+const escapeRegex = (
+  value = ""
+) => {
+
+  return String(value).replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+};
+
+
+/* =========================================================
+   🔧 NORMALIZE TEXT
+========================================================= */
+
+const normalizeText = (
+  value = ""
+) => {
+
+  return String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ");
+};
+
+
+/* =========================================================
+   🔎 BUILD TEXT CONDITIONS
+========================================================= */
+
+/**
+ * Text is used carefully.
+ *
+ * If category has already been resolved:
+ *
+ *   category = plumber
+ *   text     = water leakage
+ *
+ * We do NOT force businesses to literally contain
+ * "water leakage".
+ *
+ * Category filtering already determines eligibility.
+ * Text is then supplied to ranking as a relevance signal.
+ *
+ * If NO category is resolved:
+ *
+ *   text = "rahul mobile shop"
+ *
+ * text becomes a MongoDB candidate filter.
+ *
+ * =========================================================
+ */
+
+const buildTextConditions = (
+  textSearch = ""
+) => {
+
+  const text =
+    normalizeText(textSearch);
 
   if (!text) {
     return [];
   }
 
-  const tokens = text
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
+  const tokens =
+    text
+      .split(/\s+/)
+      .map(
+        (token) =>
+          token.trim()
+      )
+      .filter(Boolean);
 
-  /*
-  ---------------------------------------------------------
-  IMPORTANT:
-  Escape regex input.
-
-  User search must NEVER become an unsafe
-  MongoDB regex expression.
-  ---------------------------------------------------------
-  */
-
-  const escapeRegex = (value = "") =>
-    value.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      "\\$&"
-    );
+  if (!tokens.length) {
+    return [];
+  }
 
   const conditions = [];
 
-  /* =====================================================
-     FULL QUERY MATCH
-  ===================================================== */
+  /* =======================================================
+     FULL PHRASE
+  ======================================================= */
 
-  const safeText = escapeRegex(text);
+  const safeText =
+    escapeRegex(text);
 
   conditions.push(
     {
@@ -135,6 +238,18 @@ const buildTextConditions = (textSearch = "") => {
       },
     },
     {
+      keywords: {
+        $regex: safeText,
+        $options: "i",
+      },
+    },
+    {
+      services: {
+        $regex: safeText,
+        $options: "i",
+      },
+    },
+    {
       categorySlug: {
         $regex: safeText,
         $options: "i",
@@ -142,42 +257,56 @@ const buildTextConditions = (textSearch = "") => {
     }
   );
 
-  /* =====================================================
+  /* =======================================================
      TOKEN FALLBACK
-     
-     Example:
+  ======================================================= */
 
-     "mobile phone repair"
+  for (
+    const token
+    of tokens
+  ) {
 
-     can still match:
+    const safeToken =
+      escapeRegex(token);
 
-     mobile repair shop
-     phone service
-  ===================================================== */
-
-  for (const token of tokens) {
-    const safeToken = escapeRegex(token);
-
-    conditions.push({
-      name: {
-        $regex: safeToken,
-        $options: "i",
+    conditions.push(
+      {
+        name: {
+          $regex: safeToken,
+          $options: "i",
+        },
       },
-    });
-
-    conditions.push({
-      tags: {
-        $regex: safeToken,
-        $options: "i",
+      {
+        description: {
+          $regex: safeToken,
+          $options: "i",
+        },
       },
-    });
-
-    conditions.push({
-      categorySlug: {
-        $regex: safeToken,
-        $options: "i",
+      {
+        tags: {
+          $regex: safeToken,
+          $options: "i",
+        },
       },
-    });
+      {
+        keywords: {
+          $regex: safeToken,
+          $options: "i",
+        },
+      },
+      {
+        services: {
+          $regex: safeToken,
+          $options: "i",
+        },
+      },
+      {
+        categorySlug: {
+          $regex: safeToken,
+          $options: "i",
+        },
+      }
+    );
   }
 
   return conditions;
@@ -185,153 +314,253 @@ const buildTextConditions = (textSearch = "") => {
 
 
 /* =========================================================
-   🔎 MAIN SEARCH ENGINE
+   📍 VALIDATE COORDINATES
 ========================================================= */
 
-export const unifiedSearchEngine = async (
+const getValidCoordinates = (
+  filters = {}
+) => {
+
+  const latitude =
+    toNumber(
+      filters?.lat
+    );
+
+  const longitude =
+    toNumber(
+      filters?.lng
+    );
+
+  const valid =
+    latitude !== null &&
+    longitude !== null &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
+
+  if (!valid) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+  };
+};
+
+
+/* =========================================================
+   📍 BUILD GEO FILTER
+========================================================= */
+
+/**
+ * Returns a MongoDB $near expression.
+ *
+ * MongoDB expects:
+ *
+ * distance = meters
+ *
+ * API/frontend may supply:
+ *
+ * distance = kilometers
+ *
+ * Therefore:
+ *
+ * km × 1000 = meters
+ *
+ * Maximum supported search radius:
+ *
+ * 500 km
+ */
+
+const buildGeoFilter = (
+  filters = {}
+) => {
+
+  const coordinates =
+    getValidCoordinates(
+      filters
+    );
+
+  if (!coordinates) {
+    return null;
+  }
+
+  const requestedDistanceKm =
+    toNumber(
+      filters?.distance,
+      10
+    );
+
+  const safeDistanceKm =
+    Math.min(
+      Math.max(
+        requestedDistanceKm,
+        0.1
+      ),
+      500
+    );
+
+  return {
+    $near: {
+      $geometry: {
+        type: "Point",
+        coordinates: [
+          coordinates.longitude,
+          coordinates.latitude,
+        ],
+      },
+      $maxDistance:
+        safeDistanceKm * 1000,
+    },
+  };
+};
+
+
+/* =========================================================
+   🚨 EXPLICIT CITY VALIDATION
+========================================================= */
+
+/**
+ * IMPORTANT:
+ *
+ * If user explicitly requested:
+ *
+ * "electrician in patn"
+ *
+ * but cityResolver could not resolve "patn",
+ * NEVER silently use current detected city.
+ *
+ * Otherwise:
+ *
+ * "patn"
+ *
+ * could accidentally return:
+ *
+ * "electricians in Hajipur"
+ *
+ * That is incorrect search behavior.
+ */
+
+const hasExplicitCityFailure = (
   searchContext = {}
 ) => {
 
-  /*
-  =========================================================
-  CONTEXT
-  =========================================================
-  */
+  const debug =
+    searchContext?.debug || {};
 
-  const {
-    cityId = null,
-    categoryId = null,
-    categoryIds = [],
-    textSearch = "",
-    filters = {},
-    limit = 20,
-    debug = {},
-  } = searchContext;
-
-
-  /*
-  =========================================================
-  🚨 EXPLICIT CITY FAILURE
-  =========================================================
-
-  Example:
-
-  "electrician in patn"
-
-  parser:
-  cityCandidate = "patn"
-
-  resolver:
-  city = null
-
-  We MUST NOT silently fall back to the
-  user's current city.
-
-  Otherwise:
-
-  "electrician in patn"
-
-  could incorrectly return:
-
-  "electricians in hajipur"
-
-  =========================================================
-  */
-
-  const explicitCityRequested =
+  const requested =
     Boolean(
       debug?.requestedCityCandidate
     );
 
-
-  const cityResolutionFailed =
-    explicitCityRequested &&
-    !debug?.resolvedCitySlug;
-
-
-  if (cityResolutionFailed) {
-
-    console.log(
-      "⚠️ EXPLICIT CITY RESOLUTION FAILED:",
-      debug.requestedCityCandidate
+  const resolved =
+    Boolean(
+      debug?.resolvedCitySlug
     );
 
-    return [];
-  }
+  return (
+    requested &&
+    !resolved
+  );
+};
 
 
-  /*
-  =========================================================
-  🚨 INVALID CITY
-  =========================================================
-  */
+/* =========================================================
+   🚨 INVALID SEARCH CONTEXT
+========================================================= */
 
-  if (debug?.invalidCity) {
+const isInvalidSearchContext = (
+  searchContext = {}
+) => {
 
-    console.log(
-      "⚠️ INVALID CITY SEARCH"
-    );
+  const debug =
+    searchContext?.debug || {};
 
-    return [];
-  }
+  return (
+    Boolean(
+      debug?.invalidCity
+    ) ||
+    Boolean(
+      debug?.invalidCategory
+    )
+  );
+};
 
 
-  /*
-  =========================================================
-  🧱 BASE QUERY
-  =========================================================
-  */
+/* =========================================================
+   🧱 BUILD BASE QUERY
+========================================================= */
 
-  const query = {
+const buildBaseQuery = () => {
 
+  return {
     status: "approved",
-
     isDeleted: false,
-
   };
+};
 
 
-  /*
-  =========================================================
-  📍 CITY FILTER
-  =========================================================
+/* =========================================================
+   📍 APPLY CITY FILTER
+========================================================= */
 
-  SSOT:
+const applyCityFilter = (
+  query,
+  cityId
+) => {
 
-  Business.cityId
-
-  We intentionally do NOT use:
-
-  - cityName
-  - citySlug
-
-  for the primary city filter.
-
-  =========================================================
-  */
-
-  if (cityId) {
-
-    query.cityId = cityId;
-
+  if (!cityId) {
+    return;
   }
 
+  /*
+   * SSOT:
+   *
+   * Business.cityId
+   *
+   * Do NOT use:
+   *
+   * cityName
+   * citySlug
+   *
+   * for primary city filtering.
+   */
+
+  query.cityId =
+    cityId;
+};
+
+
+/* =========================================================
+   🏷 APPLY CATEGORY FILTER
+========================================================= */
+
+const applyCategoryFilter = (
+  query,
+  categoryId,
+  categoryIds
+) => {
 
   /*
-  =========================================================
-  🏷 CATEGORY FILTER
-  =========================================================
-
-  Leaf categories are preferred.
-
-  Example:
-
-  category = "repair-services"
-
-  categoryIds =
-  [mobile-repair-id, laptop-repair-id, ...]
-  =========================================================
-  */
+   * Leaf category IDs have priority.
+   *
+   * Example:
+   *
+   * Parent:
+   *   Home Services
+   *
+   * Leaf:
+   *   Plumbing
+   *   Electrical
+   *
+   * Search should query:
+   *
+   * categoryId: {
+   *   $in: [...]
+   * }
+   */
 
   if (
     Array.isArray(categoryIds) &&
@@ -342,190 +571,390 @@ export const unifiedSearchEngine = async (
       $in: categoryIds,
     };
 
-  } else if (categoryId) {
-
-    query.categoryId = categoryId;
-
+    return;
   }
 
+  if (categoryId) {
 
-  /*
-  =========================================================
-  🔎 TEXT SEARCH
-  =========================================================
-  */
+    query.categoryId =
+      categoryId;
+  }
+};
+
+
+/* =========================================================
+   🔎 APPLY TEXT FILTER
+========================================================= */
+
+const applyTextFilter = (
+  query,
+  textSearch,
+  hasCategory
+) => {
 
   const textConditions =
-    buildTextConditions(textSearch);
+    buildTextConditions(
+      textSearch
+    );
 
+  if (
+    !textConditions.length
+  ) {
+    return;
+  }
 
-  if (textConditions.length > 0) {
+  /*
+   * IMPORTANT:
+   *
+   * With resolved category:
+   *
+   * category determines eligibility
+   * text determines relevance/ranking
+   *
+   * Without category:
+   *
+   * text must determine candidate eligibility.
+   */
+
+  if (!hasCategory) {
 
     query.$and = [
       {
-        $or: textConditions,
+        $or:
+          textConditions,
       },
     ];
-
   }
+};
 
 
-  /*
-  =========================================================
-  📍 GEO SEARCH
-  =========================================================
+/* =========================================================
+   📍 APPLY GEO FILTER
+========================================================= */
 
-  MongoDB GeoJSON:
+const applyGeoFilter = (
+  query,
+  filters
+) => {
 
-  coordinates:
-
-  [
-    longitude,
-    latitude
-  ]
-
-  distance is supplied in KM by frontend/API.
-
-  MongoDB requires meters.
-
-  =========================================================
-  */
-
-  const latitude =
-    toNumber(filters?.lat);
-
-  const longitude =
-    toNumber(filters?.lng);
-
-
-  const distanceKm =
-    toNumber(
-      filters?.distance,
-      10
+  const geoFilter =
+    buildGeoFilter(
+      filters
     );
 
+  if (!geoFilter) {
+    return;
+  }
 
-  const validCoordinates =
-    latitude !== null &&
-    longitude !== null &&
-    latitude >= -90 &&
-    latitude <= 90 &&
-    longitude >= -180 &&
-    longitude <= 180;
+  query.location =
+    geoFilter;
+};
 
 
-  if (validCoordinates) {
+/* =========================================================
+   🧠 PREPARE RANKING CONTEXT
+========================================================= */
 
-    const safeDistanceKm =
-      Math.min(
-        Math.max(distanceKm, 0.1),
-        500
+/**
+ * Ranking must receive the complete resolved context.
+ *
+ * This allows rankBusinesses() to use:
+ *
+ * - textSearch
+ * - rawQuery
+ * - intent
+ * - sortBy
+ * - isNearMe
+ * - isEmergency
+ * - distance
+ * - vectorScore
+ * - relevanceScore
+ *
+ * UnifiedSearchEngine does NOT calculate these signals.
+ */
+
+const prepareRankingContext = (
+  searchContext = {}
+) => {
+
+  return {
+    ...searchContext,
+
+    textSearch:
+      normalizeText(
+        searchContext?.textSearch
+      ),
+
+    rawQuery:
+      normalizeText(
+        searchContext?.rawQuery
+      ),
+
+    filters: {
+      ...(searchContext?.filters || {}),
+    },
+  };
+};
+
+
+/* =========================================================
+   🔎 MAIN SEARCH ENGINE
+========================================================= */
+
+export const unifiedSearchEngine =
+  async (
+    searchContext = {}
+  ) => {
+
+    try {
+
+      /* ===================================================
+         CONTEXT
+      =================================================== */
+
+      const {
+        cityId = null,
+        categoryId = null,
+        categoryIds = [],
+        textSearch = "",
+        filters = {},
+        limit = 20,
+      } = searchContext;
+
+
+      /* ===================================================
+         🚨 EXPLICIT CITY FAILURE
+      =================================================== */
+
+      if (
+        hasExplicitCityFailure(
+          searchContext
+        )
+      ) {
+
+        console.log(
+          "⚠️ EXPLICIT CITY RESOLUTION FAILED:",
+          searchContext?.debug
+            ?.requestedCityCandidate
+        );
+
+        return [];
+      }
+
+
+      /* ===================================================
+         🚨 INVALID SEARCH CONTEXT
+      =================================================== */
+
+      if (
+        isInvalidSearchContext(
+          searchContext
+        )
+      ) {
+
+        console.log(
+          "⚠️ INVALID SEARCH CONTEXT"
+        );
+
+        return [];
+      }
+
+
+      /* ===================================================
+         🧱 BASE QUERY
+      =================================================== */
+
+      const query =
+        buildBaseQuery();
+
+
+      /* ===================================================
+         📍 CITY
+      =================================================== */
+
+      applyCityFilter(
+        query,
+        cityId
       );
 
 
-    query.location = {
+      /* ===================================================
+         🏷 CATEGORY
+      =================================================== */
 
-      $near: {
-
-        $geometry: {
-
-          type: "Point",
-
-          coordinates: [
-            longitude,
-            latitude,
-          ],
-
-        },
-
-        $maxDistance:
-          safeDistanceKm * 1000,
-
-      },
-
-    };
-
-  }
+      applyCategoryFilter(
+        query,
+        categoryId,
+        categoryIds
+      );
 
 
-  /*
-  =========================================================
-  🐛 DEBUG
-  =========================================================
-  */
+      /* ===================================================
+         🔎 TEXT
+      =================================================== */
 
-  console.log(
-    "🔥 SEARCH QUERY:",
-    JSON.stringify(
-      query,
-      null,
-      2
-    )
-  );
+      const hasCategory =
+        Boolean(
+          categoryId
+        ) ||
+        (
+          Array.isArray(
+            categoryIds
+          ) &&
+          categoryIds.length > 0
+        );
 
-
-  /*
-  =========================================================
-  📊 FETCH BUSINESSES
-  =========================================================
-  */
-
-  const businesses =
-    await Business.find(query)
-
-      .populate(
-        "cityId",
-        "name slug district state"
-      )
-
-      .populate(
-        "categoryId",
-        "name slug parentCategory"
-      )
-
-      .limit(
-        normalizeLimit(limit)
-      )
-
-      .lean();
+      applyTextFilter(
+        query,
+        textSearch,
+        hasCategory
+      );
 
 
-  console.log(
-    "🔥 FOUND BUSINESSES:",
-    businesses.length
-  );
+      /* ===================================================
+         📍 GEO
+      =================================================== */
+
+      applyGeoFilter(
+        query,
+        filters
+      );
 
 
-  /*
-  =========================================================
-  🏆 RANK RESULTS
-  =========================================================
+      /* ===================================================
+         🐛 DEBUG QUERY
+      =================================================== */
 
-  Ranking is intentionally kept outside
-  this search engine.
+      if (
+        process.env.NODE_ENV !==
+        "production"
+      ) {
 
-  This makes the architecture:
-
-  FILTER → FETCH → RANK
-
-  =========================================================
-  */
-
-  const rankedResults =
-    rankBusinesses(
-      businesses,
-      searchContext
-    );
+        console.log(
+          "🔥 SEARCH QUERY:",
+          JSON.stringify(
+            query,
+            null,
+            2
+          )
+        );
+      }
 
 
-  /*
-  =========================================================
-  ✅ FINAL RESULT
-  =========================================================
-  */
+      /* ===================================================
+         📊 FETCH CANDIDATES
+      =================================================== */
 
-  return rankedResults;
-};
+      /*
+       * Fetch a larger candidate pool than the final limit.
+       *
+       * Why?
+       *
+       * Ranking should happen BEFORE final truncation.
+       *
+       * Example:
+       *
+       * requested limit = 20
+       *
+       * Fetch = 100
+       *
+       * Rank all 100
+       *
+       * Return best 20.
+       */
+
+      const finalLimit =
+        normalizeLimit(
+          limit
+        );
+
+      const candidateLimit =
+        Math.min(
+          Math.max(
+            finalLimit * 5,
+            50
+          ),
+          500
+        );
+
+
+      const businesses =
+        await Business.find(
+          query
+        )
+
+          .populate(
+            "cityId",
+            "name slug district state"
+          )
+
+          .populate(
+            "categoryId",
+            "name slug parentCategory"
+          )
+
+          .limit(
+            candidateLimit
+          )
+
+          .lean();
+
+
+      if (
+        process.env.NODE_ENV !==
+        "production"
+      ) {
+
+        console.log(
+          "🔥 FOUND CANDIDATES:",
+          businesses.length
+        );
+      }
+
+
+      /* ===================================================
+         🏆 RANK
+      =================================================== */
+
+      const rankingContext =
+        prepareRankingContext(
+          searchContext
+        );
+
+      const rankedResults =
+        rankBusinesses(
+          businesses,
+          rankingContext
+        );
+
+
+      /* ===================================================
+         ✂️ FINAL LIMIT
+      =================================================== */
+
+      return rankedResults.slice(
+        0,
+        finalLimit
+      );
+
+    } catch (error) {
+
+      console.error(
+        "🔥 UNIFIED SEARCH ENGINE ERROR:",
+        error
+      );
+
+      /*
+       * Search failure should not crash
+       * the entire API request.
+       *
+       * Controller can return an empty
+       * result set or appropriate response.
+       */
+
+      return [];
+    }
+  };
 
 
 /* =========================================================

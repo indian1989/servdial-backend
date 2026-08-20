@@ -27,6 +27,7 @@
  * Ye file STATIC semantic intelligence layer hai.
  *
  * DB/category slug resolution:
+ *
  * semanticMapper
  *        ↓
  * categoryResolver
@@ -42,7 +43,7 @@
 ========================================================= */
 
 const normalize = (text = "") => {
-  return String(text)
+  return String(text ?? "")
     .toLowerCase()
     .normalize("NFKC")
     .replace(/[^\p{L}\p{N}\s-]/gu, " ")
@@ -63,22 +64,80 @@ const tokenize = (text = "") => {
 
 
 /* =========================================================
+   🔎 SAFE PHRASE MATCH
+========================================================= */
+
+/**
+ * Matches complete words / phrases only.
+ *
+ * Prevents:
+ *
+ * "spa"
+ *
+ * from matching:
+ *
+ * "spare"
+ *
+ * or another word containing "spa".
+ *
+ * Also supports:
+ *
+ * "car repair"
+ * "new york"
+ * "ac repair"
+ */
+
+const phraseMatches = (
+  query,
+  keyword
+) => {
+
+  const normalizedQuery =
+    normalize(query);
+
+  const normalizedKeyword =
+    normalize(keyword);
+
+  if (
+    !normalizedQuery ||
+    !normalizedKeyword
+  ) {
+    return false;
+  }
+
+  /* =======================================================
+     EXACT QUERY MATCH
+  ======================================================= */
+
+  if (
+    normalizedQuery ===
+    normalizedKeyword
+  ) {
+    return true;
+  }
+
+  /* =======================================================
+     WORD-BOUNDARY PHRASE MATCH
+  ======================================================= */
+
+  const escaped =
+    normalizedKeyword.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&"
+    );
+
+  return new RegExp(
+    `(?:^|\\s)${escaped}(?=\\s|$)`,
+    "iu"
+  ).test(
+    normalizedQuery
+  );
+};
+
+
+/* =========================================================
    🔥 GLOBAL SEMANTIC MAP
-========================================================= *
- *
- * IMPORTANT:
- * ---------------------------------------------------------
- * Keys should ideally match your Category.slug values.
- *
- * Values contain:
- * - exact category name
- * - common aliases
- * - natural-language phrases
- * - service-related expressions
- *
- * Keep this map independent from MongoDB.
- *
- * ========================================================= */
+========================================================= */
 
 const SEMANTIC_MAP = {
 
@@ -367,7 +426,6 @@ const SEMANTIC_MAP = {
     "real estate agent",
     "real estate broker",
     "property consultant",
-    "property dealer",
   ],
 
 };
@@ -378,16 +436,36 @@ const SEMANTIC_MAP = {
 ========================================================= */
 
 export const SEMANTIC_CATEGORIES =
-  Object.keys(SEMANTIC_MAP);
+  Object.keys(
+    SEMANTIC_MAP
+  );
 
 
 /* =========================================================
-   🧠 EXACT / PHRASE MATCH
+   🧠 PHRASE MATCH
 ========================================================= */
 
-const getPhraseMatch = (query) => {
+/**
+ * Priority:
+ *
+ * 1. Exact phrase
+ * 2. Longest complete phrase
+ *
+ * Example:
+ *
+ * "car repair service"
+ *
+ * "car repair"
+ * beats
+ * "repair"
+ */
 
-  const normalizedQuery = normalize(query);
+const getPhraseMatch = (
+  query
+) => {
+
+  const normalizedQuery =
+    normalize(query);
 
   if (!normalizedQuery) {
     return null;
@@ -396,11 +474,17 @@ const getPhraseMatch = (query) => {
   let bestMatch = null;
   let bestLength = 0;
 
-  for (const [category, keywords] of Object.entries(
-    SEMANTIC_MAP
-  )) {
+  for (
+    const [category, keywords]
+    of Object.entries(
+      SEMANTIC_MAP
+    )
+  ) {
 
-    for (const keyword of keywords) {
+    for (
+      const keyword
+      of keywords
+    ) {
 
       const normalizedKeyword =
         normalize(keyword);
@@ -409,38 +493,38 @@ const getPhraseMatch = (query) => {
         continue;
       }
 
+      /*
+       * Exact query/category match.
+       */
+
       if (
-        normalizedQuery === normalizedKeyword
+        normalizedQuery ===
+        normalizedKeyword
       ) {
         return category;
       }
 
+      /*
+       * Complete phrase match.
+       */
+
       if (
-        normalizedQuery.includes(
+        phraseMatches(
+          normalizedQuery,
           normalizedKeyword
         )
       ) {
-
-        /*
-         * Prefer the longest matching phrase.
-         *
-         * Example:
-         *
-         * "car repair service"
-         *
-         * "car repair"
-         * beats
-         * "car"
-         */
 
         if (
           normalizedKeyword.length >
           bestLength
         ) {
+
           bestLength =
             normalizedKeyword.length;
 
-          bestMatch = category;
+          bestMatch =
+            category;
         }
       }
     }
@@ -454,10 +538,14 @@ const getPhraseMatch = (query) => {
    🧠 TOKEN MATCH
 ========================================================= */
 
-const getTokenMatch = (query) => {
+const getTokenMatch = (
+  query
+) => {
 
   const queryTokens =
-    new Set(tokenize(query));
+    new Set(
+      tokenize(query)
+    );
 
   if (!queryTokens.size) {
     return null;
@@ -468,17 +556,24 @@ const getTokenMatch = (query) => {
 
   for (
     const [category, keywords]
-    of Object.entries(SEMANTIC_MAP)
+    of Object.entries(
+      SEMANTIC_MAP
+    )
   ) {
 
     let categoryScore = 0;
 
-    for (const keyword of keywords) {
+    for (
+      const keyword
+      of keywords
+    ) {
 
       const keywordTokens =
         tokenize(keyword);
 
-      if (!keywordTokens.length) {
+      if (
+        !keywordTokens.length
+      ) {
         continue;
       }
 
@@ -496,33 +591,32 @@ const getTokenMatch = (query) => {
         }
       }
 
-      /*
-       * Complete phrase token match
-       */
+      /* ===================================================
+         COMPLETE PHRASE TOKEN MATCH
+      =================================================== */
 
       if (
-        matched === keywordTokens.length
+        matched ===
+        keywordTokens.length
       ) {
 
         const score =
           keywordTokens.length * 10;
 
         if (
-          score > categoryScore
+          score >
+          categoryScore
         ) {
-          categoryScore = score;
+          categoryScore =
+            score;
         }
 
         continue;
       }
 
-      /*
-       * Partial token match
-       *
-       * Only accept when the keyword has
-       * a single token. This prevents
-       * aggressive false positives.
-       */
+      /* ===================================================
+         SINGLE TOKEN MATCH
+      =================================================== */
 
       if (
         keywordTokens.length === 1 &&
@@ -538,7 +632,8 @@ const getTokenMatch = (query) => {
     }
 
     if (
-      categoryScore > bestScore
+      categoryScore >
+      bestScore
     ) {
 
       bestScore =
@@ -561,10 +656,6 @@ export const getSemanticCategory = (
   keyword = ""
 ) => {
 
-  if (!keyword) {
-    return null;
-  }
-
   const query =
     normalize(keyword);
 
@@ -572,10 +663,10 @@ export const getSemanticCategory = (
     return null;
   }
 
-  /*
-   * Priority 1:
-   * Exact / phrase match
-   */
+  /* =======================================================
+     PRIORITY 1
+     Exact / complete phrase
+  ======================================================= */
 
   const phraseMatch =
     getPhraseMatch(query);
@@ -584,44 +675,39 @@ export const getSemanticCategory = (
     return phraseMatch;
   }
 
-  /*
-   * Priority 2:
-   * Token match
-   */
+  /* =======================================================
+     PRIORITY 2
+     Token matching
+  ======================================================= */
 
-  return getTokenMatch(query);
+  return getTokenMatch(
+    query
+  );
 };
 
 
 /* =========================================================
    🔍 GET ALL SEMANTIC MATCHES
-========================================================= *
- *
+========================================================= */
+
+/**
  * Useful for future multi-category search.
  *
  * Example:
  *
  * "car ac repair"
  *
- * could potentially produce:
+ * →
  *
  * [
  *   "mechanic",
  *   "ac-repair"
  * ]
- *
- * Current search engine may still choose
- * only the primary category.
- *
- * ========================================================= */
+ */
 
 export const getSemanticCategories = (
   keyword = ""
 ) => {
-
-  if (!keyword) {
-    return [];
-  }
 
   const query =
     normalize(keyword);
@@ -634,23 +720,18 @@ export const getSemanticCategories = (
 
   for (
     const [category, keywords]
-    of Object.entries(SEMANTIC_MAP)
+    of Object.entries(
+      SEMANTIC_MAP
+    )
   ) {
 
     const matched =
       keywords.some(
-        (keyword) => {
-
-          const normalizedKeyword =
-            normalize(keyword);
-
-          return (
-            normalizedKeyword &&
-            query.includes(
-              normalizedKeyword
-            )
-          );
-        }
+        (keyword) =>
+          phraseMatches(
+            query,
+            keyword
+          )
       );
 
     if (matched) {
