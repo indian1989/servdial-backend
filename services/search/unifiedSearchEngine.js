@@ -910,7 +910,17 @@ export const unifiedSearchEngine =
           businesses.length
         );
       }
+console.log("🔥🔥🔥 REACHED RANKING SECTION 🔥🔥🔥");
 
+console.log(
+  "🔥 BUSINESSES COUNT:",
+  businesses?.length
+);
+
+console.log(
+  "🔥 FIRST BUSINESS ADDRESS:",
+  businesses?.[0]?.address
+);
 
       /* ===================================================
          🏆 RANK
@@ -921,12 +931,30 @@ export const unifiedSearchEngine =
           searchContext
         );
 
+        console.log(
+  "🔥 BEFORE RANK ADDRESS:",
+  businesses[0]?.address
+);
+
+console.log(
+  "🔥 BEFORE RANK BUSINESS:",
+  businesses[0]
+);
       const rankedResults =
         rankBusinesses(
           businesses,
           rankingContext
         );
 
+        console.log(
+  "🔥 AFTER RANK ADDRESS:",
+  rankedResults[0]?.address
+);
+
+console.log(
+  "🔥 AFTER RANK BUSINESS:",
+  rankedResults[0]
+);
 
       /* ===================================================
          ✂️ FINAL LIMIT

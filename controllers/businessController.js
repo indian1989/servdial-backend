@@ -32,40 +32,160 @@ const requireField = (field, name) => {
    SLUG GENERATOR (CONTROLLED)
 ========================= */
 
-/* =========================
-   SLUG GENERATOR (CONTROLLED)
-========================= */
+/* =========================================================
+   SLUG GENERATOR — CITY + AREA AWARE
+========================================================= */
 
-const generateBusinessSlug = async (name) => {
+/* =========================================================
+   SLUG GENERATOR — CITY + AREA AWARE
+========================================================= */
+
+const generateBusinessSlug = async (
+  name,
+  cityId,
+  area
+) => {
 
   const base =
     slugify(name) ||
     "business";
 
-  let slug = base;
-  let counter = 1;
+
+  const normalizedArea =
+    typeof area === "string"
+      ? slugify(area)
+      : "";
 
 
-  while (
-    await Business.findOne({
-      $or: [
-        {
-          slug,
-        },
-        {
-          slugHistory: slug,
-        },
-      ],
+  /* =======================================================
+     FIND EXISTING BUSINESSES IN SAME CITY
+  ======================================================= */
+
+  const sameCityBusinesses =
+    await Business.find({
+      cityId,
+      isDeleted: false,
     })
-  ) {
+      .select("slug slugHistory address")
+      .lean();
 
-    slug =
-      `${base}-${counter++}`;
+
+  /* =======================================================
+     HELPER — CHECK SLUG
+  ======================================================= */
+
+  const slugExists = (candidate) => {
+
+    return sameCityBusinesses.some(
+      (business) =>
+
+        business.slug === candidate ||
+
+        (
+          Array.isArray(business.slugHistory) &&
+          business.slugHistory.includes(candidate)
+        )
+    );
+
+  };
+
+
+  /* =======================================================
+     1. BASE SLUG AVAILABLE IN THIS CITY
+     
+     Example:
+     Patna:
+       apollo-pharmacy
+
+     Hajipur:
+       apollo-pharmacy
+  ======================================================= */
+
+  if (!slugExists(base)) {
+
+    return base;
 
   }
 
 
-  return slug;
+  /* =======================================================
+     2. SAME CITY + AREA
+     
+     Example:
+     apollo-pharmacy-kankarbagh
+  ======================================================= */
+
+  if (normalizedArea) {
+
+    const areaBase =
+      `${base}-${normalizedArea}`;
+
+
+    /* -----------------------------------------------
+       Area slug available
+    ----------------------------------------------- */
+
+    if (!slugExists(areaBase)) {
+
+      return areaBase;
+
+    }
+
+
+    /* -----------------------------------------------
+       Same city + same area
+       
+       apollo-pharmacy-kankarbagh-2
+       apollo-pharmacy-kankarbagh-3
+       ...
+    ----------------------------------------------- */
+
+    let counter = 2;
+
+    let candidate =
+      `${areaBase}-${counter}`;
+
+
+    while (slugExists(candidate)) {
+
+      counter++;
+
+      candidate =
+        `${areaBase}-${counter}`;
+
+    }
+
+
+    return candidate;
+
+  }
+
+
+  /* =======================================================
+     3. SAME CITY + AREA NOT AVAILABLE
+     
+     apollo-pharmacy-2
+     apollo-pharmacy-3
+     ...
+  ======================================================= */
+
+  let counter = 2;
+
+  let candidate =
+    `${base}-${counter}`;
+
+
+  while (slugExists(candidate)) {
+
+    counter++;
+
+    candidate =
+      `${base}-${counter}`;
+
+  }
+
+
+  return candidate;
 
 };
 
@@ -412,10 +532,12 @@ if (!finalLocation) {
 
   /* ================= CREATE ================= */
 
-
-  const slug =
-    await generateBusinessSlug(name);
-
+const slug =
+  await generateBusinessSlug(
+    name,
+    cityId,
+    safeAddress.area
+  );
 
 
   const status =
@@ -741,7 +863,7 @@ export const getBusinesses = asyncHandler(async (req, res) => {
     Business.find(query)
     .select("+location")
     .populate( "cityId",
-      "name slug latitude longitude"
+      "name slug district state latitude longitude"
     )
     .populate(
       "categoryId",
@@ -1449,6 +1571,7 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
 });
 });
 
+
 // ================= GET BUSINESS BY SLUG =================
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
@@ -1456,6 +1579,12 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     req.params.slug
       ?.toLowerCase()
       .trim();
+
+  const requestedCitySlug =
+    req.params.citySlug
+      ?.toLowerCase()
+      .trim();
+
 
   if (!value) {
     return res.status(400).json({
@@ -1470,37 +1599,128 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     1. CURRENT SLUG
-  ===================================================== */
+     1. CITY-AWARE CURRENT SLUG
+     ===================================================== */
 
-  business = await Business.findOne({
-    slug: value,
-    status: "approved",
-    isDeleted: false,
-  });
+  if (requestedCitySlug) {
+
+    const city =
+      await City.findOne({
+        slug: requestedCitySlug,
+        status: "active",
+      })
+      .select("_id name slug state district")
+      .lean();
 
 
-  /* =====================================================
-     2. OLD SLUG
-  ===================================================== */
+    if (city) {
 
-  if (!business) {
+      business =
+        await Business.findOne({
+          cityId: city._id,
 
-    business = await Business.findOne({
-      slugHistory: value,
-      status: "approved",
-      isDeleted: false,
-    });
+          slug: value,
 
-    if (business) {
-      isOldSlug = true;
+          status: "approved",
+
+          isDeleted: false,
+        });
+
     }
+
   }
 
 
   /* =====================================================
-     3. NOT FOUND
-  ===================================================== */
+     2. CITY-AWARE OLD SLUG
+     
+     Same city + slugHistory
+     ===================================================== */
+
+  if (!business && requestedCitySlug) {
+
+    const city =
+      await City.findOne({
+        slug: requestedCitySlug,
+        status: "active",
+      })
+      .select("_id")
+      .lean();
+
+
+    if (city) {
+
+      business =
+        await Business.findOne({
+          cityId: city._id,
+
+          slugHistory: value,
+
+          status: "approved",
+
+          isDeleted: false,
+        });
+
+
+      if (business) {
+
+        isOldSlug = true;
+
+      }
+
+    }
+
+  }
+
+
+  /* =====================================================
+     3. LEGACY FALLBACK
+     
+     IMPORTANT:
+     Existing URLs must continue working.
+     
+     Example:
+     /businesses/apollo-pharmacy
+     ===================================================== */
+
+  if (!business) {
+
+    business =
+      await Business.findOne({
+        slug: value,
+
+        status: "approved",
+
+        isDeleted: false,
+      });
+
+
+    if (!business) {
+
+      business =
+        await Business.findOne({
+          slugHistory: value,
+
+          status: "approved",
+
+          isDeleted: false,
+        });
+
+
+      if (business) {
+
+        isOldSlug = true;
+
+      }
+
+    }
+
+  }
+
+
+  /* =====================================================
+     4. NOT FOUND
+     ===================================================== */
 
   if (!business) {
 
@@ -1512,39 +1732,156 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
   }
 
 
-    /* =====================================================
-     4. OLD SLUG → CURRENT SLUG
-  ===================================================== */
+  /* =====================================================
+     5. POPULATE CANONICAL BUSINESS
+     ===================================================== */
+
+  const populatedBusiness =
+    await Business.findById(
+      business._id
+    )
+
+      .populate(
+        "cityId",
+        "name slug state district"
+      )
+
+      .populate(
+        "categoryId",
+        "name slug uiType features"
+      )
+
+      .lean();
+
+
+  if (!populatedBusiness) {
+
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
+
+  }
+
+
+  /* =====================================================
+     6. CHECK CANONICAL CITY
+     ===================================================== */
+
+  const canonicalCitySlug =
+    populatedBusiness.citySlug ||
+    populatedBusiness.cityId?.slug ||
+    "";
+
+
+  /* =====================================================
+     7. CHECK CANONICAL CATEGORY
+     ===================================================== */
+
+  const canonicalCategorySlug =
+    populatedBusiness.categorySlug ||
+    populatedBusiness.categoryId?.slug ||
+    "";
+
+
+  /* =====================================================
+     8. OLD SLUG
+     
+     Do NOT change business slug.
+     Frontend will redirect to canonical URL.
+     ===================================================== */
 
   if (isOldSlug) {
 
-  const populatedOldSlugBusiness =
-    await Business.findById(business._id)
-      .populate("cityId", "name slug")
-      .populate("categoryId", "name slug")
-      .lean();
+    return res.json({
 
-  return res.json({
-    success: true,
+      success: true,
 
-    redirect: true,
+      redirect: true,
 
-    oldSlug: value,
+      oldSlug: value,
 
-    canonicalSlug: business.slug,
+      canonicalSlug:
+        populatedBusiness.slug,
 
-    data: {
-      business: populatedOldSlugBusiness,
-      reviews: [],
-    },
+      canonicalCitySlug,
 
-    message: "Business URL has moved",
-  });
-}
+      canonicalCategorySlug,
+
+      data: {
+
+        business:
+          populatedBusiness,
+
+        reviews: [],
+
+      },
+
+      message:
+        "Business URL has moved",
+
+    });
+
+  }
+
 
   /* =====================================================
-     LANGUAGE
-  ===================================================== */
+     9. CITY MISMATCH
+     
+     Example requested:
+     
+     /hajipur-vaishali-bihar/pharmacy/apollo-pharmacy
+     
+     But business belongs to:
+     
+     /patna-bihar/pharmacy/apollo-pharmacy
+     
+     Never show wrong business.
+     
+     Frontend will redirect to canonical URL.
+     ===================================================== */
+
+  if (
+    requestedCitySlug &&
+    canonicalCitySlug &&
+    requestedCitySlug !== canonicalCitySlug
+  ) {
+
+    return res.json({
+
+      success: true,
+
+      redirect: true,
+
+      requestedCitySlug,
+
+      canonicalCitySlug,
+
+      canonicalCategorySlug,
+
+      canonicalSlug:
+        populatedBusiness.slug,
+
+      data: {
+
+        business:
+          populatedBusiness,
+
+        reviews: [],
+
+      },
+
+      message:
+        "Business city URL has moved",
+
+    });
+
+  }
+
+
+  /* =====================================================
+     10. LANGUAGE
+     ===================================================== */
 
   const language =
     (
@@ -1574,55 +1911,48 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     POPULATE
-  ===================================================== */
-
-  const populatedBusiness =
-    await Business.findById(business._id)
-
-      .populate(
-        "cityId",
-        "name slug state district"
-      )
-
-      .populate(
-        "categoryId",
-        "name slug uiType features"
-      )
-
-      .lean();
-
-
-  /* =====================================================
-     FAQ
-  ===================================================== */
+     11. FAQ
+     ===================================================== */
 
   populatedBusiness.faq =
     generateBusinessFAQ({
-      business: populatedBusiness,
-      language: finalLanguage,
+
+      business:
+        populatedBusiness,
+
+      language:
+        finalLanguage,
+
     });
 
 
   /* =====================================================
-     REVIEWS
-  ===================================================== */
+     12. REVIEWS
+     ===================================================== */
 
   const reviews =
     await Review.find({
-      businessId: populatedBusiness._id,
-      status: "approved",
+
+      businessId:
+        populatedBusiness._id,
+
+      status:
+        "approved",
+
     })
+
       .sort({
         createdAt: -1,
       })
+
       .limit(20)
+
       .lean();
 
 
   /* =====================================================
-     CACHE
-  ===================================================== */
+     13. CACHE
+     ===================================================== */
 
   res.setHeader(
     "Cache-Control",
@@ -1631,8 +1961,8 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     RESPONSE
-  ===================================================== */
+     14. RESPONSE
+     ===================================================== */
 
   return res.json({
 
@@ -1643,9 +1973,17 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     canonicalSlug:
       populatedBusiness.slug,
 
+    canonicalCitySlug,
+
+    canonicalCategorySlug,
+
     data: {
-      business: populatedBusiness,
+
+      business:
+        populatedBusiness,
+
       reviews,
+
     },
 
   });

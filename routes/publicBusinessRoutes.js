@@ -90,6 +90,14 @@ router.post(
    📄 SINGLE BUSINESS
    KEEP LAST
 ========================= */
+
+// CITY + CATEGORY + BUSINESS
+router.get(
+  "/:citySlug/:categorySlug/:slug",
+  getBusinessBySlug
+);
+
+// LEGACY / OLD
 router.get(
   "/:slug",
   getBusinessBySlug
