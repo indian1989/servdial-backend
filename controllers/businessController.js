@@ -2022,12 +2022,41 @@ if (!business) {
 
   if (isOldSlug) {
 
-    return res.redirect(
-      301,
-      canonicalUrl
-    );
+  return res.json({
 
-  }
+    success: true,
+
+    redirect: true,
+
+    oldSlug: value,
+
+    canonicalSlug:
+      canonicalBusinessSlug,
+
+    canonicalCitySlug:
+      canonicalCitySlug,
+
+    canonicalCategorySlug:
+      canonicalCategorySlug,
+
+    canonicalUrl:
+      canonicalUrl,
+
+    data: {
+
+      business:
+        populatedBusiness,
+
+      reviews: [],
+
+    },
+
+    message:
+      "Business URL has moved",
+
+  });
+
+}
 
 
   /* =====================================================
