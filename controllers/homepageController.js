@@ -48,6 +48,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   slug
   logo
   images
+  address
   averageRating
   totalReviews
   views
@@ -62,6 +63,11 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   businessHours
   isTrustedPartner
   isPremiumPartner
+
+   address
+  district
+  state
+  pincode
   citySlug
   categorySlug
   location
@@ -181,6 +187,7 @@ lat && lng
     slug: 1,
     logo: 1,
     images: 1,
+    address: 1,
     businessHours:1,
 
     averageRating: 1,
@@ -190,17 +197,22 @@ lat && lng
     whatsappClicks: 1,
     phone: 1,
     whatsapp: 1,
+
     isFeatured: 1,
     featurePriority: 1,
     isVerified: 1,
 
      plan: 1,
-  isTrustedPartner: 1,
-  isPremiumPartner: 1,
+     isTrustedPartner: 1,
+     isPremiumPartner: 1,
+     
+
     citySlug: 1,
     categorySlug: 1,
+
     cityId: 1,
     categoryId: 1,
+    
     distance: 1,
     location: 1,
   },

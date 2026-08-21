@@ -31,8 +31,9 @@ if (cached) {
     .send(cached);
 }
 
-    const businessCount = await Business.countDocuments({
+   const businessCount = await Business.countDocuments({
   status: "approved",
+  isDeleted: false,
 });
 
 const cityCount = await City.countDocuments({
@@ -47,6 +48,7 @@ const cityCategoryCount = await Business.aggregate([
   {
     $match: {
       status: "approved",
+      isDeleted: false,
     },
   },
   {
@@ -351,7 +353,9 @@ if (cached) {
     const skip = (page - 1) * PAGE_SIZE;
 
     const data = await Business.aggregate([
-      { $match: { status: "approved" } },
+      { $match: { status: "approved",
+        isDeleted: false,
+       } },
       {
         $group: {
           _id: {
@@ -407,72 +411,172 @@ res.send(xml);
 
 /* ========================= BUSINESS (PAGINATED) ========================= */
 
+/* =========================
+   BUSINESS (PAGINATED)
+========================= */
+
 export const businessSitemap = async (req, res) => {
+
   try {
-    const page = Number(req.params.page || 1);
 
-    const cacheKey = `sitemap:businesses:${page}`;
+    const page =
+      Number(req.params.page || 1);
 
-const cached = getCache(cacheKey);
 
-if (cached) {
-  return res
-    .type("application/xml")
-    .send(cached);
-}
+    /* =====================================================
+       CACHE
+    ===================================================== */
 
-    const skip = (page - 1) * PAGE_SIZE;
+    const cacheKey =
+      `sitemap:businesses:${page}`;
 
-    const businesses = await Business.find({ status: "approved" })
-      .select("slug citySlug categorySlug updatedAt image")
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(PAGE_SIZE)
-      .lean();
 
-    if (!businesses.length)
-      return res.status(404).send("Business sitemap not found");
+    const cached =
+      getCache(cacheKey);
 
-    const urls = businesses
-      .map(
-        (b) => `
+
+    if (cached) {
+
+      return res
+        .type("application/xml")
+        .send(cached);
+
+    }
+
+
+    /* =====================================================
+       PAGINATION
+    ===================================================== */
+
+    const skip =
+      (page - 1) * PAGE_SIZE;
+
+
+    /* =====================================================
+       FETCH APPROVED BUSINESSES
+    ===================================================== */
+
+    const businesses =
+      await Business.find({
+
+        status: "approved",
+
+        isDeleted: false,
+
+      })
+        .select(
+          "slug citySlug categorySlug updatedAt images"
+        )
+        .sort({
+          updatedAt: -1,
+        })
+        .skip(skip)
+        .limit(PAGE_SIZE)
+        .lean();
+
+
+    /* =====================================================
+       EMPTY PAGE
+    ===================================================== */
+
+    if (!businesses.length) {
+
+      return res
+        .status(404)
+        .send(
+          "Business sitemap not found"
+        );
+
+    }
+
+
+    /* =====================================================
+       BUILD URLS
+    ===================================================== */
+
+    const urls =
+      businesses
+        .map((business) => {
+
+          const image =
+            Array.isArray(
+              business.images
+            ) &&
+            business.images.length > 0
+              ? business.images[0]
+              : "";
+
+
+          return `
 <url>
-<loc>${FRONTEND_URL}/${b.citySlug}/${b.categorySlug}/${b.slug}</loc>
-<lastmod>${getLastMod(b.updatedAt)}</lastmod>
-<changefreq>weekly</changefreq>
+<loc>${FRONTEND_URL}/${business.citySlug}/${business.categorySlug}/${business.slug}</loc>
+<lastmod>${getLastMod(business.updatedAt)}</lastmod>
+<changefreq>daily</changefreq>
 <priority>0.7</priority>
 ${
-  b.image
+  image
     ? `
 <image:image>
-<image:loc>${b.image}</image:loc>
+<image:loc>${image}</image:loc>
 </image:image>`
     : ""
 }
-</url>`
-      )
-      .join("");
-      
-res.type("application/xml");
+</url>`;
 
-res.set(
-  "Cache-Control",
-  "public, max-age=3600, s-maxage=3600"
-);
-
-const xml =
-`${xmlHeader}<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">${urls}</urlset>`;
+        })
+        .join("");
 
 
-setCache(
-  cacheKey,
-  xml,
-  3600
-);
+    /* =====================================================
+       RESPONSE
+    ===================================================== */
+
+    res.type(
+      "application/xml"
+    );
 
 
-res.send(xml);
+    res.set(
+      "Cache-Control",
+      "public, max-age=3600, s-maxage=3600"
+    );
+
+
+    const xml =
+      `${xmlHeader}` +
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" ` +
+      `xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">` +
+      `${urls}` +
+      `</urlset>`;
+
+
+    /* =====================================================
+       CACHE RESULT
+    ===================================================== */
+
+    setCache(
+      cacheKey,
+      xml,
+      3600
+    );
+
+
+    res.send(xml);
+
+
   } catch (err) {
-    res.status(500).send("Business sitemap error");
+
+    console.error(
+      "Business sitemap error:",
+      err
+    );
+
+    res
+      .status(500)
+      .send(
+        "Business sitemap error"
+      );
+
   }
+
 };

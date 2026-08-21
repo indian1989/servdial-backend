@@ -25,7 +25,6 @@ const businessSchema = new mongoose.Schema(
 slug: {
   type: String,
   lowercase: true,
-  unique: true,
   index: true,
 },
 
@@ -1099,6 +1098,22 @@ businessSchema.index({
   categorySlug: 1,
   slug: 1,
 });
+
+/* =========================================================
+   BUSINESS SLUG UNIQUENESS
+   Same slug allowed in different cities
+   Same slug NOT allowed in same city
+========================================================= */
+
+businessSchema.index(
+  {
+    cityId: 1,
+    slug: 1,
+  },
+  {
+    unique: true,
+  }
+);
 
 businessSchema.index({
   slugHistory: 1,

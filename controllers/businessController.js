@@ -28,14 +28,6 @@ const requireField = (field, name) => {
 };
 
 
-/* =========================
-   SLUG GENERATOR (CONTROLLED)
-========================= */
-
-/* =========================================================
-   SLUG GENERATOR — CITY + AREA AWARE
-========================================================= */
-
 /* =========================================================
    SLUG GENERATOR — CITY + AREA AWARE
 ========================================================= */
@@ -863,7 +855,7 @@ export const getBusinesses = asyncHandler(async (req, res) => {
     Business.find(query)
     .select("+location")
     .populate( "cityId",
-      "name slug district state latitude longitude"
+      "name slug district state country latitude longitude"
     )
     .populate(
       "categoryId",
@@ -1239,66 +1231,97 @@ if (updates.categoryId) {
 
 }
 
-/* ================= BUSINESS SLUG ================= */
+/* =========================================================
+   BUSINESS SLUG — CITY + AREA AWARE
+========================================================= */
+
+const nameChanged =
+  updates.name !== undefined &&
+  updates.name.trim() !== business.name.trim();
+
+
+const cityChanged =
+  updates.cityId !== undefined &&
+  String(updates.cityId) !== String(business.cityId);
+
+
+const areaChanged =
+  updates.address !== undefined &&
+  (
+    (updates.address?.area || "").trim() !==
+    (business.address?.area || "").trim()
+  );
+
+
+/*
+ * Slug regenerate only when something that affects
+ * business identity in the URL changes.
+ */
 
 if (
-  updates.name !== undefined &&
-  updates.name.trim() !== business.name.trim()
+  nameChanged ||
+  cityChanged ||
+  areaChanged
 ) {
 
-  const cleanName =
-    updates.name
-      .trim()
-      .replace(/\s+/g, " ");
+  /* ================= CLEAN NAME ================= */
 
-  const baseSlug =
-    slugify(cleanName) ||
-    "business";
-
-  let newSlug =
-    baseSlug;
-
-  let counter = 1;
+  const finalName =
+    updates.name !== undefined
+      ? updates.name
+          .trim()
+          .replace(/\s+/g, " ")
+      : business.name;
 
 
-  // =====================================================
-  // 🔒 SLUG MUST NOT COLLIDE WITH
-  //
-  // 1. Another business current slug
-  // 2. Another business historical slug
-  //
-  // =====================================================
+  /* ================= FINAL CITY ================= */
 
-  while (
-    await Business.findOne({
+  const finalCityId =
+    updates.cityId ||
+    business.cityId;
 
-      _id: {
-        $ne: business._id,
-      },
 
-      $or: [
+  /* ================= FINAL AREA ================= */
 
-        {
-          slug: newSlug,
-        },
+  const finalArea =
+    updates.address?.area !== undefined
+      ? updates.address.area
+      : business.address?.area || "";
 
-        {
-          slugHistory: newSlug,
-        },
 
-      ],
+  /* ================= GENERATE NEW SLUG ================= */
 
-    })
+  const newSlug =
+    await generateBusinessSlug(
+      finalName,
+      finalCityId,
+      finalArea
+    );
+
+
+  /* ================= SAVE NAME ================= */
+
+  updates.name =
+    finalName;
+
+
+  /* ================= SAVE OLD SLUG ================= */
+
+  if (
+    business.slug &&
+    business.slug !== newSlug
   ) {
 
-    newSlug =
-      `${baseSlug}-${counter++}`;
+    updates.$addToSet = {
+      ...(updates.$addToSet || {}),
+      slugHistory:
+        business.slug,
+    };
 
   }
 
 
-  updates.name =
-    cleanName;
+  /* ================= SAVE NEW SLUG ================= */
 
   updates.slug =
     newSlug;
@@ -1371,8 +1394,9 @@ if (
     "",
 
   businessSlug:
-    business.slug ||
-    "",
+  updates.slug ||
+  business.slug ||
+  "",
 });
 
     updates.seo = {
@@ -1575,10 +1599,15 @@ export const updateBusinessMedia = asyncHandler(async (req, res) => {
 // ================= GET BUSINESS BY SLUG =================
 export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
+  /* =====================================================
+     REQUEST PARAMS
+  ===================================================== */
+
   const value =
     req.params.slug
       ?.toLowerCase()
       .trim();
+
 
   const requestedCitySlug =
     req.params.citySlug
@@ -1586,45 +1615,70 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
       .trim();
 
 
+  const requestedCategorySlug =
+    req.params.categorySlug
+      ?.toLowerCase()
+      .trim();
+
+
   if (!value) {
+
     return res.status(400).json({
       success: false,
       message: "Slug is required",
     });
+
   }
 
 
+  /* =====================================================
+     STATE
+  ===================================================== */
+
   let business = null;
+
   let isOldSlug = false;
+
+  let requestedCity = null;
+
+  let requestedCategory = null;
 
 
   /* =====================================================
-     1. CITY-AWARE CURRENT SLUG
-     ===================================================== */
+     1. RESOLVE CITY
+     
+     Only when citySlug exists.
+  ===================================================== */
 
   if (requestedCitySlug) {
 
-    const city =
+    requestedCity =
       await City.findOne({
-        slug: requestedCitySlug,
-        status: "active",
+
+        slug:
+          requestedCitySlug,
+
+        status:
+          "active",
+
       })
-      .select("_id name slug state district")
+      .select(
+        "_id name slug state district"
+      )
       .lean();
 
 
-    if (city) {
+    /*
+     * Invalid city in a structured business URL.
+     *
+     * Do not fall back to another city's business.
+     */
+    if (!requestedCity) {
 
-      business =
-        await Business.findOne({
-          cityId: city._id,
-
-          slug: value,
-
-          status: "approved",
-
-          isDeleted: false,
-        });
+      return res.status(404).json({
+        success: false,
+        message: "City not found",
+      });
 
     }
 
@@ -1632,41 +1686,39 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     2. CITY-AWARE OLD SLUG
+     2. RESOLVE CATEGORY
      
-     Same city + slugHistory
-     ===================================================== */
+     Category is part of the public URL.
+     We use it to prevent wrong-category URLs.
+  ===================================================== */
 
-  if (!business && requestedCitySlug) {
+  if (requestedCategorySlug) {
 
-    const city =
-      await City.findOne({
-        slug: requestedCitySlug,
-        status: "active",
+    requestedCategory =
+      await Category.findOne({
+
+        slug:
+          requestedCategorySlug,
+
+        status:
+          "active",
+
       })
-      .select("_id")
+      .select(
+        "_id name slug uiType features"
+      )
       .lean();
 
 
-    if (city) {
+    /*
+     * Invalid category in a structured business URL.
+     */
+    if (!requestedCategory) {
 
-      business =
-        await Business.findOne({
-          cityId: city._id,
-
-          slugHistory: value,
-
-          status: "approved",
-
-          isDeleted: false,
-        });
-
-
-      if (business) {
-
-        isOldSlug = true;
-
-      }
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
 
     }
 
@@ -1674,36 +1726,180 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     3. LEGACY FALLBACK
-     
-     IMPORTANT:
-     Existing URLs must continue working.
+     3. CURRENT SLUG — CITY AWARE
      
      Example:
-     /businesses/apollo-pharmacy
-     ===================================================== */
+     
+     Patna:
+       apollo-pharmacy
+     
+     Hajipur:
+       apollo-pharmacy
+     
+     Both are valid because cityId differs.
+  ===================================================== */
 
-  if (!business) {
+  if (requestedCity) {
+
+    const query = {
+
+      cityId:
+        requestedCity._id,
+
+      slug:
+        value,
+
+      status:
+        "approved",
+
+      isDeleted:
+        false,
+
+    };
+
+
+    /*
+     * If category is present,
+     * require matching category as well.
+     */
+    if (requestedCategory) {
+
+      query.categoryId =
+        requestedCategory._id;
+
+    }
+
+
+    business =
+      await Business.findOne(
+        query
+      );
+
+  }
+
+
+  /* =====================================================
+   4. OLD SLUG — HISTORY LOOKUP
+     
+   IMPORTANT:
+   Do NOT restrict slugHistory by cityId.
+   
+   Reason:
+   Business may have moved to another city.
+   
+   Example:
+   
+   OLD:
+   Hajipur + old-slug
+   
+   NEW:
+   Patna + new-slug
+   
+   Old Hajipur URL must still 301
+   to the new Patna canonical URL.
+===================================================== */
+
+if (!business) {
+
+  const query = {
+
+    slugHistory:
+      value,
+
+    status:
+      "approved",
+
+    isDeleted:
+      false,
+
+  };
+
+
+  /*
+   * Category restriction is still useful
+   * because category is part of the old URL.
+   */
+
+  if (requestedCategory) {
+
+    query.categoryId =
+      requestedCategory._id;
+
+  }
+
+
+  business =
+    await Business.findOne(
+      query
+    );
+
+
+  if (business) {
+
+    isOldSlug = true;
+
+  }
+
+}
+
+  /* =====================================================
+     5. LEGACY FALLBACK
+     
+     This is important for EXISTING URLs.
+     
+     Example:
+     
+     /api/businesses/apollo-pharmacy
+     
+     We still allow the old lookup.
+     
+     IMPORTANT:
+     This fallback is used ONLY when citySlug
+     was not supplied.
+  ===================================================== */
+
+  if (
+    !business &&
+    !requestedCitySlug
+  ) {
+
+    /*
+     * CURRENT SLUG
+     */
 
     business =
       await Business.findOne({
-        slug: value,
 
-        status: "approved",
+        slug:
+          value,
 
-        isDeleted: false,
+        status:
+          "approved",
+
+        isDeleted:
+          false,
+
       });
 
+
+    /*
+     * OLD SLUG
+     */
 
     if (!business) {
 
       business =
         await Business.findOne({
-          slugHistory: value,
 
-          status: "approved",
+          slugHistory:
+            value,
 
-          isDeleted: false,
+          status:
+            "approved",
+
+          isDeleted:
+            false,
+
         });
 
 
@@ -1719,22 +1915,26 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     4. NOT FOUND
-     ===================================================== */
+     6. NOT FOUND
+  ===================================================== */
 
   if (!business) {
 
     return res.status(404).json({
+
       success: false,
-      message: "Business not found",
+
+      message:
+        "Business not found",
+
     });
 
   }
 
 
   /* =====================================================
-     5. POPULATE CANONICAL BUSINESS
-     ===================================================== */
+     7. POPULATE CANONICAL BUSINESS
+  ===================================================== */
 
   const populatedBusiness =
     await Business.findById(
@@ -1757,16 +1957,20 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
   if (!populatedBusiness) {
 
     return res.status(404).json({
+
       success: false,
-      message: "Business not found",
+
+      message:
+        "Business not found",
+
     });
 
   }
 
 
   /* =====================================================
-     6. CHECK CANONICAL CITY
-     ===================================================== */
+     8. CANONICAL CITY
+  ===================================================== */
 
   const canonicalCitySlug =
     populatedBusiness.citySlug ||
@@ -1775,8 +1979,8 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     7. CHECK CANONICAL CATEGORY
-     ===================================================== */
+     9. CANONICAL CATEGORY
+  ===================================================== */
 
   const canonicalCategorySlug =
     populatedBusiness.categorySlug ||
@@ -1785,115 +1989,68 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     8. OLD SLUG
+     10. CANONICAL BUSINESS SLUG
+  ===================================================== */
+
+  const canonicalBusinessSlug =
+    populatedBusiness.slug ||
+    "";
+
+
+  /* =====================================================
+     11. CANONICAL URL
+  ===================================================== */
+
+  const canonicalUrl =
+    `https://servdial.com/` +
+    `${canonicalCitySlug}/` +
+    `${canonicalCategorySlug}/` +
+    `${canonicalBusinessSlug}`;
+
+
+  /* =====================================================
+     12. OLD SLUG → HTTP 301
      
-     Do NOT change business slug.
-     Frontend will redirect to canonical URL.
-     ===================================================== */
+     IMPORTANT:
+     
+     This is now a REAL HTTP redirect.
+     
+     Browser + Google receive:
+     
+     301 Moved Permanently
+  ===================================================== */
 
   if (isOldSlug) {
 
-    return res.json({
-
-      success: true,
-
-      redirect: true,
-
-      oldSlug: value,
-
-      canonicalSlug:
-        populatedBusiness.slug,
-
-      canonicalCitySlug,
-
-      canonicalCategorySlug,
-
-      data: {
-
-        business:
-          populatedBusiness,
-
-        reviews: [],
-
-      },
-
-      message:
-        "Business URL has moved",
-
-    });
+    return res.redirect(
+      301,
+      canonicalUrl
+    );
 
   }
 
 
   /* =====================================================
-     9. CITY MISMATCH
-     
-     Example requested:
-     
-     /hajipur-vaishali-bihar/pharmacy/apollo-pharmacy
-     
-     But business belongs to:
-     
-     /patna-bihar/pharmacy/apollo-pharmacy
-     
-     Never show wrong business.
-     
-     Frontend will redirect to canonical URL.
-     ===================================================== */
-
-  if (
-    requestedCitySlug &&
-    canonicalCitySlug &&
-    requestedCitySlug !== canonicalCitySlug
-  ) {
-
-    return res.json({
-
-      success: true,
-
-      redirect: true,
-
-      requestedCitySlug,
-
-      canonicalCitySlug,
-
-      canonicalCategorySlug,
-
-      canonicalSlug:
-        populatedBusiness.slug,
-
-      data: {
-
-        business:
-          populatedBusiness,
-
-        reviews: [],
-
-      },
-
-      message:
-        "Business city URL has moved",
-
-    });
-
-  }
-
-
-  /* =====================================================
-     10. LANGUAGE
-     ===================================================== */
+     13. LANGUAGE
+  ===================================================== */
 
   const language =
     (
       req.query.lang ||
-      req.headers["accept-language"]
+
+      req.headers[
+        "accept-language"
+      ]
         ?.split(",")[0]
         ?.split("-")[0] ||
+
       "en"
+
     ).toLowerCase();
 
 
   const supportedLanguages = [
+
     "en",
     "hi",
     "bn",
@@ -1901,18 +2058,21 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     "ta",
     "te",
     "gu",
+
   ];
 
 
   const finalLanguage =
-    supportedLanguages.includes(language)
+    supportedLanguages.includes(
+      language
+    )
       ? language
       : "en";
 
 
   /* =====================================================
-     11. FAQ
-     ===================================================== */
+     14. FAQ
+  ===================================================== */
 
   populatedBusiness.faq =
     generateBusinessFAQ({
@@ -1927,8 +2087,8 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     12. REVIEWS
-     ===================================================== */
+     15. REVIEWS
+  ===================================================== */
 
   const reviews =
     await Review.find({
@@ -1942,7 +2102,10 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     })
 
       .sort({
-        createdAt: -1,
+
+        createdAt:
+          -1,
+
       })
 
       .limit(20)
@@ -1951,18 +2114,21 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
 
 
   /* =====================================================
-     13. CACHE
-     ===================================================== */
+     16. CACHE
+  ===================================================== */
 
   res.setHeader(
+
     "Cache-Control",
+
     "public, max-age=300, stale-while-revalidate=600"
+
   );
 
 
   /* =====================================================
-     14. RESPONSE
-     ===================================================== */
+     17. RESPONSE
+  ===================================================== */
 
   return res.json({
 
@@ -1971,11 +2137,16 @@ export const getBusinessBySlug = asyncHandler(async (req, res) => {
     redirect: false,
 
     canonicalSlug:
-      populatedBusiness.slug,
+      canonicalBusinessSlug,
 
-    canonicalCitySlug,
+    canonicalCitySlug:
+      canonicalCitySlug,
 
-    canonicalCategorySlug,
+    canonicalCategorySlug:
+      canonicalCategorySlug,
+
+    canonicalUrl:
+      canonicalUrl,
 
     data: {
 
