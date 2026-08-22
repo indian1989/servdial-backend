@@ -15,6 +15,7 @@ const normalizeCity = (val) => {
 // ================= SCHEMA =================
 const businessSchema = new mongoose.Schema(
   {
+
     // ================= BASIC INFO =================
     name: {
       type: String,
@@ -40,6 +41,40 @@ slugHistory: [
   },
 ],
 
+// =========================================================
+// 🔗 BUSINESS URL HISTORY
+//
+// Preserves complete old public URL context:
+// city + category + business slug
+// =========================================================
+
+urlHistory: [
+  {
+    slug: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+
+    citySlug: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+
+    categorySlug: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+
+    changedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+],
+
     description: {
       type: String,
       trim: true,
@@ -59,7 +94,6 @@ slugHistory: [
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       required: false,
-      index: true,
     },
 
     // 🔥 SEO SLUG CACHE (VERY IMPORTANT)
@@ -1117,6 +1151,14 @@ businessSchema.index(
 
 businessSchema.index({
   slugHistory: 1,
+});
+
+// ================= URL HISTORY =================
+
+businessSchema.index({
+  "urlHistory.citySlug": 1,
+  "urlHistory.categorySlug": 1,
+  "urlHistory.slug": 1,
 });
 
 // ================= GEO =================

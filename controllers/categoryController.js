@@ -3,12 +3,260 @@ import mongoose from "mongoose";
 import Category from "../models/Category.js";
 import slugify from "../utils/slugify.js";
 import memoryCache from "../utils/memoryCache.js";
+
+import {
+  invalidateCategoryCache,
+  resolveCategoryBySlug,
+  normalizeCategorySlug,
+  getDirectChildren,
+} from "../services/resolver/categoryResolver.js";
 import { pingSearchEngines } from "../services/seo/pingSearchEngines.js";
 import { generateCategoryKeywords } from "../utils/categoryKeywords.js";
 
-/* ================= CACHE RESET ================= */
-const resetCategoryCache = () => {
-  memoryCache.del("categories:tree");
+/* =========================================================
+   CATEGORY VALIDATION HELPERS
+========================================================= */
+
+const isValidObjectId = (id) =>
+  mongoose.Types.ObjectId.isValid(id);
+
+
+/* =========================================================
+   VALIDATE CATEGORY NAME + SLUG
+========================================================= */
+
+const validateCategoryName = (name) => {
+
+  if (
+    typeof name !== "string"
+  ) {
+    throw new Error(
+      "Category name is required"
+    );
+  }
+
+
+  const cleanName =
+    name
+      .trim()
+      .replace(/\s+/g, " ");
+
+
+  if (!cleanName) {
+    throw new Error(
+      "Category name is required"
+    );
+  }
+
+
+  const slug =
+    slugify(cleanName);
+
+
+  if (!slug) {
+    throw new Error(
+      "Category slug could not be generated"
+    );
+  }
+
+
+  return {
+    name: cleanName,
+    slug,
+  };
+
+};
+
+
+/* =========================================================
+   VALIDATE PARENT CATEGORY + CIRCULAR TREE
+========================================================= */
+
+const validateParentCategory = async ({
+  categoryId = null,
+  parentCategory = null,
+}) => {
+
+  /* =======================================================
+     ROOT CATEGORY
+  ======================================================= */
+
+  if (
+    parentCategory === null ||
+    parentCategory === undefined ||
+    parentCategory === ""
+  ) {
+    return null;
+  }
+
+
+  /* =======================================================
+     OBJECT ID VALIDATION
+  ======================================================= */
+
+  if (
+    !isValidObjectId(
+      parentCategory
+    )
+  ) {
+    throw new Error(
+      "Invalid parent category"
+    );
+  }
+
+
+  const parentId =
+    String(parentCategory);
+
+
+  /* =======================================================
+     SELF-PARENT PROTECTION
+  ======================================================= */
+
+  if (
+    categoryId &&
+    parentId ===
+      String(categoryId)
+  ) {
+    throw new Error(
+      "Category cannot be its own parent"
+    );
+  }
+
+
+  /* =======================================================
+     PARENT EXISTENCE
+  ======================================================= */
+
+  const parent =
+  await Category.findById(
+    parentCategory
+  )
+  .select(
+    "_id parentCategory status level"
+  )
+  .lean();
+
+
+if (!parent) {
+  throw new Error(
+    "Parent category not found"
+  );
+}
+
+
+/* =======================================================
+   PARENT MUST BE ROOT CATEGORY
+======================================================= */
+
+if (
+  Number(parent.level) !== 0
+) {
+  throw new Error(
+    "Sub category cannot be used as a parent category"
+  );
+}
+
+
+  /* =======================================================
+     OPTIONAL SAFETY:
+     PARENT MUST BE ACTIVE
+  ======================================================= */
+
+  if (
+    parent.status !==
+    "active"
+  ) {
+    throw new Error(
+      "Parent category must be active"
+    );
+  }
+
+
+  /* =======================================================
+     CIRCULAR REFERENCE PROTECTION
+  ======================================================= */
+
+  if (!categoryId) {
+    return parentCategory;
+  }
+
+
+  const visited =
+    new Set();
+
+
+  let currentId =
+    parent._id;
+
+
+  while (
+    currentId
+  ) {
+
+    const currentKey =
+      String(currentId);
+
+
+    /* -----------------------------------------------
+       EXISTING BAD CYCLE
+    ----------------------------------------------- */
+
+    if (
+      visited.has(
+        currentKey
+      )
+    ) {
+      throw new Error(
+        "Circular category hierarchy detected"
+      );
+    }
+
+
+    visited.add(
+      currentKey
+    );
+
+
+    /* -----------------------------------------------
+       TARGET CATEGORY APPEARS IN PARENT CHAIN
+    ----------------------------------------------- */
+
+    if (
+      currentKey ===
+      String(categoryId)
+    ) {
+      throw new Error(
+        "Circular category hierarchy detected"
+      );
+    }
+
+
+    const current =
+      await Category.findById(
+        currentId
+      )
+      .select(
+        "parentCategory"
+      )
+      .lean();
+
+
+    if (
+      !current?.parentCategory
+    ) {
+      break;
+    }
+
+
+    currentId =
+      current.parentCategory;
+
+  }
+
+
+  return parentCategory;
+
 };
 
 /* ================= BUILD TREE ================= */
@@ -38,8 +286,13 @@ const buildCategoryTree = (categories) => {
 export const getAllCategories = async (req, res) => {
   try {
     const categories = await Category.find({
-      status: "active",
-    }).lean();
+  status: "active",
+})
+  .sort({
+    order: 1,
+    name: 1,
+  })
+  .lean();
 
     res.json({
       success: true,
@@ -69,8 +322,14 @@ export const getCategoryTree = async (req, res) => {
     }
 
     const categories = await Category.find({
-      status: "active",
-    }).lean();
+  status: "active",
+})
+  .sort({
+    level: 1,
+    order: 1,
+    name: 1,
+  })
+  .lean();
 
     const tree = buildCategoryTree(categories);
 
@@ -92,72 +351,93 @@ export const getCategoryTree = async (req, res) => {
 
 /* ================= GET BY SLUG ================= */
 
-/* ================= GET BY SLUG ================= */
-
 export const getCategoryBySlug = async (req, res) => {
   try {
-    const value = req.params.slug?.toLowerCase().trim();
 
-    if (!value) {
+    const rawValue =
+      req.params.slug;
+
+    const normalizedSlug =
+      normalizeCategorySlug(rawValue);
+
+
+    /* =====================================================
+       VALIDATION
+    ===================================================== */
+
+    if (!normalizedSlug) {
+
       return res.status(400).json({
         success: false,
         message: "Category slug is required",
       });
+
     }
 
-    let category = null;
-    let isOldSlug = false;
 
     /* =====================================================
-       1. CURRENT SLUG
+       SSOT CATEGORY RESOLUTION
+       
+       Supports:
+       - current slug
+       - slugHistory
     ===================================================== */
 
-    category = await Category.findOne({
-      slug: value,
-      status: "active",
-    });
+    const category =
+      await resolveCategoryBySlug(
+        normalizedSlug
+      );
+
 
     /* =====================================================
-       2. OLD SLUG FROM SLUG HISTORY
+       NOT FOUND
     ===================================================== */
 
     if (!category) {
-      category = await Category.findOne({
-        "slugHistory.slug": value,
-        status: "active",
-      });
 
-      if (category) {
-        isOldSlug = true;
-      }
-    }
-
-    /* =====================================================
-       3. NOT FOUND
-    ===================================================== */
-
-    if (!category) {
       return res.status(404).json({
         success: false,
         message: "Category not found",
       });
+
     }
 
+
     /* =====================================================
-       4. OLD → CURRENT SLUG
+       OLD SLUG DETECTION
+    ===================================================== */
+
+    const canonicalSlug =
+      normalizeCategorySlug(
+        category.slug
+      );
+
+    const isOldSlug =
+      normalizedSlug !==
+      canonicalSlug;
+
+
+    /* =====================================================
+       RESPONSE
     ===================================================== */
 
     return res.json({
+
       success: true,
 
-      data: category,
+      data:
+        category,
 
-      redirect: isOldSlug,
+      redirect:
+        isOldSlug,
 
-      canonicalSlug: category.slug,
+      canonicalSlug:
+        canonicalSlug,
+
     });
 
   } catch (err) {
+
     console.error(
       "getCategoryBySlug error:",
       err
@@ -167,51 +447,34 @@ export const getCategoryBySlug = async (req, res) => {
       success: false,
       message: "Server error",
     });
+
   }
 };
 
 /* ================= GET CHILDREN ================= */
+
 export const getCategoryWithChildren = async (req, res) => {
   try {
-    const value = req.params.slug?.toLowerCase().trim();
 
-    if (!value) {
+    const normalizedSlug =
+      normalizeCategorySlug(
+        req.params.slug
+      );
+
+
+    if (!normalizedSlug) {
       return res.status(400).json({
         success: false,
         message: "Category slug is required",
       });
     }
 
-    let parent = null;
-    let isOldSlug = false;
 
-    /* =====================================================
-       1. CURRENT SLUG
-    ===================================================== */
+    const parent =
+      await resolveCategoryBySlug(
+        normalizedSlug
+      );
 
-    parent = await Category.findOne({
-      slug: value,
-      status: "active",
-    }).lean();
-
-    /* =====================================================
-       2. OLD SLUG FROM SLUG HISTORY
-    ===================================================== */
-
-    if (!parent) {
-      parent = await Category.findOne({
-        "slugHistory.slug": value,
-        status: "active",
-      }).lean();
-
-      if (parent) {
-        isOldSlug = true;
-      }
-    }
-
-    /* =====================================================
-       3. NOT FOUND
-    ===================================================== */
 
     if (!parent) {
       return res.status(404).json({
@@ -220,22 +483,26 @@ export const getCategoryWithChildren = async (req, res) => {
       });
     }
 
-    /* =====================================================
-       4. CHILDREN
-    ===================================================== */
 
-    const children = await Category.find({
-      parentCategory: parent._id,
-      status: "active",
-    })
-      .sort({ order: 1, name: 1 })
-      .lean();
+    const children =
+      await getDirectChildren(
+        parent._id
+      );
 
-    /* =====================================================
-       5. RESPONSE
-    ===================================================== */
+
+    const canonicalSlug =
+      normalizeCategorySlug(
+        parent.slug
+      );
+
+
+    const isOldSlug =
+      normalizedSlug !==
+      canonicalSlug;
+
 
     return res.json({
+
       success: true,
 
       data: {
@@ -243,11 +510,16 @@ export const getCategoryWithChildren = async (req, res) => {
         children,
       },
 
-      redirect: isOldSlug,
-      canonicalSlug: parent.slug,
+      redirect:
+        isOldSlug,
+
+      canonicalSlug:
+        canonicalSlug,
+
     });
 
   } catch (err) {
+
     console.error(
       "getCategoryWithChildren:",
       err
@@ -257,6 +529,7 @@ export const getCategoryWithChildren = async (req, res) => {
       success: false,
       message: "Failed to fetch children",
     });
+
   }
 };
 
@@ -296,9 +569,65 @@ export const createCategory = async (req, res) => {
   features = [],
 } = req.body;
 
-    const slug = slugify(name);
 
-    const exists = await Category.findOne({ slug });
+/* =====================================================
+   VALIDATE NAME + SLUG
+===================================================== */
+
+let validatedName;
+let slug;
+
+try {
+
+  const validated =
+    validateCategoryName(
+      name
+    );
+
+  validatedName =
+    validated.name;
+
+  slug =
+    validated.slug;
+
+} catch (err) {
+
+  return res.status(400).json({
+    success: false,
+    message: err.message,
+  });
+
+}
+
+
+/* =====================================================
+   VALIDATE PARENT
+===================================================== */
+
+let validatedParentCategory;
+
+try {
+
+  validatedParentCategory =
+    await validateParentCategory({
+      parentCategory,
+    });
+
+} catch (err) {
+
+  return res.status(400).json({
+    success: false,
+    message: err.message,
+  });
+
+}
+
+    const exists = await Category.findOne({
+  $or: [
+    { slug },
+    { "slugHistory.slug": slug },
+  ],
+});
 
     if (exists) {
       return res.status(400).json({
@@ -307,19 +636,22 @@ export const createCategory = async (req, res) => {
       });
     }
 
-    const level = parentCategory ? 1 : 0;
+    const level =
+  validatedParentCategory
+    ? 1
+    : 0;
 
     const finalFeatures = [...new Set([...(features || []), "offers"])];
 
 const keywords = generateCategoryKeywords({
-  name,
+  name: validatedName,
   slug,
 });
 
 const category = await Category.create({
-  name,
+  name: validatedName,
   slug,
-  parentCategory,
+  parentCategory: validatedParentCategory,
   level,
   order,
   description,
@@ -328,7 +660,12 @@ const category = await Category.create({
   keywords,
 });
 
-    resetCategoryCache();
+    await invalidateCategoryCache({
+  categoryId: category._id,
+  slug: category.slug,
+  parentCategoryId: category.parentCategory,
+});
+
     await pingSearchEngines();
 
     res.json({
@@ -348,6 +685,17 @@ const category = await Category.create({
 /* ================= UPDATE ================= */
 export const updateCategory = async (req, res) => {
   try {
+
+    if (
+  !isValidObjectId(
+    req.params.id
+  )
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid category id",
+  });
+}
     const category = await Category.findById(req.params.id);
 
     if (!category) {
@@ -356,6 +704,13 @@ export const updateCategory = async (req, res) => {
         message: "Category not found",
       });
     }
+
+      const oldSlug =
+  category.slug;
+
+const oldParentCategory =
+  category.parentCategory;
+  
 
     const {
       name,
@@ -372,37 +727,76 @@ export const updateCategory = async (req, res) => {
        CATEGORY NAME + SLUG
     ===================================================== */
 
-    if (name !== undefined && name.trim() !== category.name) {
-      const cleanName = name
-        .trim()
-        .replace(/\s+/g, " ");
+if (
+  name !== undefined &&
+  String(name).trim() !==
+    category.name
+) {
 
-      const newSlug = slugify(cleanName);
+  let validated;
 
-      const slugExists = await Category.findOne({
+  try {
+
+    validated =
+      validateCategoryName(
+        name
+      );
+
+  } catch (err) {
+
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+
+  }
+
+
+  const cleanName =
+    validated.name;
+
+  const newSlug =
+    validated.slug;
+
+
+  const slugExists =
+  await Category.findOne({
+
+    $or: [
+      {
         slug: newSlug,
-        _id: { $ne: category._id },
-      });
+      },
+      {
+        "slugHistory.slug":
+          newSlug,
+      },
+    ],
 
-      if (slugExists) {
-        return res.status(400).json({
-          success: false,
-          message: "Slug already exists",
-        });
-      }
+    _id: {
+      $ne:
+        category._id,
+    },
 
-      /* ===============================================
-         IMPORTANT
+  });
 
-         Save old slug BEFORE changing category.slug.
-         Category.js pre-save middleware will also
-         detect the slug modification and store the
-         previous slug in slugHistory.
-      =============================================== */
+  if (slugExists) {
 
-      category.name = cleanName;
-      category.slug = newSlug;
-    }
+    return res.status(400).json({
+      success: false,
+      message:
+        "Slug already exists",
+    });
+
+  }
+
+
+  category.name =
+    cleanName;
+
+  category.slug =
+    newSlug;
+
+}
 
     /* =====================================================
        BASIC FIELDS
@@ -424,13 +818,47 @@ export const updateCategory = async (req, res) => {
        PARENT CATEGORY + LEVEL
     ===================================================== */
 
-    if (parentCategory !== undefined) {
-      category.parentCategory =
-        parentCategory || null;
+    if (
+  parentCategory !==
+  undefined
+) {
 
-      category.level =
-        parentCategory ? 1 : 0;
-    }
+  let validatedParentCategory;
+
+  try {
+
+    validatedParentCategory =
+      await validateParentCategory({
+
+        categoryId:
+          category._id,
+
+        parentCategory:
+          parentCategory || null,
+
+      });
+
+  } catch (err) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        err.message,
+    });
+
+  }
+
+
+  category.parentCategory =
+    validatedParentCategory;
+
+  category.level =
+    validatedParentCategory
+      ? 1
+      : 0;
+
+}
+
 
     /* =====================================================
        UI TYPE
@@ -487,7 +915,24 @@ category.keywords = generateCategoryKeywords({
        CACHE RESET
     ===================================================== */
 
-    resetCategoryCache();
+   await invalidateCategoryCache({
+
+  categoryId:
+    category._id,
+
+  slug:
+    category.slug,
+
+  oldSlug,
+
+  parentCategoryId:
+    category.parentCategory,
+
+  oldParentCategoryId:
+    oldParentCategory,
+
+});
+
 
     /* =====================================================
        SEARCH ENGINE PING
@@ -521,33 +966,128 @@ category.keywords = generateCategoryKeywords({
 
 
 /* ================= DELETE ================= */
+
 export const deleteCategory = async (req, res) => {
   try {
-    const hasChildren = await Category.exists({
-      parentCategory: req.params.id,
-    });
+
+    if (
+  !isValidObjectId(
+    req.params.id
+  )
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid category id",
+  });
+}
+
+    /* =====================================================
+       1. CHECK CHILD CATEGORIES
+    ===================================================== */
+
+    const hasChildren =
+      await Category.exists({
+        parentCategory:
+          req.params.id,
+      });
+
 
     if (hasChildren) {
+
       return res.status(400).json({
+
         success: false,
-        message: "Has children categories",
+
+        message:
+          "Has children categories",
+
       });
+
     }
 
-    await Category.findByIdAndDelete(req.params.id);
 
-    resetCategoryCache();
+    /* =====================================================
+       2. LOAD CATEGORY BEFORE DELETE
+       
+       Needed for:
+       - old slug cache invalidation
+       - parent cache invalidation
+       - category cache invalidation
+    ===================================================== */
+
+    const category =
+      await Category.findById(
+        req.params.id
+      );
+
+
+    if (!category) {
+
+      return res.status(404).json({
+
+        success: false,
+
+        message:
+          "Category not found",
+
+      });
+
+    }
+
+
+    /* =====================================================
+       3. DELETE CATEGORY
+    ===================================================== */
+
+    await Category.findByIdAndDelete(
+      req.params.id
+    );
+
+
+    /* =====================================================
+       4. INVALIDATE CATEGORY CACHE
+    ===================================================== */
+
+    await invalidateCategoryCache({
+  categoryId: category._id,
+  slug: category.slug,
+  parentCategoryId: category.parentCategory,
+});
+
+
+    /* =====================================================
+       5. PING SEARCH ENGINES
+    ===================================================== */
+
     await pingSearchEngines();
 
-    res.json({
-      success: true,
-    });
-  } catch (err) {
-    console.error("deleteCategory:", err);
 
-    res.status(500).json({
-      success: false,
-      message: "Failed to delete category",
+    /* =====================================================
+       6. RESPONSE
+    ===================================================== */
+
+    return res.json({
+
+      success: true,
+
     });
+
+  } catch (err) {
+
+    console.error(
+      "deleteCategory:",
+      err
+    );
+
+
+    return res.status(500).json({
+
+      success: false,
+
+      message:
+        "Failed to delete category",
+
+    });
+
   }
 };

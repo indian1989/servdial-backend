@@ -59,6 +59,259 @@ const categoryLeafCacheKey = (id) =>
   `category:leaf:${String(id)}`;
 
 /* =========================================================
+   INVALIDATE CATEGORY CACHE
+   - slug cache
+   - tree cache
+   - children cache
+   - leaf cache
+   - ancestor leaf caches
+========================================================= */
+
+export const invalidateCategoryCache = async ({
+  categoryId = null,
+  slug = null,
+  oldSlug = null,
+  parentCategoryId = null,
+  oldParentCategoryId = null,
+} = {}) => {
+
+  /* =======================================================
+     GLOBAL TREE CACHE
+  ======================================================= */
+
+  memoryCache.del(
+    "categories:tree"
+  );
+
+
+  /* =======================================================
+     CURRENT SLUG CACHE
+  ======================================================= */
+
+  if (slug) {
+
+    memoryCache.del(
+      categorySlugCacheKey(
+        normalizeCategorySlug(slug)
+      )
+    );
+
+  }
+
+
+  /* =======================================================
+     OLD SLUG CACHE
+  ======================================================= */
+
+  if (oldSlug) {
+
+    memoryCache.del(
+      categorySlugCacheKey(
+        normalizeCategorySlug(oldSlug)
+      )
+    );
+
+  }
+
+
+  /* =======================================================
+     CATEGORY SELF CACHE
+  ======================================================= */
+
+  if (categoryId) {
+
+    memoryCache.del(
+      categoryChildrenCacheKey(
+        categoryId
+      )
+    );
+
+    memoryCache.del(
+      categoryLeafCacheKey(
+        categoryId
+      )
+    );
+
+  }
+
+
+  /* =======================================================
+     COLLECT ALL ANCESTORS
+  ======================================================= */
+
+  const ancestorIds = new Set();
+
+  const collectAncestors = async (
+    startId
+  ) => {
+
+    let currentId =
+      startId;
+
+    const visited =
+      new Set();
+
+
+    while (currentId) {
+
+      const currentKey =
+        String(currentId);
+
+
+      /* ===============================================
+         CYCLE PROTECTION
+      =============================================== */
+
+      if (
+        visited.has(currentKey)
+      ) {
+
+        console.warn(
+          "⚠️ CATEGORY CACHE ANCESTOR CYCLE:",
+          currentKey
+        );
+
+        break;
+
+      }
+
+
+      visited.add(
+        currentKey
+      );
+
+
+      /* ===============================================
+         STORE ANCESTOR
+      =============================================== */
+
+      ancestorIds.add(
+        currentKey
+      );
+
+
+      /* ===============================================
+         LOAD PARENT
+      =============================================== */
+
+      const current =
+        await Category.findById(
+          currentId
+        )
+        .select(
+          "parentCategory"
+        )
+        .lean();
+
+
+      if (
+        !current?.parentCategory
+      ) {
+
+        break;
+
+      }
+
+
+      currentId =
+        current.parentCategory;
+
+    }
+
+  };
+
+
+  /* =======================================================
+     CURRENT CATEGORY / PARENT CHAIN
+  ======================================================= */
+
+  if (parentCategoryId) {
+
+    await collectAncestors(
+      parentCategoryId
+    );
+
+  }
+
+
+  /* =======================================================
+     OLD PARENT CHAIN
+     
+     Important when a category moves from
+     Parent A → Parent B.
+  ======================================================= */
+
+  if (
+    oldParentCategoryId &&
+    String(oldParentCategoryId) !==
+      String(parentCategoryId || "")
+  ) {
+
+    await collectAncestors(
+      oldParentCategoryId
+    );
+
+  }
+
+
+  /* =======================================================
+     CATEGORY'S OWN CURRENT PARENT CHAIN
+     
+     This ensures the current hierarchy is covered even
+     when only categoryId was supplied.
+  ======================================================= */
+
+  if (categoryId) {
+
+    const category =
+      await Category.findById(
+        categoryId
+      )
+      .select(
+        "parentCategory"
+      )
+      .lean();
+
+
+    if (
+      category?.parentCategory
+    ) {
+
+      await collectAncestors(
+        category.parentCategory
+      );
+
+    }
+
+  }
+
+
+  /* =======================================================
+     INVALIDATE ALL ANCESTOR CACHES
+  ======================================================= */
+
+  for (
+    const ancestorId
+    of ancestorIds
+  ) {
+
+    memoryCache.del(
+      categoryChildrenCacheKey(
+        ancestorId
+      )
+    );
+
+    memoryCache.del(
+      categoryLeafCacheKey(
+        ancestorId
+      )
+    );
+
+  }
+
+};
+
+/* =========================================================
    RESOLVE CATEGORY BY SLUG
 ========================================================= */
 
@@ -204,12 +457,18 @@ const getDirectChildren = async (
   }
 
   const children =
-    await Category.find({
-      parentCategory: parentId,
-      status: "active",
+  await Category.find({
+    parentCategory: parentId,
+    status: "active",
+  })
+    .select(
+      "_id name slug parentCategory status order"
+    )
+    .sort({
+      order: 1,
+      name: 1,
     })
-      .select("_id name slug parentCategory status")
-      .lean();
+    .lean();
 
   memoryCache.set(
     cacheKey,
