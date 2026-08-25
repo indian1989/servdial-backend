@@ -50,42 +50,54 @@ export const createBusiness = asyncHandler(
   async (req, res) => {
 
     const {
-      name,
-      categoryId,
-      cityId,
-      pincode,
-      address,
-      phone,
-      whatsapp,
-      landline,
-      alternatePhone,
-      phoneCode,
-      website,
-      description,
-      location,
-      logo,
-      images,
-      businessHours,
-      district,
-      state,
-      services,
-      serviceTypes,
-      serviceCoverage,
-      foodType,
-      pricing,
-      catalog,
-      menu,
-      faq,
-      offers,
-      tags,
-      restaurantBooking,
-      partyBooking,
-      boost,
-      isFeatured,
-      isVerified,
-      country,
-      countryCode,
-    } = req.body;
+  name,
+  categoryId,
+  cityId,
+  pincode,
+  address,
+
+  phone,
+  phoneCountryCode,
+
+  whatsapp,
+  whatsappCountryCode,
+
+  alternatePhone,
+  alternatePhoneCountryCode,
+
+  landline,
+  landlineCountryCode,
+
+  website,
+  description,
+  location,
+  logo,
+  images,
+  businessHours,
+  district,
+  state,
+  services,
+  serviceTypes,
+  serviceCoverage,
+  responseTime,
+  homeService,
+  paymentOptions,
+  foodType,
+  pricing,
+  catalog,
+  menu,
+  faq,
+  offers,
+  tags,
+  restaurantBooking,
+  roomBooking,
+  partyBooking,
+  boost,
+  isFeatured,
+  isVerified,
+  country,
+  countryCode,
+} = req.body;
 
 
     /* =====================================================
@@ -114,11 +126,7 @@ export const createBusiness = asyncHandler(
         "Pincode"
       );
 
-      requireField(
-        phone,
-        "Phone"
-      );
-
+      
     } catch (err) {
 
       return res.status(400).json({
@@ -197,181 +205,257 @@ export const createBusiness = asyncHandler(
 
     }
 
+/* =====================================================
+   RESPONSE TIME
+===================================================== */
 
-    /* =====================================================
-       COUNTRY PHONE CODE
-    ===================================================== */
+    let cleanResponseTime = null;
 
-    const cleanPhoneCode =
-      String(
-        phoneCode ||
-        "+91"
-      )
-        .replace(
-          /[^\d+]/g,
-          ""
-        )
-        .trim();
+if (
+  responseTime !== undefined &&
+  responseTime !== null &&
+  responseTime !== ""
+) {
+  const parsedResponseTime = Number(responseTime);
 
+  if (
+    !Number.isFinite(parsedResponseTime) ||
+    parsedResponseTime < 0
+  ) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "Response time must be a valid non-negative number",
+    });
+  }
 
-    const normalizedPhoneCode =
-      cleanPhoneCode.startsWith("+")
-        ? cleanPhoneCode
-        : `+${cleanPhoneCode}`;
-
-
-    /* =====================================================
-       MAIN MOBILE
-    ===================================================== */
-
-    const cleanPhone =
-      String(
-        phone || ""
-      )
-        .replace(
-          /\D/g,
-          ""
-        )
-        .slice(-10);
+  cleanResponseTime = parsedResponseTime;
+}
 
 
-    if (
-      cleanPhone.length !== 10
-    ) {
+ /* =========================================================
+   PHONE / LANDLINE HELPERS
+========================================================= */
 
-      return res.status(400).json({
+const normalizeCountryCode = (
+  value,
+  fallback = "+91"
+) => {
 
-        success: false,
+  const code =
+    String(value || fallback)
+      .replace(/[^\d+]/g, "")
+      .trim();
 
-        message:
-          "Main mobile number must be 10 digits",
+  if (!code) {
+    return fallback;
+  }
 
-      });
-
-    }
-
-
-    const fullPhone =
-      `${normalizedPhoneCode}${cleanPhone}`;
-
-
-    /* =====================================================
-       WHATSAPP
-    ===================================================== */
-
-    const cleanWhatsapp =
-      whatsapp
-        ? String(
-            whatsapp
-          )
-            .replace(
-              /\D/g,
-              ""
-            )
-            .slice(-10)
-        : cleanPhone;
+  return code.startsWith("+")
+    ? code
+    : `+${code}`;
+};
 
 
-    if (
-      cleanWhatsapp.length !== 10
-    ) {
+const cleanMobileNumber = (value) => {
 
-      return res.status(400).json({
+  return String(value || "")
+    .replace(/\D/g, "")
+    .slice(-10);
 
-        success: false,
-
-        message:
-          "WhatsApp number must be 10 digits",
-
-      });
-
-    }
+};
 
 
-    const fullWhatsapp =
-      `${normalizedPhoneCode}${cleanWhatsapp}`;
+const cleanLandlineNumber = (value) => {
+
+  return String(value || "")
+    .replace(/\D/g, "");
+
+};
 
 
-    /* =====================================================
-       LANDLINE
-    ===================================================== */
+/* =========================================================
+   PHONE COUNTRY CODES
+========================================================= */
 
-    const cleanLandline =
-      landline
-        ? String(
-            landline
-          ).replace(
-            /\D/g,
-            ""
-          )
-        : "";
+const normalizedPhoneCountryCode =
+  normalizeCountryCode(
+    phoneCountryCode,
+    "+91"
+  );
 
 
-    if (
-      cleanLandline &&
-      (
-        cleanLandline.length < 6 ||
-        cleanLandline.length > 12
-      )
-    ) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message:
-          "Landline number must be between 6 and 12 digits",
-
-      });
-
-    }
+const normalizedWhatsappCountryCode =
+  normalizeCountryCode(
+    whatsappCountryCode,
+    normalizedPhoneCountryCode
+  );
 
 
-    const fullLandline =
-      cleanLandline
-        ? `${normalizedPhoneCode}${cleanLandline}`
-        : "";
+const normalizedAlternatePhoneCountryCode =
+  normalizeCountryCode(
+    alternatePhoneCountryCode,
+    normalizedPhoneCountryCode
+  );
 
 
-    /* =====================================================
-       ALTERNATE MOBILE
-    ===================================================== */
-
-    const cleanAlternatePhone =
-      alternatePhone
-        ? String(
-            alternatePhone
-          )
-            .replace(
-              /\D/g,
-              ""
-            )
-            .slice(-10)
-        : "";
+const normalizedLandlineCountryCode =
+  normalizeCountryCode(
+    landlineCountryCode,
+    normalizedPhoneCountryCode
+  );
 
 
-    if (
-      cleanAlternatePhone &&
-      cleanAlternatePhone.length !== 10
-    ) {
+/* =========================================================
+   MAIN MOBILE
+   Optional
+========================================================= */
 
-      return res.status(400).json({
-
-        success: false,
-
-        message:
-          "Alternate mobile number must be 10 digits",
-
-      });
-
-    }
+const cleanPhone =
+  phone === undefined ||
+  phone === null ||
+  String(phone).trim() === ""
+    ? ""
+    : cleanMobileNumber(phone);
 
 
-    const fullAlternatePhone =
-      cleanAlternatePhone
-        ? `${normalizedPhoneCode}${cleanAlternatePhone}`
-        : "";
+/* =========================================================
+   MAIN LANDLINE
+   Optional
+========================================================= */
 
+const cleanLandline =
+  landline === undefined ||
+  landline === null ||
+  String(landline).trim() === ""
+    ? ""
+    : cleanLandlineNumber(landline);
+
+
+/* =========================================================
+   WHATSAPP
+   Optional
+========================================================= */
+
+const cleanWhatsapp =
+  whatsapp === undefined ||
+  whatsapp === null ||
+  String(whatsapp).trim() === ""
+    ? ""
+    : cleanMobileNumber(whatsapp);
+
+
+if (
+  cleanWhatsapp &&
+  cleanWhatsapp.length !== 10
+) {
+
+  return res.status(400).json({
+
+    success: false,
+
+    message:
+      "WhatsApp number must be 10 digits",
+
+  });
+
+}
+
+
+/* =========================================================
+   ALTERNATE MOBILE
+   Optional
+========================================================= */
+
+const cleanAlternatePhone =
+  alternatePhone === undefined ||
+  alternatePhone === null ||
+  String(alternatePhone).trim() === ""
+    ? ""
+    : cleanMobileNumber(alternatePhone);
+
+
+if (
+  cleanAlternatePhone &&
+  cleanAlternatePhone.length !== 10
+) {
+
+  return res.status(400).json({
+
+    success: false,
+
+    message:
+      "Alternate mobile number must be 10 digits",
+
+  });
+
+}
+
+
+/* =========================================================
+   MAIN MOBILE VALIDATION
+========================================================= */
+
+if (
+  cleanPhone &&
+  cleanPhone.length !== 10
+) {
+
+  return res.status(400).json({
+
+    success: false,
+
+    message:
+      "Mobile number must be 10 digits",
+
+  });
+
+}
+
+
+/* =========================================================
+   MAIN LANDLINE VALIDATION
+========================================================= */
+
+if (
+  cleanLandline &&
+  (
+    cleanLandline.length < 6 ||
+    cleanLandline.length > 12
+  )
+) {
+
+  return res.status(400).json({
+
+    success: false,
+
+    message:
+      "Landline number must be between 6 and 12 digits",
+
+  });
+
+}
+
+
+/* =========================================================
+   MOBILE OR LANDLINE REQUIRED
+========================================================= */
+
+if (
+  !cleanPhone &&
+  !cleanLandline
+) {
+
+  return res.status(400).json({
+
+    success: false,
+
+    message:
+      "At least one contact number is required: Mobile or Landline",
+
+  });
+
+}
 
     /* =====================================================
        RESOLVE CITY
@@ -743,20 +827,29 @@ export const createBusiness = asyncHandler(
           cleanPincode,
 
 
-        phoneCountryCode:
-          normalizedPhoneCode,
-
         phone:
-          fullPhone,
+  cleanPhone,
 
-        whatsapp:
-          fullWhatsapp,
+phoneCountryCode:
+  normalizedPhoneCountryCode,
 
-        landline:
-          fullLandline,
+whatsapp:
+  cleanWhatsapp,
 
-        alternatePhone:
-          fullAlternatePhone,
+whatsappCountryCode:
+  normalizedWhatsappCountryCode,
+
+alternatePhone:
+  cleanAlternatePhone,
+
+alternatePhoneCountryCode:
+  normalizedAlternatePhoneCountryCode,
+
+landline:
+  cleanLandline,
+
+landlineCountryCode:
+  normalizedLandlineCountryCode,
 
 
         website:
@@ -892,59 +985,38 @@ export const createBusiness = asyncHandler(
 
 
         restaurantBooking:
-          restaurantBooking ||
-          {
+  restaurantBooking ||
+  {
+    enabled: false,
+    totalTables: 0,
+    seatingCapacity: 0,
+    advanceBookingDays: 0,
+  },
 
-            enabled:
-              false,
-
-            totalTables:
-              "",
-
-            seatingCapacity:
-              "",
-
-            advanceBookingDays:
-              "",
-
-          },
+        roomBooking:
+  roomBooking || {
+    enabled: false,
+    totalRooms: 0,
+    advanceBookingDays: 0,
+  },
 
 
         partyBooking:
-          partyBooking ||
-          {
-
-            enabled:
-              false,
-
-            bookingTypes:
-              [],
-
-            minGuests:
-              "",
-
-            maxGuests:
-              "",
-
-            advanceAmount:
-              "",
-
-            bookingNotice:
-              "24h",
-
-            timeSlots:
-              [],
-
-            contactNumber:
-              "",
-
-            whatsappBooking:
-              false,
-
-            notes:
-              "",
-
-          },
+  partyBooking ||
+  {
+    enabled: false,
+    bookingTypes: [],
+    minGuests: 0,
+    maxGuests: 0,
+    capacity: 0,
+    advanceAmount: 0,
+    advanceBookingDays: 0,
+    bookingNotice: "24h",
+    timeSlots: [],
+    contactNumber: "",
+    whatsappBooking: false,
+    notes: "",
+  },
 
 
         businessHours:
@@ -952,6 +1024,30 @@ export const createBusiness = asyncHandler(
             businessHours ||
             {}
           ),
+
+         responseTime:
+  cleanResponseTime,
+
+homeService:
+  Boolean(homeService),
+
+paymentOptions:
+  Array.isArray(paymentOptions)
+    ? [
+        ...new Set(
+          paymentOptions
+            .filter(
+              (option) =>
+                typeof option === "string" &&
+                option.trim()
+            )
+            .map(
+              (option) =>
+                option.trim()
+            )
+        ),
+      ]
+    : [],
 
 
         boost:

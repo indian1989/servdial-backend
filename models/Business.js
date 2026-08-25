@@ -345,9 +345,10 @@ countryCode:{
 },
 
     // ================= CONTACT =================
-    phone: {
+  phone: {
   type: String,
-  required: true,
+  trim: true,
+  default: "",
 },
 
 phoneCountryCode: {
@@ -381,6 +382,7 @@ alternatePhoneCountryCode: {
 landline: {
   type: String,
   trim: true,
+  default: "",
 },
 
 landlineCountryCode: {
@@ -415,6 +417,24 @@ website: {
 boost: {
   type: Boolean,
   default: false,
+},
+
+// ================= BUSINESS FEATURES =================
+
+responseTime: {
+  type: Number,
+  min: 0,
+  default: null,
+},
+
+homeService: {
+  type: Boolean,
+  default: false,
+},
+
+paymentOptions: {
+  type: [String],
+  default: [],
 },
 
 // ================= SERVICE PRICING =================
@@ -636,12 +656,75 @@ partyBooking: {
     default: false,
   },
 
+  // Types of party/event booking supported
+  bookingTypes: {
+    type: [String],
+    default: [],
+  },
+
+  // Minimum number of guests accepted
+  minGuests: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+
+  // Maximum number of guests supported
+  maxGuests: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+
+  // Maximum overall capacity
+  // Kept for compatibility and general capacity use
   capacity: {
     type: Number,
     min: 0,
     default: 0,
   },
 
+  // Advance amount required for booking
+  advanceAmount: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
+
+  // Minimum notice required before booking
+  bookingNotice: {
+    type: String,
+    trim: true,
+    default: "24h",
+  },
+
+  // Available booking time slots
+  timeSlots: {
+    type: [String],
+    default: [],
+  },
+
+  // Dedicated booking contact number
+  contactNumber: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+
+  // Whether WhatsApp booking is supported
+  whatsappBooking: {
+    type: Boolean,
+    default: false,
+  },
+
+  // Additional booking information
+  notes: {
+    type: String,
+    trim: true,
+    default: "",
+  },
+
+  // Kept for backward compatibility
   advanceBookingDays: {
     type: Number,
     min: 0,
@@ -781,24 +864,48 @@ leadCount:{
     featurePriority: { type: Number, default: 0 },
     featuredUntil: Date,
 
-    isVerified:{
- type:Boolean,
- default:false,
- index:true,
+    // ================= BUSINESS VERIFICATION =================
+
+isVerified: {
+  type: Boolean,
+  default: false,
+  index: true,
 },
 
-verificationType:{
- type:String,
- enum:[
-   "none",
-   "phone",
-   "document",
-   "both"
- ],
- default:"none"
+verificationStatus: {
+  type: String,
+  enum: [
+    "none",
+    "pending",
+    "approved",
+    "rejected",
+  ],
+  default: "none",
+  index: true,
 },
 
-verifiedAt:Date,
+verificationType: {
+  type: String,
+  enum: [
+    "none",
+    "phone",
+    "document",
+    "both",
+  ],
+  default: "none",
+},
+
+verificationRequestedAt: {
+  type: Date,
+},
+
+verifiedAt: {
+  type: Date,
+},
+
+verificationRejectedAt: {
+  type: Date,
+},
 
 plan: {
   type: String,
@@ -859,6 +966,40 @@ claimedAt:{
   },
   { timestamps: true }
 );
+
+// =========================================================
+// 📞 PHONE / LANDLINE VALIDATION
+// =========================================================
+//
+// At least ONE contact number is mandatory:
+//
+// Mobile only       → VALID
+// Landline only     → VALID
+// Mobile + Landline → VALID
+// Neither           → INVALID
+//
+// =========================================================
+
+businessSchema.pre("validate", function (next) {
+
+  const mobile =
+    this.phone?.toString().trim() || "";
+
+  const landline =
+    this.landline?.toString().trim() || "";
+
+  if (!mobile && !landline) {
+
+    this.invalidate(
+      "phone",
+      "Either Mobile Number or Landline Number is required."
+    );
+
+  }
+
+  next();
+
+});
 
 // ================= CAPTURE ORIGINAL SLUG =================
 businessSchema.pre("init", function () {

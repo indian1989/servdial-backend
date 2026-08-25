@@ -260,6 +260,7 @@ export const getCityCategoryPage = async (req, res) => {
           logo
           images
           phone
+          landline
           whatsapp
           website
           address
@@ -292,6 +293,16 @@ export const getCityCategoryPage = async (req, res) => {
         )
         .lean();
 
+        console.log(
+  "📞 SEO BEFORE RANK CALL DEBUG:",
+  {
+    phone: businesses?.[0]?.phone,
+    landline: businesses?.[0]?.landline,
+    id: businesses?.[0]?._id,
+    name: businesses?.[0]?.name,
+  }
+);
+
       const ranked = rankBusinesses(
         businesses,
         {
@@ -301,6 +312,16 @@ export const getCityCategoryPage = async (req, res) => {
           timeOfDay: new Date().getHours(),
         }
       );
+
+      console.log(
+  "📞 SEO AFTER RANK CALL DEBUG:",
+  {
+    phone: ranked?.[0]?.phone,
+    landline: ranked?.[0]?.landline,
+    id: ranked?.[0]?._id,
+    name: ranked?.[0]?.name,
+  }
+);
 
       const locationText =
         normalizeLocation(
@@ -703,18 +724,37 @@ export const getCityCategoryPage = async (req, res) => {
        RANK BUSINESSES
     ===================================================== */
 
-    const ranked =
-      rankBusinesses(
-        businesses,
-        {
-          userLocation: null,
-          userPreferences: null,
-          searchIntent: null,
-          timeOfDay:
-            new Date().getHours(),
-        }
-      );
+    console.log(
+  "📞 CATEGORY BEFORE RANK CALL DEBUG:",
+  businesses?.map((b) => ({
+    id: b?._id,
+    name: b?.name,
+    phone: b?.phone,
+    landline: b?.landline,
+  }))
+);
 
+const ranked =
+  rankBusinesses(
+    businesses,
+    {
+      userLocation: null,
+      userPreferences: null,
+      searchIntent: null,
+      timeOfDay:
+        new Date().getHours(),
+    }
+  );
+
+console.log(
+  "📞 CATEGORY AFTER RANK CALL DEBUG:",
+  ranked?.map((b) => ({
+    id: b?._id,
+    name: b?.name,
+    phone: b?.phone,
+    landline: b?.landline,
+  }))
+);
 
     /* =====================================================
        LOCATION

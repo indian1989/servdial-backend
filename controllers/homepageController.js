@@ -55,6 +55,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   phoneClicks
   whatsappClicks
   phone
+  landline
   whatsapp
   isFeatured
   featurePriority
@@ -196,6 +197,7 @@ lat && lng
     phoneClicks: 1,
     whatsappClicks: 1,
     phone: 1,
+    landline: 1,
     whatsapp: 1,
 
     isFeatured: 1,
