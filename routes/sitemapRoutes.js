@@ -8,6 +8,7 @@ import {
   citySitemap,
   categorySitemap,
   cityCategorySitemap,
+  cityPagesSitemap,
   businessSitemap
 } from "../controllers/sitemapController.js";
 
@@ -92,7 +93,19 @@ router.get(
 );
 
 
+// =================================================
+// CITY DEDICATED PAGES
+// =================================================
 
+router.get(
+  "/sitemap-city-pages.xml",
+  cityPagesSitemap
+);
+
+router.get(
+  "/sitemap-city-pages-:page(\\d+).xml",
+  cityPagesSitemap
+);
 
 // =================================================
 // BUSINESS SITEMAPS

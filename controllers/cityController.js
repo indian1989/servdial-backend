@@ -37,7 +37,9 @@ export const getCities = async (req, res) => {
 });
     }
 
-    const cities = await City.find({})
+    const cities = await City.find({
+  
+})
       .sort({ name: 1 })
       .lean();
 
@@ -408,7 +410,20 @@ export const getCityBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
 
-    const city = await City.findOne({ slug, status: "active" }).lean();
+    // =====================================================
+    // 1. FIND CURRENT CITY OR OLD CITY SLUG
+    // =====================================================
+
+    const city = await City.findOne({
+      $or: [
+        { slug },
+        { slugHistory: slug },
+      ],
+    }).lean();
+
+    // =====================================================
+    // 2. CITY NOT FOUND
+    // =====================================================
 
     if (!city) {
       return res.status(404).json({
@@ -417,9 +432,70 @@ export const getCityBySlug = async (req, res) => {
       });
     }
 
-    res.json({ success: true, data: city });
+    // =====================================================
+    // 3. INACTIVE CITY → REDIRECT
+    // =====================================================
+
+    if (
+      city.status === "inactive" &&
+      city.redirectToCity
+    ) {
+      const redirectCity = await City.findById(
+        city.redirectToCity
+      )
+        .select("_id slug status")
+        .lean();
+
+      // ===================================================
+      // VALID REDIRECT TARGET
+      // ===================================================
+
+      if (
+        redirectCity &&
+        redirectCity.status === "active" &&
+        redirectCity.slug
+      ) {
+        return res.status(200).json({
+          success: true,
+          redirect: true,
+          redirectType: 301,
+          from: city.slug,
+          to: redirectCity.slug,
+          cityId: redirectCity._id,
+        });
+      }
+    }
+
+    // =====================================================
+    // 4. INACTIVE CITY WITHOUT VALID REDIRECT
+    // =====================================================
+
+    if (city.status !== "active") {
+      return res.status(404).json({
+        success: false,
+        message: "City not found",
+      });
+    }
+
+    // =====================================================
+    // 5. ACTIVE CITY
+    // =====================================================
+
+    return res.json({
+      success: true,
+      data: city,
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false });
+    console.error(
+      "getCityBySlug error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 

@@ -457,6 +457,269 @@ if (
 
 }
 
+/* =========================================================
+   CONTACT DUPLICATE CHECK
+   =========================================================
+
+   FINAL RULE:
+
+   PROVIDER:
+   - Same provider + same phone/landline
+     across multiple businesses = ALLOWED
+
+   - Different provider + same phone/landline
+     = BLOCKED
+
+   - Phone ↔ landline cross duplicate
+     = BLOCKED
+
+   ADMIN:
+   - owner is null
+   - Admin does NOT use owner-based duplicate allowance
+   - Duplicate contact gives WARNING / RECONFIRMATION
+   - Admin can continue only after explicit confirmation
+
+   IMPORTANT:
+   This is backend safety.
+   Frontend should also check while typing.
+========================================================= */
+
+const isAdmin =
+  req.user?.role === "admin" ||
+  req.user?.role === "superadmin";
+
+const providerId =
+  req.user?._id || null;
+
+const duplicateContactNumbers = [
+  cleanPhone,
+  cleanAlternatePhone,
+  cleanLandline,
+].filter(Boolean);
+
+if (duplicateContactNumbers.length > 0) {
+
+  /*
+  =====================================================
+  BUILD CONTACT MATCH QUERY
+
+  A number is considered duplicate if it already exists
+  either as phone OR landline.
+
+  Therefore:
+
+  new phone    ↔ existing phone
+  new phone    ↔ existing landline
+  new landline ↔ existing phone
+  new landline ↔ existing landline
+
+  All are considered duplicates.
+  =====================================================
+  */
+
+  const contactMatch = {
+  $or: [
+    ...duplicateContactNumbers.map(
+      (number) => ({
+        phone: number,
+      })
+    ),
+
+    ...duplicateContactNumbers.map(
+      (number) => ({
+        alternatePhone: number,
+      })
+    ),
+
+    ...duplicateContactNumbers.map(
+      (number) => ({
+        landline: number,
+      })
+    ),
+  ],
+};
+
+
+  /*
+  =====================================================
+  PROVIDER SIDE
+  =====================================================
+
+  Current provider's own businesses are excluded.
+
+  Therefore:
+
+  same provider + same number
+      → allowed
+
+  another provider + same number
+      → blocked
+
+  owner:null / admin-created business + same number
+      → also blocked
+  =====================================================
+  */
+
+  const duplicateQuery = isAdmin
+    ? contactMatch
+    : {
+        ...contactMatch,
+        owner: {
+          $ne: providerId,
+        },
+      };
+
+
+  const duplicateBusinesses =
+    await Business.find(duplicateQuery)
+      .select(
+        "_id name owner phone landline"
+      )
+      .limit(10)
+      .lean();
+
+
+  if (duplicateBusinesses.length > 0) {
+
+    /*
+    ===================================================
+    ADMIN SIDE
+    ===================================================
+
+    Admin is allowed to continue only after explicit
+    reconfirmation.
+
+    Frontend should first receive this warning and then
+    resubmit with:
+
+      confirmDuplicateContact: true
+
+    ===================================================
+    */
+
+    if (isAdmin) {
+
+      const confirmed =
+        req.body?.confirmDuplicateContact === true;
+
+
+      if (!confirmed) {
+
+        return res.status(409).json({
+
+          success: false,
+
+          duplicate: true,
+
+          requiresConfirmation: true,
+
+          message:
+            "This phone or landline number is already registered with another business. Please reconfirm before creating this business.",
+
+          duplicates:
+            duplicateBusinesses.map(
+              (business) => ({
+                id: business._id,
+                name: business.name,
+                owner:
+                  business.owner || null,
+                phone:
+                  business.phone || "",
+                landline:
+                  business.landline || "",
+              })
+            ),
+
+        });
+
+      }
+
+    }
+
+
+    /*
+    ===================================================
+    PROVIDER SIDE
+    ===================================================
+
+    Provider gets a hard block.
+
+    Same provider's own businesses were already excluded
+    from the query, so this only reaches here when another
+    provider/admin-owned business has the number.
+    ===================================================
+    */
+
+    if (!isAdmin) {
+
+      let duplicateField =
+        "contact number";
+
+
+      const duplicateBusiness =
+        duplicateBusinesses[0];
+
+
+      if (
+  cleanPhone &&
+  (
+    duplicateBusiness.phone === cleanPhone ||
+    duplicateBusiness.landline === cleanPhone ||
+    duplicateBusiness.alternatePhone === cleanPhone
+  )
+) {
+
+  duplicateField =
+    "mobile number";
+
+} else if (
+  cleanAlternatePhone &&
+  (
+    duplicateBusiness.phone === cleanAlternatePhone ||
+    duplicateBusiness.landline === cleanAlternatePhone ||
+    duplicateBusiness.alternatePhone === cleanAlternatePhone
+  )
+) {
+
+  duplicateField =
+    "alternate mobile number";
+
+} else if (
+  cleanLandline &&
+  (
+    duplicateBusiness.phone === cleanLandline ||
+    duplicateBusiness.landline === cleanLandline ||
+    duplicateBusiness.alternatePhone === cleanLandline
+  )
+) {
+
+  duplicateField =
+    "landline number";
+
+}
+
+      return res.status(409).json({
+
+        success: false,
+
+        duplicate: true,
+
+        field:
+          duplicateField === "mobile number"
+            ? "phone"
+            : "landline",
+
+        message:
+          `This ${duplicateField} is already registered with another provider.`,
+
+      });
+
+    }
+
+  }
+
+}
+
     /* =====================================================
        RESOLVE CITY
     ===================================================== */
@@ -778,12 +1041,17 @@ if (
     ===================================================== */
 
     const business =
-      await Business.create({
+  await Business.create({
 
-        name:
-          name.trim(),
+    owner:
+  isAdmin
+    ? null
+    : req.user._id,
 
-        categoryId,
+    name:
+      name.trim(),
+
+    categoryId,
 
         cityId,
 

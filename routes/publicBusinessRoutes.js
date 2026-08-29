@@ -6,12 +6,19 @@ import {
   getBusinesses,
   claimBusiness,
   getBusinessBySlug,
-  getSimilarBusinesses,
   trackBusinessView,
   trackBusinessAnalytics,
   getBusinessCount,
-  getLatestBusinesses,
 } from "../controllers/businessController.js";
+
+import {
+  getLatestBusinesses,
+  getFeaturedBusinesses,
+  getTopRatedBusinesses,
+  getNearbyBusinesses,
+  getSimilarBusinesses,
+  getPopularSearches,
+} from "../controllers/business/businessDiscoveryController.js";
 
 import {
   unifiedSearch,
@@ -42,6 +49,44 @@ trackBusinessAnalytics
 router.get(
   "/latest",
   getLatestBusinesses
+);
+
+/* =========================
+   ⭐ FEATURED
+========================= */
+
+router.get(
+  "/featured",
+  getFeaturedBusinesses
+);
+
+/* =========================
+   ⭐ TOP RATED
+========================= */
+
+router.get(
+  "/top-rated",
+  getTopRatedBusinesses
+);
+
+/* =========================
+📍 NEARBY
+========================= */
+router.get(
+  "/nearby",
+  getNearbyBusinesses
+);
+
+/* =========================
+   🔥 POPULAR SEARCHES
+========================= */
+
+router.get(
+
+  "/popular-searches",
+
+  getPopularSearches
+
 );
 
 /* =========================

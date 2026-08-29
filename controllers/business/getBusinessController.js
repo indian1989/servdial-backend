@@ -74,45 +74,122 @@ export const getBusinessBySlug = asyncHandler(
 
 
     /* =====================================================
-       1. RESOLVE CITY
-    ===================================================== */
+   1. RESOLVE CITY
+===================================================== */
+
+let canonicalRequestedCity = null;
+
+if (requestedCitySlug) {
+
+  // ===================================================
+  // FIND CURRENT OR LEGACY CITY
+  //
+  // IMPORTANT:
+  // Inactive city bhi find karna hai because
+  // inactive city may redirect to another city.
+  // ===================================================
+
+  requestedCity =
+    await City.findOne({
+
+      slug:
+        requestedCitySlug,
+
+    })
+    .select(
+      "_id name slug state district status redirectToCity"
+    )
+    .lean();
+
+
+  // ===================================================
+  // CITY NOT FOUND
+  // ===================================================
+
+  if (!requestedCity) {
+
+    return res.status(404).json({
+
+      success: false,
+
+      message:
+        "City not found",
+
+    });
+
+  }
+
+
+  // ===================================================
+  // LEGACY / INACTIVE CITY
+  // ===================================================
+
+  if (
+    requestedCity.status === "inactive" &&
+    requestedCity.redirectToCity
+  ) {
+
+    canonicalRequestedCity =
+      await City.findById(
+        requestedCity.redirectToCity
+      )
+      .select(
+        "_id name slug state district status"
+      )
+      .lean();
+
+
+    // =================================================
+    // VALID REDIRECT TARGET
+    // =================================================
 
     if (
-      requestedCitySlug
+      !canonicalRequestedCity ||
+      canonicalRequestedCity.status !== "active"
     ) {
 
-      requestedCity =
-        await City.findOne({
+      return res.status(404).json({
 
-          slug:
-            requestedCitySlug,
+        success: false,
 
-          status:
-            "active",
+        message:
+          "City redirect target not found",
 
-        })
-        .select(
-          "_id name slug state district"
-        )
-        .lean();
-
-
-      if (
-        !requestedCity
-      ) {
-
-        return res.status(404).json({
-
-          success: false,
-
-          message:
-            "City not found",
-
-        });
-
-      }
+      });
 
     }
+
+  }
+  else if (
+    requestedCity.status === "active"
+  ) {
+
+    // =================================================
+    // CURRENT ACTIVE CITY
+    // =================================================
+
+    canonicalRequestedCity =
+      requestedCity;
+
+  }
+  else {
+
+    // =================================================
+    // INACTIVE WITHOUT REDIRECT
+    // =================================================
+
+    return res.status(404).json({
+
+      success: false,
+
+      message:
+        "City not found",
+
+    });
+
+  }
+
+}
 
 
     /* =====================================================
@@ -179,25 +256,24 @@ export const getBusinessBySlug = asyncHandler(
     ===================================================== */
 
     if (
-      requestedCity
-    ) {
+  requestedCity
+) {
 
-      const query = {
+  const query = {
 
-        cityId:
-          requestedCity._id,
+    cityId:
+      canonicalRequestedCity._id,
 
-        slug:
-          value,
+    slug:
+      value,
 
-        status:
-          "approved",
+    status:
+      "approved",
 
-        isDeleted:
-          false,
+    isDeleted:
+      false,
 
-      };
-
+  };
 
       /* -----------------------------------------------
          CATEGORY MATCH

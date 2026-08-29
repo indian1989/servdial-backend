@@ -59,15 +59,7 @@ export {
   trackBusinessAnalytics,
 };
 
-import {
-  getSimilarBusinesses,
-  getLatestBusinesses,
-} from "./business/businessDiscoveryController.js";
 
-export {
-  getSimilarBusinesses,
-  getLatestBusinesses,
-};
 
 /* =========================
    CORE VALIDATION HELPERS

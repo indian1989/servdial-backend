@@ -358,20 +358,20 @@ export const parseSearchIntent = (
 
   if (!keyword) {
     return {
-      rawQuery: "",
-      cleanedQuery: "",
-      tokens: [],
+  rawQuery: "",
+  cleanedQuery: "",
+  tokens: [],
+  cityCandidate: null,
 
-      cityCandidate: null,
+  locationMode: "none",
 
-      sortBy: null,
-      minRating: null,
-      pricePreference: null,
-
-      openNow: false,
-      isNearMe: false,
-      isEmergency: false,
-    };
+  sortBy: null,
+  minRating: null,
+  pricePreference: null,
+  openNow: false,
+  isNearMe: false,
+  isEmergency: false,
+};
   }
 
   /* =======================================================
@@ -387,6 +387,7 @@ export const parseSearchIntent = (
       tokens: [],
 
       cityCandidate: null,
+      locationMode: "none",
 
       sortBy: null,
       minRating: null,
@@ -415,6 +416,36 @@ export const parseSearchIntent = (
     containsPhrase(query, "nearby") ||
     containsPhrase(query, "closest") ||
     containsPhrase(query, "nearest");
+
+      /* =======================================================
+     LOCATION MODE
+  ======================================================= */
+
+  /*
+   * Location precedence is decided later by
+   * queryIntelligenceEngine.
+   *
+   * Parser only reports what the user expressed.
+   *
+   * HARD:
+   *   "electrician in patna"
+   *   "hotel near patna"
+   *
+   * GEO:
+   *   "plumber near me"
+   *   "restaurant nearby"
+   *
+   * NONE:
+   *   "electrician"
+   *   "best salon"
+   */
+
+  const locationMode =
+    cityCandidate
+      ? "hard"
+      : isNearMe
+        ? "geo"
+        : "none";
 
   /* =======================================================
      OPEN NOW
@@ -522,31 +553,57 @@ export const parseSearchIntent = (
   ======================================================= */
 
   return {
-    rawQuery: query,
+  rawQuery: query,
 
-    cleanedQuery,
+  cleanedQuery,
 
-    tokens,
+  tokens,
 
-    /*
-     * Candidate only.
-     *
-     * IMPORTANT:
-     * This is NOT a resolved City document.
-     *
-     * Database resolution happens later
-     * inside cityResolver.js.
-     */
-    cityCandidate,
+  /*
+   * Candidate only.
+   *
+   * IMPORTANT:
+   * This is NOT a resolved City document.
+   *
+   * Database resolution happens later
+   * inside cityResolver.js.
+   */
 
-    sortBy,
-    minRating,
-    pricePreference,
+  cityCandidate,
 
-    openNow,
-    isNearMe,
-    isEmergency,
-  };
+  /*
+   * =====================================================
+   * LOCATION MODE
+   * =====================================================
+   *
+   * hard:
+   *   User explicitly supplied a location.
+   *
+   * geo:
+   *   User requested proximity such as:
+   *   near me / nearby / closest / nearest.
+   *
+   * none:
+   *   No location intent in the query.
+   *
+   * This is only a parser signal.
+   * City resolution happens later.
+   */
+
+  locationMode,
+
+  sortBy,
+
+  minRating,
+
+  pricePreference,
+
+  openNow,
+
+  isNearMe,
+
+  isEmergency,
+};
 };
 
 /* =========================================================

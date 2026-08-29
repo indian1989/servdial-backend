@@ -72,6 +72,11 @@ const cityCategoryPages = Math.ceil(
   (cityCategoryCount[0]?.total || 0) / PAGE_SIZE
 );
 
+const cityPageCount = cityCount;
+const cityPageSitemapPages = Math.ceil(
+  cityPageCount / PAGE_SIZE
+);
+
     const businessMaps = Array.from(
       { length: businessPages },
       (_, i) => `
@@ -108,6 +113,15 @@ const cityCategoryPages = Math.ceil(
 </sitemap>`
 ).join("");
 
+const cityPageMaps = Array.from(
+  { length: cityPageSitemapPages },
+  (_, i) => `
+<sitemap>
+<loc>${BACKEND_URL}/sitemap-city-pages-${i + 1}.xml</loc>
+<lastmod>${new Date().toISOString()}</lastmod>
+</sitemap>`
+).join("");
+
 const sitemap = `
 ${xmlHeader}
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -121,6 +135,7 @@ ${cityMaps}
 ${categoryMaps}
 ${businessMaps}
 ${cityCategoryMaps}
+${cityPageMaps}
 
 </sitemapindex>`;
 
@@ -406,6 +421,194 @@ setCache(
 res.send(xml);
   } catch (err) {
     res.status(500).send("City-category sitemap error");
+  }
+};
+
+/* =========================
+   CITY DEDICATED PAGES
+========================= */
+
+export const cityPagesSitemap = async (req, res) => {
+  try {
+
+    const page =
+      Number(req.params.page || 1);
+
+    const cacheKey =
+      `sitemap:city-pages:${page}`;
+
+    const cached =
+      getCache(cacheKey);
+
+    if (cached) {
+      return res
+        .type("application/xml")
+        .send(cached);
+    }
+
+    const skip =
+      (page - 1) * PAGE_SIZE;
+
+    const cities =
+      await City.find({
+        status: "active",
+      })
+        .select("slug updatedAt")
+        .skip(skip)
+        .limit(PAGE_SIZE)
+        .lean();
+
+    if (!cities.length) {
+      return res
+        .status(404)
+        .send("City pages sitemap not found");
+    }
+
+    /* =====================================================
+       CITY DEDICATED PAGE LASTMOD DATA
+    ===================================================== */
+
+    const citySlugs =
+      cities.map((city) => city.slug);
+
+    const businessUpdates =
+      await Business.aggregate([
+        {
+          $match: {
+            status: "approved",
+            isDeleted: false,
+            citySlug: {
+              $in: citySlugs,
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$citySlug",
+
+            latestBusinessUpdate: {
+              $max: "$updatedAt",
+            },
+
+            latestFeaturedUpdate: {
+              $max: {
+                $cond: [
+                  { $eq: ["$isFeatured", true] },
+                  "$updatedAt",
+                  null,
+                ],
+              },
+            },
+          },
+        },
+      ]);
+
+    const businessUpdateMap =
+      new Map(
+        businessUpdates.map((item) => [
+          item._id,
+          item,
+        ])
+      );
+
+    /* =====================================================
+       BUILD URLS
+    ===================================================== */
+
+    const urls =
+      cities
+        .map((city) => {
+
+          const cityData =
+            businessUpdateMap.get(
+              city.slug
+            );
+
+          const cityLastMod =
+            getLastMod(
+              city.updatedAt
+            );
+
+          const latestBusinessLastMod =
+            getLastMod(
+              cityData?.latestBusinessUpdate ||
+              city.updatedAt
+            );
+
+          const featuredLastMod =
+            getLastMod(
+              cityData?.latestFeaturedUpdate ||
+              city.updatedAt
+            );
+
+          return `
+<url>
+<loc>${FRONTEND_URL}/${city.slug}/categories</loc>
+<lastmod>${cityLastMod}</lastmod>
+<changefreq>weekly</changefreq>
+<priority>0.8</priority>
+</url>
+
+<url>
+<loc>${FRONTEND_URL}/${city.slug}/featured-businesses</loc>
+<lastmod>${featuredLastMod}</lastmod>
+<changefreq>daily</changefreq>
+<priority>0.8</priority>
+</url>
+
+<url>
+<loc>${FRONTEND_URL}/${city.slug}/top-rated-businesses</loc>
+<lastmod>${latestBusinessLastMod}</lastmod>
+<changefreq>daily</changefreq>
+<priority>0.8</priority>
+</url>
+
+<url>
+<loc>${FRONTEND_URL}/${city.slug}/latest-businesses</loc>
+<lastmod>${latestBusinessLastMod}</lastmod>
+<changefreq>daily</changefreq>
+<priority>0.8</priority>
+</url>`;
+
+        })
+        .join("");
+
+    res.type(
+      "application/xml"
+    );
+
+    res.set(
+      "Cache-Control",
+      "public, max-age=3600, s-maxage=3600"
+    );
+
+    const xml =
+      `${xmlHeader}` +
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
+      `${urls}` +
+      `</urlset>`;
+
+    setCache(
+      cacheKey,
+      xml,
+      3600
+    );
+
+    res.send(xml);
+
+  } catch (err) {
+
+    console.error(
+      "City pages sitemap error:",
+      err
+    );
+
+    res
+      .status(500)
+      .send(
+        "City pages sitemap error"
+      );
+
   }
 };
 

@@ -162,15 +162,20 @@ export const buildSearchContext = async (
     isEmergency,
   } = parsed;
 
-  /* =======================================================
-     CITY FROM API FILTER
+    /* =======================================================
+     CITY INPUT NORMALIZATION
   =======================================================
    *
-   * Priority:
+   * Industry-standard location precedence:
    *
-   * 1. Explicit city in search query
-   * 2. citySlug API filter
-   * 3. city API filter
+   * 1. Explicit city parsed from the search query
+   * 2. Explicit citySlug API filter
+   * 3. Detected/current city API filter
+   *
+   * IMPORTANT:
+   *
+   * Query location has the highest priority because it
+   * represents the user's explicit search intent.
    *
    * Example:
    *
@@ -181,7 +186,10 @@ export const buildSearchContext = async (
    * city = hajipur
    *
    * Result:
-   * patna MUST win.
+   * patna MUST remain the requested city.
+   *
+   * If the query contains no explicit city, the API
+   * location filters may be used as fallback.
    *
    * =======================================================
    */
@@ -202,15 +210,42 @@ export const buildSearchContext = async (
         )
       : null;
 
-  /*
-   * Query city always gets priority.
+
+  /* =======================================================
+     EXPLICIT QUERY CITY
+  ======================================================= */
+
+  const queryCityCandidate =
+    cityCandidate
+      ? normalizeSlug(cityCandidate)
+      : null;
+
+
+  /* =======================================================
+     FINAL CITY CANDIDATE
+  =======================================================
+   *
+   * Explicit query location always wins.
+   *
+   * Only when the query does NOT contain a city do we
+   * fall back to API-provided location.
+   *
+   * =======================================================
    */
 
-  if (!cityCandidate) {
+  if (!queryCityCandidate) {
+
     cityCandidate =
       requestedCitySlug ||
       requestedCity ||
       null;
+
+  }
+  else {
+
+    cityCandidate =
+      cityCandidate;
+
   }
 
   /* =======================================================
@@ -267,17 +302,24 @@ export const buildSearchContext = async (
   }
 
   /* =======================================================
-     RESOLVE CITY
-  ======================================================= */
+   RESOLVE CITY
+======================================================= */
 
-  let city = null;
+let city = null;
 
-  if (cityCandidate) {
-    city =
-      await resolveCity(
-        cityCandidate
-      );
-  }
+if (cityCandidate) {
+
+  const normalizedCityCandidate =
+    normalizeSlug(
+      cityCandidate
+    );
+
+  city =
+    await resolveCity(
+      normalizedCityCandidate
+    );
+
+}
 
   /*
    * IMPORTANT:
@@ -291,14 +333,34 @@ export const buildSearchContext = async (
    * user's current city.
    */
 
-  const explicitCityRequested =
-    !!parsed.cityCandidate ||
-    !!requestedCitySlug ||
-    !!requestedCity;
+  /* =======================================================
+   EXPLICIT CITY REQUEST DETECTION
+=======================================================
+ *
+ * A city is considered explicitly requested when:
+ *
+ * 1. Query contains a city candidate
+ * 2. citySlug filter is supplied
+ * 3. city filter is supplied
+ *
+ * IMPORTANT:
+ *
+ * If an explicit city cannot be resolved,
+ * search must NOT silently fall back to another city.
+ *
+ * =======================================================
+ */
 
-  const cityResolutionFailed =
-    explicitCityRequested &&
-    !city;
+const explicitCityRequested =
+  Boolean(
+    queryCityCandidate ||
+    requestedCitySlug ||
+    requestedCity
+  );
+
+const cityResolutionFailed =
+  explicitCityRequested &&
+  !city;
 
   /* =======================================================
      RESOLVE CATEGORY
@@ -406,6 +468,10 @@ export const buildSearchContext = async (
   const finalFilters = {
   ...normalizedFilters,
 
+  /* =====================================================
+     CANONICAL CITY
+  ===================================================== */
+
   city:
     city?.slug ||
     null,
@@ -414,9 +480,32 @@ export const buildSearchContext = async (
     city?._id ||
     null,
 
+  /* =====================================================
+     CITY RESOLUTION STATE
+  ===================================================== */
+
+  requestedCitySlug:
+    requestedCitySlug ||
+    null,
+
+  requestedCityCandidate:
+    queryCityCandidate ||
+    null,
+
+  cityResolutionFailed:
+    Boolean(cityResolutionFailed),
+
+  /* =====================================================
+     CATEGORY
+  ===================================================== */
+
   categorySlug:
     categorySlug ||
     null,
+
+  /* =====================================================
+     GEO
+  ===================================================== */
 
   lat:
     Number.isFinite(latitude)
@@ -430,9 +519,10 @@ export const buildSearchContext = async (
 
   distance,
 
-  /*
-   * Behavioral search signals
-   */
+  /* =====================================================
+     BEHAVIORAL SEARCH SIGNALS
+  ===================================================== */
+
   sortBy:
     sortBy || null,
 
@@ -461,6 +551,10 @@ export const buildSearchContext = async (
   const context = {
   rawQuery: cleanQuery,
 
+  /* =====================================================
+     CANONICAL CITY
+  ===================================================== */
+
   cityId:
     city?._id ||
     null,
@@ -468,6 +562,22 @@ export const buildSearchContext = async (
   citySlug:
     city?.slug ||
     null,
+
+  /* =====================================================
+     REQUESTED CITY
+  ===================================================== */
+
+  requestedCitySlug:
+    requestedCitySlug ||
+    null,
+
+  requestedCityCandidate:
+    queryCityCandidate ||
+    null,
+
+  /* =====================================================
+     CATEGORY
+  ===================================================== */
 
   categoryId,
 
@@ -521,18 +631,19 @@ export const buildSearchContext = async (
       !!categoryContext,
 
     requestedCityCandidate:
-      parsed.cityCandidate ||
-      null,
+  queryCityCandidate ||
+  null,
 
-    requestedCitySlug:
-      requestedCitySlug ||
-      null,
+requestedCitySlug:
+  requestedCitySlug ||
+  null,
 
-    resolvedCitySlug:
-      city?.slug ||
-      null,
+resolvedCitySlug:
+  city?.slug ||
+  null,
 
-    cityResolutionFailed,
+cityResolutionFailed:
+  Boolean(cityResolutionFailed),
 
     requestedCategorySlug:
       categorySlug ||
@@ -565,44 +676,67 @@ export const buildSearchContext = async (
   ======================================================= */
 
   console.log(
-    "🔥 SEARCH CONTEXT:",
-    JSON.stringify(
-      {
-        rawQuery:
-          context.rawQuery,
+  "🔥 SEARCH CONTEXT:",
+  JSON.stringify(
+    {
+      rawQuery:
+        context.rawQuery,
 
-        cityId:
-          context.cityId,
+      /* =================================================
+         CITY
+      ================================================= */
 
-        citySlug:
-          context.citySlug,
+      requestedCityCandidate:
+        context.requestedCityCandidate,
 
-        categoryId:
-          context.categoryId,
+      requestedCitySlug:
+        context.requestedCitySlug,
 
-        categoryIds:
-          context.categoryIds,
+      cityId:
+        context.cityId,
 
-        categorySlug:
-          context.categorySlug,
+      citySlug:
+        context.citySlug,
 
-        intent:
-          context.intent,
+      cityResolutionFailed:
+        context.debug
+          .cityResolutionFailed,
 
-        searchIntent:
-          context.searchIntent,
+      /* =================================================
+         CATEGORY
+      ================================================= */
 
-        textSearch:
-          context.textSearch,
+      categoryId:
+        context.categoryId,
 
-        cityResolutionFailed:
-          context.debug
-            .cityResolutionFailed,
-      },
-      null,
-      2
-    )
-  );
+      categoryIds:
+        context.categoryIds,
+
+      categorySlug:
+        context.categorySlug,
+
+      /* =================================================
+         INTENT
+      ================================================= */
+
+      intent:
+        context.intent,
+
+      searchIntent:
+        context.searchIntent,
+
+      /* =================================================
+         TEXT
+      ================================================= */
+
+      textSearch:
+        context.textSearch,
+
+    },
+    null,
+    2
+  )
+);
 
   return context;
 };

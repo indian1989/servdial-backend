@@ -161,10 +161,14 @@ export const updateBusiness =
          BUILD UPDATE PAYLOAD
       ===================================================== */
 
-      const updates = {
+        const updates = {
         ...req.body,
-      };
+        };
 
+        const confirmDuplicateContact =
+        Boolean(req.body.confirmDuplicateContact);
+
+        delete updates.confirmDuplicateContact;
 
       /* =====================================================
          REMOVE MONGODB OPERATORS
@@ -749,6 +753,282 @@ export const updateBusiness =
         });
 
       }
+
+            /* =====================================================
+         DUPLICATE PHONE / LANDLINE VALIDATION
+         
+         FINAL RULE:
+
+         PROVIDER:
+         - Same provider → duplicate phone/landline allowed
+         - Different provider → duplicate phone/landline blocked
+         - Phone ↔ Landline cross-duplicate also blocked
+
+         ADMIN / SUPERADMIN:
+         - Duplicate is warning only
+         - Reconfirmation required
+         - Admin-created business may have owner = null
+      ===================================================== */
+
+      const finalContactNumbers = [
+  finalPhone,
+  finalLandline,
+  updates.alternatePhone !== undefined
+    ? updates.alternatePhone
+    : business.alternatePhone || "",
+].filter(Boolean);
+
+
+if (finalContactNumbers.length > 0) {
+
+  const duplicateConditions = [];
+
+
+  /* -------------------------------------------------
+     PHONE MATCHES PHONE / ALTERNATE PHONE / LANDLINE
+  ------------------------------------------------- */
+
+  if (finalPhone) {
+
+    duplicateConditions.push(
+      {
+        phone: finalPhone,
+      },
+      {
+        alternatePhone: finalPhone,
+      },
+      {
+        landline: finalPhone,
+      }
+    );
+
+  }
+
+
+  /* -------------------------------------------------
+     ALTERNATE PHONE MATCHES PHONE / ALTERNATE PHONE / LANDLINE
+  ------------------------------------------------- */
+
+  const finalAlternatePhone =
+    updates.alternatePhone !== undefined
+      ? updates.alternatePhone
+      : business.alternatePhone || "";
+
+
+  if (finalAlternatePhone) {
+
+    duplicateConditions.push(
+      {
+        phone: finalAlternatePhone,
+      },
+      {
+        alternatePhone: finalAlternatePhone,
+      },
+      {
+        landline: finalAlternatePhone,
+      }
+    );
+
+  }
+
+
+  /* -------------------------------------------------
+     LANDLINE MATCHES PHONE / ALTERNATE PHONE / LANDLINE
+  ------------------------------------------------- */
+
+  if (finalLandline) {
+
+    duplicateConditions.push(
+      {
+        phone: finalLandline,
+      },
+      {
+        alternatePhone: finalLandline,
+      },
+      {
+        landline: finalLandline,
+      }
+    );
+
+  }
+
+
+  if (duplicateConditions.length > 0) {
+
+    const isAdmin =
+      ["admin", "superadmin"].includes(
+        String(
+          req.user?.role || ""
+        ).toLowerCase()
+      );
+
+
+    /* ===============================================
+       PROVIDER SIDE — STRICT
+
+       Same provider:
+       → same phone allowed
+       → same alternatePhone allowed
+       → same landline allowed
+
+       Different provider:
+       → phone duplicate blocked
+       → alternatePhone duplicate blocked
+       → landline duplicate blocked
+
+       Cross-field duplicate also blocked:
+       phone ↔ alternatePhone
+       phone ↔ landline
+       alternatePhone ↔ landline
+    =============================================== */
+
+    if (!isAdmin) {
+
+      const duplicateBusiness =
+        await Business.findOne({
+
+          _id: {
+            $ne: id,
+          },
+
+          owner: {
+            $ne: req.user._id,
+          },
+
+          $or:
+            duplicateConditions,
+
+        })
+          .select(
+            "_id name phone alternatePhone landline owner cityName"
+          )
+          .lean();
+
+
+      if (duplicateBusiness) {
+
+        return res.status(409).json({
+
+          success: false,
+
+          code:
+            "DUPLICATE_CONTACT_NUMBER",
+
+          message:
+            "This mobile, alternate mobile or landline number is already used by another provider.",
+
+          duplicate: {
+
+            businessId:
+              duplicateBusiness._id,
+
+            businessName:
+              duplicateBusiness.name,
+
+            phone:
+              duplicateBusiness.phone ||
+              "",
+
+            alternatePhone:
+              duplicateBusiness.alternatePhone ||
+              "",
+
+            landline:
+              duplicateBusiness.landline ||
+              "",
+
+            cityName:
+              duplicateBusiness.cityName ||
+              "",
+
+          },
+
+        });
+
+      }
+
+    }
+
+
+    /* ===============================================
+       ADMIN / SUPERADMIN SIDE
+
+       Duplicate = warning.
+       Confirmation required.
+    =============================================== */
+
+    else {
+
+      const duplicateBusiness =
+        await Business.findOne({
+
+          _id: {
+            $ne: id,
+          },
+
+          $or:
+            duplicateConditions,
+
+        })
+          .select(
+            "_id name phone alternatePhone landline owner cityName"
+          )
+          .lean();
+
+
+      if (
+        duplicateBusiness &&
+        !confirmDuplicateContact
+      ) {
+
+        return res.status(409).json({
+
+          success: false,
+
+          code:
+            "DUPLICATE_CONTACT_WARNING",
+
+          requiresConfirmation:
+            true,
+
+          message:
+            "This mobile, alternate mobile or landline number is already used by another business. Please confirm to continue.",
+
+          duplicate: {
+
+            businessId:
+              duplicateBusiness._id,
+
+            businessName:
+              duplicateBusiness.name,
+
+            phone:
+              duplicateBusiness.phone ||
+              "",
+
+            alternatePhone:
+              duplicateBusiness.alternatePhone ||
+              "",
+
+            landline:
+              duplicateBusiness.landline ||
+              "",
+
+            cityName:
+              duplicateBusiness.cityName ||
+              "",
+
+          },
+
+        });
+
+      }
+
+    }
+
+  }
+
+}
 
 
       /* =====================================================

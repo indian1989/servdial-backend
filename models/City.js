@@ -94,11 +94,38 @@ const citySchema = new mongoose.Schema(
     default: ""
   },
 
-  // ================= STATUS =================
+   // ================= STATUS =================
   status: {
     type: String,
-    enum: ["active","inactive"],
+    enum: ["active", "inactive"],
     default: "active",
+  },
+
+  // ================= SEO REDIRECT =================
+  //
+  // Used when an old/duplicate city record is replaced
+  // by the correct city record.
+  //
+  // Example:
+  // Patna City → Patna
+  // Lalganj → Hajpur
+  // Mahnar → Hajpur
+  // Patepur → Hajpur
+  //
+  // Old city record is kept inactive so its old URL
+  // can permanently redirect to the correct city URL.
+  //
+  redirectToCity: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "City",
+    default: null,
+    index: true,
+  },
+
+  redirectFromReason: {
+    type: String,
+    trim: true,
+    default: "",
   }
 
 },

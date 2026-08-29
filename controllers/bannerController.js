@@ -29,12 +29,19 @@ export const createBanner = async (req, res) => {
 
     // ================= PLACEMENT VALIDATION =================
     const allowedPlacements = [
-      "homepage_top",
-      "homepage_middle",
-      "homepage_bottom",
-      "category_page",
-      "city_page",
-    ];
+  "homepage_top",
+  "homepage_middle",
+  "homepage_bottom",
+
+  "business_listing_top",
+  "business_listing_bottom",
+
+  "category_page_top",
+  "category_page_middle",
+  "category_page_bottom",
+
+  "city_page",
+];
 
     if (!allowedPlacements.includes(placement)) {
       return res.status(400).json({
@@ -475,12 +482,19 @@ export const updateBanner = async (req, res) => {
 
     // ================= VALIDATION =================
     const allowedPlacements = [
-      "homepage_top",
-      "homepage_middle",
-      "homepage_bottom",
-      "category_page",
-      "city_page",
-    ];
+  "homepage_top",
+  "homepage_middle",
+  "homepage_bottom",
+
+  "business_listing_top",
+  "business_listing_bottom",
+
+  "category_page_top",
+  "category_page_middle",
+  "category_page_bottom",
+
+  "city_page",
+];
 
     if (placement && !allowedPlacements.includes(placement)) {
       return res.status(400).json({
