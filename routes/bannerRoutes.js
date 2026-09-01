@@ -43,15 +43,16 @@ router.post(
 // CREATE BANNER
 // =====================================================
 
-// Admin / Superadmin / Provider
+// Admin / Superadmin / Provider / User
 router.post(
   "/",
   protect,
   authorizeRoles(
-    "admin",
-    "superadmin",
-    "provider"
-  ),
+  "user",
+  "admin",
+  "superadmin",
+  "provider"
+),
   createBanner
 );
 

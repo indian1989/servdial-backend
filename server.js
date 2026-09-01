@@ -152,8 +152,12 @@ import bannerRoutes from "./routes/bannerRoutes.js";
 import adminBannerRoutes from "./routes/adminBannerRoutes.js";
 import geocodeRoutes from "./routes/geocodeRoutes.js";
 
+// PAYMENTS
+import paymentRoutes from "./routes/paymentRoutes.js";
+import paymentSettingsRoutes from "./routes/paymentSettingsRoutes.js";
 
-
+// NOTIFICATIONS
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 // =================================================
 // ROOT API
@@ -273,9 +277,6 @@ app.use(
 );
 
 
-
-
-
 // BANNER
 
 app.use(
@@ -289,9 +290,25 @@ app.use(
   adminBannerRoutes
 );
 
+// PAYMENTS
+
+app.use(
+  "/api/payments",
+  paymentRoutes
+);
 
 
+app.use(
+  "/api/payment-settings",
+  paymentSettingsRoutes
+);
 
+// NOTIFICATIONS
+
+app.use(
+  "/api/notifications",
+  notificationRoutes
+);
 
 // FEATURES
 

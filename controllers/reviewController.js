@@ -151,3 +151,29 @@ export const getBusinessReviews = asyncHandler(async (req, res) => {
     },
   });
 });
+
+// ======================================================
+// GET LOGGED-IN USER REVIEWS
+// ======================================================
+export const getMyReviews = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+
+  const reviews = await Review.find({
+    userId,
+    isDeleted: false,
+  })
+    .populate(
+      "businessId",
+      "name slug cityName citySlug categoryId"
+    )
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return res.json({
+    success: true,
+    data: reviews,
+    meta: {
+      total: reviews.length,
+    },
+  });
+});

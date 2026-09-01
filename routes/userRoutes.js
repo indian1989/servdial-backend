@@ -1,50 +1,134 @@
 // backend/routes/userRoutes.js
-import express from "express";
-import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
-import {
-    createAdmin,
-    changePassword,
-    saveBusiness,
-    checkSavedBusiness,
-    removeSavedBusiness,
-    getSavedBusinesses
-} from "../controllers/userController.js";
 
+import express from "express";
+
+import {
+  protect,
+  authorizeRoles,
+} from "../middleware/authMiddleware.js";
+
+import {
+  createAdmin,
+  changePassword,
+  saveBusiness,
+  checkSavedBusiness,
+  removeSavedBusiness,
+  getSavedBusinesses,
+  getUserBanners,
+  updateUserBanner,
+  deleteUserBanner,
+  getUserNotifications,
+  getUserMessages,
+} from "../controllers/userController.js";
 
 const router = express.Router();
 
-// Change password (any authenticated user)
-router.put("/change-password", protect, changePassword);
+// =====================================================
+// CHANGE PASSWORD
+// Any authenticated user
+// =====================================================
 
-// Create admin (only superadmin)
-router.post("/create-admin", protect, authorizeRoles("superadmin"), createAdmin);
-
-// save business
-router.post(
-"/save-business",
-protect,
-saveBusiness
+router.put(
+  "/change-password",
+  protect,
+  changePassword
 );
+
+
+// =====================================================
+// CREATE ADMIN
+// Superadmin only
+// =====================================================
+
+router.post(
+  "/create-admin",
+  protect,
+  authorizeRoles("superadmin"),
+  createAdmin
+);
+
+
+// =====================================================
+// SAVED BUSINESSES
+// =====================================================
+
+// Save business
+router.post(
+  "/save-business",
+  protect,
+  saveBusiness
+);
+
+// Check saved business
+router.get(
+  "/check-saved/:businessId",
+  protect,
+  checkSavedBusiness
+);
+
+// Remove saved business
+router.post(
+  "/remove-saved-business",
+  protect,
+  removeSavedBusiness
+);
+
+// Get saved businesses
+router.get(
+  "/saved-businesses",
+  protect,
+  getSavedBusinesses
+);
+
+
+// =====================================================
+// USER BANNERS
+// =====================================================
+
+// Get logged-in user's own banners
+router.get(
+  "/banners",
+  protect,
+  authorizeRoles("user"),
+  getUserBanners
+);
+
+// Update logged-in user's own banner
+router.put(
+  "/banners/:bannerId",
+  protect,
+  authorizeRoles("user"),
+  updateUserBanner
+);
+
+// Delete logged-in user's own banner
+router.delete(
+  "/banners/:bannerId",
+  protect,
+  authorizeRoles("user"),
+  deleteUserBanner
+);
+
+
+// =====================================================
+// USER NOTIFICATIONS
+// =====================================================
 
 router.get(
-"/check-saved/:businessId",
-protect,
-checkSavedBusiness
-);
-
-// remove saved
-router.post(
-"/remove-saved-business",
-protect,
-removeSavedBusiness
+  "/notifications",
+  protect,
+  getUserNotifications
 );
 
 
-// get saved list
+// =====================================================
+// USER MESSAGES
+// =====================================================
+
 router.get(
-"/saved-businesses",
-protect,
-getSavedBusinesses
+  "/messages",
+  protect,
+  getUserMessages
 );
 
 

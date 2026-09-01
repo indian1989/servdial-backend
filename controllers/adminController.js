@@ -810,6 +810,159 @@ export const getSystemSettings = asyncHandler(async (req, res) => {
 });
 
 /* ======================================================
+   UPDATE SYSTEM SETTINGS
+====================================================== */
+export const updateSystemSettings = asyncHandler(
+  async (req, res) => {
+    const {
+      siteName,
+      siteLogo,
+      contactEmail,
+      contactPhone,
+      maintenanceMode,
+      footerText,
+      socialLinks,
+    } = req.body;
+
+    // ====================================================
+    // VALIDATION
+    // ====================================================
+
+    if (!contactEmail?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Contact email is required.",
+      });
+    }
+
+    // ====================================================
+    // FIND EXISTING SETTINGS
+    // ====================================================
+
+    let settings = await SystemSettings.findOne();
+
+    // ====================================================
+    // CREATE SETTINGS
+    // ====================================================
+
+    if (!settings) {
+      settings = new SystemSettings({
+        siteName:
+          siteName?.trim() || "ServDial",
+
+        siteLogo:
+          siteLogo || "",
+
+        contactEmail:
+          contactEmail.trim(),
+
+        contactPhone:
+          contactPhone || "",
+
+        maintenanceMode:
+          Boolean(maintenanceMode),
+
+        footerText:
+          footerText || "",
+
+        socialLinks: {
+          facebook:
+            socialLinks?.facebook || "",
+
+          twitter:
+            socialLinks?.twitter || "",
+
+          instagram:
+            socialLinks?.instagram || "",
+
+          linkedin:
+            socialLinks?.linkedin || "",
+        },
+
+        createdBy:
+          req.user?._id,
+
+        updatedBy:
+          req.user?._id,
+      });
+    }
+
+    // ====================================================
+    // UPDATE EXISTING SETTINGS
+    // ====================================================
+
+    else {
+      settings.siteName =
+        siteName?.trim() ||
+        settings.siteName;
+
+      settings.siteLogo =
+        siteLogo ??
+        settings.siteLogo;
+
+      settings.contactEmail =
+        contactEmail.trim();
+
+      settings.contactPhone =
+        contactPhone ??
+        settings.contactPhone;
+
+      settings.maintenanceMode =
+        maintenanceMode ??
+        settings.maintenanceMode;
+
+      settings.footerText =
+        footerText ??
+        settings.footerText;
+
+      settings.socialLinks = {
+        facebook:
+          socialLinks?.facebook ??
+          settings.socialLinks?.facebook ??
+          "",
+
+        twitter:
+          socialLinks?.twitter ??
+          settings.socialLinks?.twitter ??
+          "",
+
+        instagram:
+          socialLinks?.instagram ??
+          settings.socialLinks?.instagram ??
+          "",
+
+        linkedin:
+          socialLinks?.linkedin ??
+          settings.socialLinks?.linkedin ??
+          "",
+      };
+
+      settings.updatedBy =
+        req.user?._id;
+    }
+
+    // ====================================================
+    // SAVE
+    // ====================================================
+
+    await settings.save();
+
+    // ====================================================
+    // RESPONSE
+    // ====================================================
+
+    res.json({
+      success: true,
+
+      message:
+        "System settings updated successfully",
+
+      data: settings,
+    });
+  }
+);
+
+/* ======================================================
    ACTIVITY LOGS
 ====================================================== */
 export const getActivityLogs = asyncHandler(async (req, res) => {

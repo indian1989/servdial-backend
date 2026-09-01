@@ -34,30 +34,70 @@ import {
   updateBusinessMedia,
 } from "../controllers/businessController.js";
 
+import {
+  getProviderBanners,
+  updateProviderBanner,
+  deleteProviderBanner,
+} from "../controllers/bannerController.js";
+
 const router = express.Router();
 
 /* ================= SECURITY ================= */
+
 router.use(protect);
+
 router.use(authorizeRoles("provider"));
 
 /* ================= PROVIDER DASHBOARD ================= */
-router.get("/dashboard", getProviderDashboardStats);
+
+router.get(
+  "/dashboard",
+  getProviderDashboardStats
+);
 
 /* ================= BUSINESSES ================= */
-router.get("/businesses", getProviderBusinesses);
+
+router.get(
+  "/businesses",
+  getProviderBusinesses
+);
+
 router.get(
   "/businesses/:id",
   getProviderBusinessById
 );
-router.post("/businesses", createBusiness);
-router.put("/businesses/:id", updateBusiness);
-router.post("/businesses/claim", claimBusiness);
-router.put("/businesses/:id/hours", updateBusinessHours);
-router.put("/businesses/:id/media", updateBusinessMedia);
 
-// ================= LEADS & REVIEWS =================
+router.post(
+  "/businesses",
+  createBusiness
+);
 
-router.get("/leads", getProviderLeads);
+router.put(
+  "/businesses/:id",
+  updateBusiness
+);
+
+router.post(
+  "/businesses/claim",
+  claimBusiness
+);
+
+router.put(
+  "/businesses/:id/hours",
+  updateBusinessHours
+);
+
+router.put(
+  "/businesses/:id/media",
+  updateBusinessMedia
+);
+
+/* ================= LEADS & REVIEWS ================= */
+
+router.get(
+  "/leads",
+  getProviderLeads
+);
 
 router.put(
   "/leads/:id/status",
@@ -79,21 +119,80 @@ router.put(
   cancelProviderLead
 );
 
-router.get("/reviews", getProviderReviews);
+router.get(
+  "/reviews",
+  getProviderReviews
+);
 
 /* ================= ANALYTICS ================= */
-router.get("/analytics", getProviderAnalytics);
+
+router.get(
+  "/analytics",
+  getProviderAnalytics
+);
 
 /* ================= SETTINGS / PROFILE ================= */
-router.get("/settings", getProviderSettings);
-router.get("/profile", getProviderProfile);
+
+router.get(
+  "/settings",
+  getProviderSettings
+);
+
+router.get(
+  "/profile",
+  getProviderProfile
+);
 
 /* ================= MESSAGES / NOTIFICATIONS / OFFERS ================= */
-router.get("/messages", getProviderMessages);
-router.get("/notifications", getProviderNotifications);
-router.get("/offers", getProviderOffers);
+
+router.get(
+  "/messages",
+  getProviderMessages
+);
+
+router.get(
+  "/notifications",
+  getProviderNotifications
+);
+
+router.get(
+  "/offers",
+  getProviderOffers
+);
 
 /* ================= SUBSCRIPTION ================= */
-router.get("/subscription", getProviderSubscription);
+
+router.get(
+  "/subscription",
+  getProviderSubscription
+);
+
+/* ================= PROVIDER BANNER ADS ================= */
+
+/*
+  Banner creation is intentionally NOT here.
+
+  Provider creates a banner through:
+  POST /banners
+  -> createBanner()
+
+  These routes are only for managing
+  the provider's own banners.
+*/
+
+router.get(
+  "/banners",
+  getProviderBanners
+);
+
+router.put(
+  "/banners/:bannerId",
+  updateProviderBanner
+);
+
+router.delete(
+  "/banners/:bannerId",
+  deleteProviderBanner
+);
 
 export default router;

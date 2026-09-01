@@ -6,6 +6,7 @@ import {
   getDashboardStats,
   getAnalytics,
   getSystemSettings,
+  updateSystemSettings,
   getActivityLogs,
   changePassword,
   getAdmins,
@@ -115,6 +116,11 @@ router.put(
 router.get(
   "/system-settings",
   getSystemSettings
+);
+
+router.put(
+  "/system-settings",
+  updateSystemSettings
 );
 
 
