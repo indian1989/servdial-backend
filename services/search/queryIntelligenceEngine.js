@@ -289,17 +289,19 @@ export const buildSearchContext = async (
 
   let semanticCategory = null;
 
-  if (!categorySlug) {
-    semanticCategory =
-      getSemanticCategory(cleanQuery);
+if (!categorySlug) {
+  semanticCategory =
+    getSemanticCategory(
+      safeString(cleanedQuery)
+    );
 
-    if (semanticCategory) {
-      categorySlug =
-        normalizeSlug(
-          semanticCategory
-        );
-    }
+  if (semanticCategory) {
+    categorySlug =
+      normalizeSlug(
+        semanticCategory
+      );
   }
+}
 
   /* =======================================================
    RESOLVE CITY

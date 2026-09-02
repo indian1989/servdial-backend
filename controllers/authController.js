@@ -42,13 +42,41 @@ expiresIn:"10m"
 
 // ================= EMAIL TRANSPORTER =================
 
+console.log("EMAIL_USER:", process.env.EMAIL_USER);
+console.log(
+  "EMAIL_PASS:",
+  process.env.EMAIL_PASS ? "AVAILABLE" : "MISSING"
+);
+
 const transporter = nodemailer.createTransport({
 
-  service:"gmail",
+  service: "gmail",
 
-  auth:{
-    user:process.env.EMAIL_USER,
-    pass:process.env.EMAIL_PASS
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+
+});
+
+
+// ================= VERIFY EMAIL TRANSPORT =================
+
+transporter.verify((error, success) => {
+
+  if (error) {
+
+    console.error(
+      "❌ EMAIL TRANSPORT ERROR:",
+      error
+    );
+
+  } else {
+
+    console.log(
+      "✅ EMAIL TRANSPORT READY"
+    );
+
   }
 
 });
@@ -67,32 +95,44 @@ const generateOTP = () => {
 
 // ================= SEND EMAIL OTP =================
 
-  const sendEmailOTP = async(
+  const sendEmailOTP = async (
   email,
   otp,
   subject
-  )=>{
+) => {
+  try {
+    const info = await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject,
+      text: `
+Your ServDial OTP is ${otp}
 
+OTP valid for 5 minutes.
+      `,
+    });
 
-  await transporter.sendMail({
+    console.log("EMAIL SENT:", {
+      messageId: info.messageId,
+      response: info.response,
+      accepted: info.accepted,
+      rejected: info.rejected,
+    });
 
-  from:process.env.EMAIL_USER,
+    return info;
 
-  to:email,
+  } catch (error) {
+    console.error("EMAIL SEND ERROR:", {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode,
+    });
 
-  subject,
-
-  text:
-  `
-  Your ServDial OTP is ${otp}
-
-  OTP valid for 5 minutes.
-  `
-
-  });
-
-
-  };
+    throw error;
+  }
+};
 
 
 // =================================================
@@ -271,8 +311,6 @@ businessName,
 categoryId,
 cityId,
 
-emailOtp
-
 }=req.body;
 
 
@@ -283,8 +321,7 @@ if(
 !name ||
 !email ||
 !phone ||
-!password ||
-!emailOtp
+!password
 ){
 
 res.status(400);
@@ -365,43 +402,6 @@ throw new Error(
 }
 
 
-
-// Verify Email OTP
-
-const otpRecord =
-await OtpVerification.findOne({
-
-email,
-
-otp:emailOtp,
-
-type:"email_verification",
-
-expiresAt:{
-$gt:Date.now()
-}
-
-});
-
-await OtpVerification.deleteOne({
-_id:otp._id
-});
-
-
-
-if(!otpRecord){
-
-res.status(400);
-
-throw new Error(
-"Invalid or expired email OTP"
-);
-
-}
-
-
-
-
 // Create User
 
 const user =
@@ -451,17 +451,6 @@ isVerified:true
 
 
 });
-
-
-
-// Remove used OTP
-
-await OtpVerification.deleteOne({
-
-_id:otpRecord._id
-
-});
-
 
 
 // Response

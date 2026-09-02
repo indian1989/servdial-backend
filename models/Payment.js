@@ -151,6 +151,16 @@ const paymentSchema = new mongoose.Schema(
       trim: true,
     },
 
+    paymentUpiQrCode: {
+      type: String,
+      trim: true,
+    },
+
+    paymentUpiQrPublicId: {
+      type: String,
+      trim: true,
+    },
+
     paymentBankName: {
       type: String,
       trim: true,

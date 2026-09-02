@@ -243,12 +243,8 @@ const buildTextConditions = (
         $options: "i",
       },
     },
-    {
-      services: {
-        $regex: safeText,
-        $options: "i",
-      },
-    },
+    { "services.name": { $regex: safeText, $options: "i" } },
+{ "services.description": { $regex: safeText, $options: "i" } },
     {
       categorySlug: {
         $regex: safeText,
@@ -294,12 +290,8 @@ const buildTextConditions = (
           $options: "i",
         },
       },
-      {
-        services: {
-          $regex: safeToken,
-          $options: "i",
-        },
-      },
+      { "services.name": { $regex: safeToken, $options: "i" } },
+{ "services.description": { $regex: safeToken, $options: "i" } },
       {
         categorySlug: {
           $regex: safeToken,
@@ -307,6 +299,71 @@ const buildTextConditions = (
         },
       }
     );
+  }
+
+  return conditions;
+};
+
+/* =========================================================
+   🔎 BUILD BUSINESS-NAME CONDITIONS
+========================================================= */
+
+const buildBusinessNameConditions = (
+  textSearch = ""
+) => {
+  const text =
+    normalizeText(textSearch);
+
+  if (!text) {
+    return [];
+  }
+
+  const tokens =
+    text
+      .split(/\s+/)
+      .map(
+        (token) =>
+          token.trim()
+      )
+      .filter(Boolean);
+
+  if (!tokens.length) {
+    return [];
+  }
+
+  const conditions = [];
+
+  /* =======================================================
+     FULL PHRASE — NAME ONLY
+  ======================================================= */
+
+  const safeText =
+    escapeRegex(text);
+
+  conditions.push({
+    name: {
+      $regex: safeText,
+      $options: "i",
+    },
+  });
+
+  /* =======================================================
+     TOKEN FALLBACK — NAME ONLY
+  ======================================================= */
+
+  for (
+    const token
+    of tokens
+  ) {
+    const safeToken =
+      escapeRegex(token);
+
+    conditions.push({
+      name: {
+        $regex: safeToken,
+        $options: "i",
+      },
+    });
   }
 
   return conditions;
@@ -537,47 +594,25 @@ const applyCityFilter = (
    🏷 APPLY CATEGORY FILTER
 ========================================================= */
 
-const applyCategoryFilter = (
-  query,
-  categoryId,
-  categoryIds
-) => {
+function applyCategoryFilter(query, categoryId, categoryIds) {
+  const ids = Array.isArray(categoryIds) && categoryIds.length
+    ? categoryIds.filter(Boolean)
+    : [];
 
-  /*
-   * Leaf category IDs have priority.
-   *
-   * Example:
-   *
-   * Parent:
-   *   Home Services
-   *
-   * Leaf:
-   *   Plumbing
-   *   Electrical
-   *
-   * Search should query:
-   *
-   * categoryId: {
-   *   $in: [...]
-   * }
-   */
-
-  if (
-    Array.isArray(categoryIds) &&
-    categoryIds.length > 0
-  ) {
-
-    query.categoryId = {
-      $in: categoryIds,
+  if (ids.length) {
+    query._servdialCategoryFilter = {
+      categoryId: {
+        $in: ids,
+      },
     };
 
     return;
   }
 
   if (categoryId) {
-
-    query.categoryId =
-      categoryId;
+    query._servdialCategoryFilter = {
+      categoryId,
+    };
   }
 };
 
@@ -586,46 +621,42 @@ const applyCategoryFilter = (
    🔎 APPLY TEXT FILTER
 ========================================================= */
 
-const applyTextFilter = (
+function applyTextFilter(
   query,
   textSearch,
-  hasCategory
-) => {
+  {
+    nameOnly = false,
+  } = {}
+) {
+  const safeText =
+    String(textSearch || "").trim();
 
-  const textConditions =
-    buildTextConditions(
-      textSearch
-    );
-
-  if (
-    !textConditions.length
-  ) {
+  if (!safeText) {
     return;
   }
 
-  /*
-   * IMPORTANT:
-   *
-   * With resolved category:
-   *
-   * category determines eligibility
-   * text determines relevance/ranking
-   *
-   * Without category:
-   *
-   * text must determine candidate eligibility.
-   */
+  const textConditions =
+    nameOnly
+      ? buildBusinessNameConditions(
+          safeText
+        )
+      : buildTextConditions(
+          safeText
+        );
 
-  if (!hasCategory) {
-
-    query.$and = [
-      {
-        $or:
-          textConditions,
-      },
-    ];
+  if (!textConditions.length) {
+    return;
   }
-};
+
+  query.$and = [
+    ...(Array.isArray(query.$and)
+      ? query.$and
+      : []),
+    {
+      $or: textConditions,
+    },
+  ];
+}
 
 
 /* =========================================================
@@ -778,7 +809,7 @@ export const unifiedSearchEngine =
       );
 
 
-      /* ===================================================
+       /* ===================================================
          🏷 CATEGORY
       =================================================== */
 
@@ -787,29 +818,6 @@ export const unifiedSearchEngine =
         categoryId,
         categoryIds
       );
-
-
-      /* ===================================================
-         🔎 TEXT
-      =================================================== */
-
-      const hasCategory =
-        Boolean(
-          categoryId
-        ) ||
-        (
-          Array.isArray(
-            categoryIds
-          ) &&
-          categoryIds.length > 0
-        );
-
-      applyTextFilter(
-        query,
-        textSearch,
-        hasCategory
-      );
-
 
       /* ===================================================
          📍 GEO
@@ -820,48 +828,9 @@ export const unifiedSearchEngine =
         filters
       );
 
-
       /* ===================================================
-         🐛 DEBUG QUERY
+         📊 CANDIDATE LIMIT
       =================================================== */
-
-      if (
-        process.env.NODE_ENV !==
-        "production"
-      ) {
-
-        console.log(
-          "🔥 SEARCH QUERY:",
-          JSON.stringify(
-            query,
-            null,
-            2
-          )
-        );
-      }
-
-
-      /* ===================================================
-         📊 FETCH CANDIDATES
-      =================================================== */
-
-      /*
-       * Fetch a larger candidate pool than the final limit.
-       *
-       * Why?
-       *
-       * Ranking should happen BEFORE final truncation.
-       *
-       * Example:
-       *
-       * requested limit = 20
-       *
-       * Fetch = 100
-       *
-       * Rank all 100
-       *
-       * Return best 20.
-       */
 
       const finalLimit =
         normalizeLimit(
@@ -877,27 +846,451 @@ export const unifiedSearchEngine =
           500
         );
 
+      /* ===================================================
+   🔎 SEARCH RETRIEVAL
+=================================================== */
 
-      const businesses =
-        await Business.find(
-          query
-        )
+/*
+ * Retrieval strategy:
+ *
+ * 1. Category candidates
+ *    → semantic/category eligibility
+ *
+ * 2. Name candidates
+ *    → business-name matching
+ *
+ * 3. Text candidates
+ *    → service / description / keyword matching
+ *
+ * IMPORTANT:
+ *
+ * A business description must NEVER be treated as
+ * proof of an exact business-name match.
+ *
+ * Category and text retrieval are therefore kept
+ * as separate candidate pools.
+ */
 
-          .populate(
-            "cityId",
-            "name slug district state"
+const hasCategory =
+  Boolean(
+    categoryId
+  ) ||
+  (
+    Array.isArray(
+      categoryIds
+    ) &&
+    categoryIds.length > 0
+  );
+
+const hasText =
+  Boolean(
+    String(
+      textSearch || ""
+    ).trim()
+  );
+
+const intent =
+  String(
+    searchContext?.intent ||
+      searchContext?.searchIntent ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+
+
+/* ===================================================
+   📦 CANDIDATE POOLS
+=================================================== */
+
+let categoryBusinesses = [];
+
+let nameBusinesses = [];
+
+let textBusinesses = [];
+
+/* ===================================================
+   🧠 BUSINESS-NAME INTENT
+=================================================== */
+
+/*
+ * Intent is supplied by Query Intelligence.
+ *
+ * The search engine does NOT detect intent.
+ *
+ * We only consume the resolved intent.
+ *
+ * Supported business-name intent labels cover the
+ * common names used by the intent layer.
+ */
+
+const isBusinessNameIntent =
+  [
+    "business_name",
+    "business-name",
+    "businessname",
+    "exact_name",
+    "exact-name",
+    "exact_business_name",
+    "exact-business-name",
+    "name",
+  ].includes(
+    intent
+  );
+
+/* ===================================================
+   🏷 CATEGORY CANDIDATES
+=================================================== */
+
+if (
+  hasCategory &&
+  query._servdialCategoryFilter
+) {
+  const categoryQuery = {
+    ...query,
+    ...query._servdialCategoryFilter,
+  };
+
+  delete categoryQuery
+    ._servdialCategoryFilter;
+
+  /*
+   * Category pool contains ONLY:
+   *
+   * approved
+   * city
+   * category
+   * geo
+   *
+   * No description/text condition.
+   */
+
+  categoryBusinesses =
+    await Business.find(
+      categoryQuery
+    )
+      .populate(
+        "cityId",
+        "name slug district state"
+      )
+      .populate(
+        "categoryId",
+        "name slug parentCategory"
+      )
+      .limit(
+        candidateLimit
+      )
+      .lean();
+}
+
+/* ===================================================
+   🏷 BUSINESS-NAME CANDIDATES
+=================================================== */
+
+/*
+ * Business-name retrieval is ALWAYS name-only.
+ *
+ * This prevents:
+ *
+ * Expert Electricals
+ *
+ * from being discovered merely because the phrase
+ * exists somewhere inside another business description.
+ */
+
+if (
+  hasText
+) {
+  const nameQuery = {
+    ...query,
+  };
+
+  delete nameQuery
+    ._servdialCategoryFilter;
+
+  applyTextFilter(
+    nameQuery,
+    textSearch,
+    {
+      nameOnly: true,
+    }
+  );
+
+  nameBusinesses =
+    await Business.find(
+      nameQuery
+    )
+      .populate(
+        "cityId",
+        "name slug district state"
+      )
+      .populate(
+        "categoryId",
+        "name slug parentCategory"
+      )
+      .limit(
+        candidateLimit
+      )
+      .lean();
+}
+
+/* ===================================================
+   🔎 SERVICE / TEXT CANDIDATES
+=================================================== */
+
+/*
+ * Full text retrieval is used ONLY when:
+ *
+ * - there is no resolved category, OR
+ * - the resolved intent is explicitly a service/text
+ *   intent.
+ *
+ * This prevents a semantic category such as:
+ *
+ * electrician
+ *
+ * from turning every description containing:
+ *
+ * Expert Electricals
+ *
+ * into a business-name match.
+ */
+
+const isServiceIntent =
+  [
+    "service",
+    "service_search",
+    "service-search",
+    "natural_language",
+    "natural-language",
+    "natural_language_search",
+    "natural-language-search",
+    "mixed",
+    "general",
+    "search",
+  ].includes(
+    intent
+  );
+
+const shouldUseFullText =
+  hasText &&
+  (
+    !hasCategory ||
+    isServiceIntent
+  );
+
+if (
+  shouldUseFullText
+) {
+  const textQuery = {
+    ...query,
+  };
+
+  delete textQuery
+    ._servdialCategoryFilter;
+
+  applyTextFilter(
+    textQuery,
+    textSearch,
+    {
+      nameOnly: false,
+    }
+  );
+
+  textBusinesses =
+    await Business.find(
+      textQuery
+    )
+      .populate(
+        "cityId",
+        "name slug district state"
+      )
+      .populate(
+        "categoryId",
+        "name slug parentCategory"
+      )
+      .limit(
+        candidateLimit
+      )
+      .lean();
+}
+
+/* ===================================================
+   🔀 MERGE + DEDUPE
+=================================================== */
+
+const businessMap =
+  new Map();
+
+/*
+ * Priority of insertion:
+ *
+ * 1. Exact/name candidates
+ * 2. Category candidates
+ * 3. Full-text candidates
+ *
+ * This does NOT perform ranking.
+ *
+ * It only makes sure that if the same business
+ * appears in multiple pools, the name candidate
+ * representation is retained.
+ */
+
+for (
+  const business
+  of nameBusinesses
+) {
+  if (
+    !business?._id
+  ) {
+    continue;
+  }
+
+  businessMap.set(
+    String(
+      business._id
+    ),
+    business
+  );
+}
+
+for (
+  const business
+  of categoryBusinesses
+) {
+  if (
+    !business?._id
+  ) {
+    continue;
+  }
+
+  if (
+    !businessMap.has(
+      String(
+        business._id
+      )
+    )
+  ) {
+    businessMap.set(
+      String(
+        business._id
+      ),
+      business
+    );
+  }
+}
+
+for (
+  const business
+  of textBusinesses
+) {
+  if (
+    !business?._id
+  ) {
+    continue;
+  }
+
+  if (
+    !businessMap.has(
+      String(
+        business._id
+      )
+    )
+  ) {
+    businessMap.set(
+      String(
+        business._id
+      ),
+      business
+    );
+  }
+}
+
+const businesses =
+  Array.from(
+    businessMap.values()
+  );
+
+/* ===================================================
+   🐛 DEBUG QUERY
+=================================================== */
+
+if (
+  process.env.NODE_ENV !==
+  "production"
+) {
+  console.log(
+    "🔥 SEARCH INTENT:",
+    intent
+  );
+
+  console.log(
+    "🔥 HAS CATEGORY:",
+    hasCategory
+  );
+
+  console.log(
+    "🔥 NAME CANDIDATES:",
+    nameBusinesses.length
+  );
+
+  console.log(
+    "🔥 CATEGORY CANDIDATES:",
+    categoryBusinesses.length
+  );
+
+  console.log(
+    "🔥 TEXT CANDIDATES:",
+    textBusinesses.length
+  );
+
+  console.log(
+    "🔥 MERGED CANDIDATES:",
+    businesses.length
+  );
+
+  console.log(
+    "🔥 SEARCH BASE QUERY:",
+    JSON.stringify(
+      query,
+      null,
+      2
+    )
+  );
+}
+
+      /* ===================================================
+         🐛 DEBUG QUERY
+      =================================================== */
+
+      if (
+        process.env.NODE_ENV !==
+        "production"
+      ) {
+        console.log(
+          "🔥 CATEGORY CANDIDATES:",
+          categoryBusinesses.length
+        );
+
+        console.log(
+          "🔥 TEXT CANDIDATES:",
+          textBusinesses.length
+        );
+
+        console.log(
+          "🔥 MERGED CANDIDATES:",
+          businesses.length
+        );
+
+        console.log(
+          "🔥 SEARCH BASE QUERY:",
+          JSON.stringify(
+            query,
+            null,
+            2
           )
-
-          .populate(
-            "categoryId",
-            "name slug parentCategory"
-          )
-
-          .limit(
-            candidateLimit
-          )
-
-          .lean();
+        );
+      }
 
 
       if (

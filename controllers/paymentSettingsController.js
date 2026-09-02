@@ -3,7 +3,7 @@
 import asyncHandler from "express-async-handler";
 
 import PaymentSettings from "../models/PaymentSettings.js";
-
+import cloudinary from "../config/cloudinary.js";
 
 // =========================================================
 // HELPERS
@@ -16,6 +16,21 @@ const isAdminUser = (req) => {
     role === "admin" ||
     role === "superadmin"
   );
+};
+
+const deleteQrFromCloudinary = async (publicId) => {
+  if (!publicId) return;
+
+  try {
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: "image",
+    });
+  } catch (error) {
+    console.error(
+      "Failed to delete old UPI QR from Cloudinary:",
+      error
+    );
+  }
 };
 
 
@@ -170,22 +185,31 @@ export const createPaymentSettings =
     // =====================================================
 
     if (upi.enabled) {
-      if (!upi.upiId?.trim()) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "UPI ID is required when UPI is enabled",
-        });
-      }
+  const hasUpiId =
+    Boolean(upi.upiId?.trim());
 
-      if (!upi.accountName?.trim()) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "UPI account name is required when UPI is enabled",
-        });
-      }
-    }
+  const hasQrCode =
+  Boolean(upi.qrCode?.trim());
+
+  if (
+    !hasUpiId &&
+    !hasQrCode
+  ) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "UPI ID or UPI QR code is required when UPI is enabled",
+    });
+  }
+
+  if (!upi.accountName?.trim()) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "UPI account name is required when UPI is enabled",
+    });
+  }
+}
 
     // =====================================================
     // BANK VALIDATION
@@ -248,16 +272,22 @@ export const createPaymentSettings =
       new PaymentSettings({
         isActive,
 
-        upi: {
-          enabled:
-            Boolean(upi.enabled),
+  upi: {
+  enabled:
+    Boolean(upi.enabled),
 
-          upiId:
-            upi.upiId?.trim() || "",
+  upiId:
+    upi.upiId?.trim() || "",
 
-          accountName:
-            upi.accountName?.trim() || "",
-        },
+  accountName:
+    upi.accountName?.trim() || "",
+
+  qrCode:
+    upi.qrCode?.trim() || "",
+
+  qrCodePublicId:
+    upi.qrCodePublicId?.trim() || "",
+},
 
         bank: {
           enabled:
@@ -353,37 +383,58 @@ export const updatePaymentSettings =
     } = req.body;
 
     // =====================================================
+// QR CLEANUP TRACKING
+// =====================================================
+
+let oldQrPublicId = "";
+let oldQrUrl = "";
+
+let qrChanged = false;
+let qrRemoved = false;
+
+    // =====================================================
     // MERGE UPI
     // =====================================================
 
     if (upi !== undefined) {
-      const nextUpi = {
-        enabled:
-          upi.enabled !== undefined
-            ? Boolean(upi.enabled)
-            : settings.upi?.enabled,
+const nextUpi = {
+  enabled:
+    upi.enabled !== undefined
+      ? Boolean(upi.enabled)
+      : settings.upi?.enabled,
 
-        upiId:
-          upi.upiId !== undefined
-            ? upi.upiId.trim()
-            : settings.upi?.upiId,
+  upiId:
+    upi.upiId !== undefined
+      ? upi.upiId.trim()
+      : settings.upi?.upiId,
 
-        accountName:
-          upi.accountName !== undefined
-            ? upi.accountName.trim()
-            : settings.upi?.accountName,
-      };
+  accountName:
+    upi.accountName !== undefined
+      ? upi.accountName.trim()
+      : settings.upi?.accountName,
+
+  qrCode:
+    upi.qrCode !== undefined
+      ? upi.qrCode.trim()
+      : settings.upi?.qrCode,
+
+  qrCodePublicId:
+    upi.qrCodePublicId !== undefined
+      ? upi.qrCodePublicId.trim()
+      : settings.upi?.qrCodePublicId,
+};
 
       if (
-        nextUpi.enabled &&
-        !nextUpi.upiId
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "UPI ID is required when UPI is enabled",
-        });
-      }
+  nextUpi.enabled &&
+  !nextUpi.upiId &&
+  !nextUpi.qrCode
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "UPI ID or UPI QR code is required when UPI is enabled",
+  });
+}
 
       if (
         nextUpi.enabled &&
@@ -396,8 +447,36 @@ export const updatePaymentSettings =
         });
       }
 
-      settings.upi =
-        nextUpi;
+// =====================================================
+// QR CHANGE DETECTION
+// =====================================================
+
+oldQrPublicId =
+  settings.upi?.qrCodePublicId || "";
+
+oldQrUrl =
+  settings.upi?.qrCode || "";
+
+const newQrPublicId =
+  nextUpi.qrCodePublicId || "";
+
+const newQrUrl =
+  nextUpi.qrCode || "";
+
+// QR was replaced with another QR
+qrChanged =
+  Boolean(oldQrPublicId) &&
+  (
+    oldQrPublicId !== newQrPublicId ||
+    oldQrUrl !== newQrUrl
+  );
+
+// Existing QR was removed
+qrRemoved =
+  Boolean(oldQrPublicId) &&
+  !newQrUrl;
+
+settings.upi = nextUpi;
     }
 
     // =====================================================
@@ -578,9 +657,19 @@ if (isActive !== undefined) {
     // pre("save") executes here.
     //
 
-    await settings.save();
+await settings.save();
 
-    return res.status(200).json({
+// =====================================================
+// CLEANUP OLD UPI QR FROM CLOUDINARY
+// =====================================================
+
+if (qrChanged || qrRemoved) {
+  await deleteQrFromCloudinary(
+    oldQrPublicId
+  );
+}
+
+return res.status(200).json({
       success: true,
       message:
         "Payment settings updated successfully",

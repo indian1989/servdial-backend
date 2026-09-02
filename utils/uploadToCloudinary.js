@@ -1,3 +1,4 @@
+// backend/utils/uploadToCloudinary.js
 import cloudinary from "../config/cloudinary.js";
 
 export const uploadImage = async (fileBuffer) => {

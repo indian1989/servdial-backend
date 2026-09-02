@@ -7,9 +7,7 @@ import {
   setCache,
 } from "../utils/memoryCache.js";
 
-import {
-  rankBusinesses,
-} from "../services/ranking/unifiedRankingEngine.js";
+import { rankBusinesses } from "../utils/rankBusinesses.js";
 
 import {
   normalizeLocation,

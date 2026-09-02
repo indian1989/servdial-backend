@@ -5,8 +5,7 @@ import asyncHandler from "express-async-handler";
 import Business from "../../models/Business.js";
 import City from "../../models/City.js";
 
-import { rankBusinesses } from "../../services/ranking/unifiedRankingEngine.js";
-
+import { rankBusinesses } from "../../utils/rankBusinesses.js";
 
 /* =========================================================
    CORE VALIDATION

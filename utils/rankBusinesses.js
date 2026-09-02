@@ -121,6 +121,221 @@ const getNameMatchScore = (business, context = {}) => {
   return 0;
 };
 
+// =========================================================
+// 🔎 LEXICAL SEARCH RELEVANCE
+// =========================================================
+
+const getLexicalRelevanceScore = (
+  business,
+  context = {}
+) => {
+  const query = normalizeText(
+    context?.textSearch ||
+    context?.rawQuery ||
+    context?.query ||
+    ""
+  );
+
+  if (!query) {
+    return 0;
+  }
+
+  const tokens = query
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  if (!tokens.length) {
+    return 0;
+  }
+
+  const getFieldText = (value) => {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => {
+          if (typeof item === "string") {
+            return item;
+          }
+
+          return [
+            item?.name,
+            item?.description,
+          ]
+            .filter(Boolean)
+            .join(" ");
+        })
+        .join(" ");
+    }
+
+    return String(value || "");
+  };
+
+  const fields = {
+    name: normalizeText(
+      getFieldText(business?.name)
+    ),
+
+    services: normalizeText(
+      getFieldText(business?.services)
+    ),
+
+    tags: normalizeText(
+      getFieldText(business?.tags)
+    ),
+
+    keywords: normalizeText(
+      getFieldText(business?.keywords)
+    ),
+
+    description: normalizeText(
+      getFieldText(business?.description)
+    ),
+
+    category: normalizeText(
+      getFieldText(business?.categorySlug)
+    ),
+  };
+
+  let matchedTokens = 0;
+  let weightedMatch = 0;
+  let strongestFieldMatch = 0;
+
+  for (const token of tokens) {
+    let tokenWeight = 0;
+
+    // 🥇 Business name
+    if (fields.name.includes(token)) {
+      tokenWeight = Math.max(
+        tokenWeight,
+        1.00
+      );
+    }
+
+    // 🥈 Services
+    if (fields.services.includes(token)) {
+      tokenWeight = Math.max(
+        tokenWeight,
+        0.85
+      );
+    }
+
+    // 🥉 Category
+    if (fields.category.includes(token)) {
+      tokenWeight = Math.max(
+        tokenWeight,
+        0.80
+      );
+    }
+
+    // Keywords
+    if (fields.keywords.includes(token)) {
+      tokenWeight = Math.max(
+        tokenWeight,
+        0.65
+      );
+    }
+
+    // Tags
+    if (fields.tags.includes(token)) {
+      tokenWeight = Math.max(
+        tokenWeight,
+        0.60
+      );
+    }
+
+    // Description is intentionally weak.
+    // Generic words like "expert", "best", etc.
+    // must not create strong search relevance.
+    if (fields.description.includes(token)) {
+      tokenWeight = Math.max(
+        tokenWeight,
+        0.25
+      );
+    }
+
+    if (tokenWeight > 0) {
+      matchedTokens += 1;
+      weightedMatch += tokenWeight;
+
+      strongestFieldMatch =
+        Math.max(
+          strongestFieldMatch,
+          tokenWeight
+        );
+    }
+  }
+
+  if (!matchedTokens) {
+    return 0;
+  }
+
+  const tokenCoverage =
+    matchedTokens / tokens.length;
+
+  const averageMatch =
+    weightedMatch / tokens.length;
+
+  // =======================================================
+  // 🎯 FULL QUERY COVERAGE
+  // =======================================================
+
+  if (tokenCoverage === 1) {
+    return clamp01(
+      (tokenCoverage * 0.60) +
+      (averageMatch * 0.40)
+    );
+  }
+
+  // =======================================================
+  // 🎯 PARTIAL QUERY COVERAGE
+  //
+  // A single generic description match should remain weak.
+  // A strong business-name/service/category match can still
+  // be useful when only part of a multi-word query matches.
+  // =======================================================
+
+  if (tokens.length > 1) {
+
+    // Strong field match:
+    // e.g. "Expert Electricals"
+    // matched against "Chourasia Electricals"
+    if (
+      strongestFieldMatch >= 0.80
+    ) {
+      return clamp01(
+        strongestFieldMatch *
+        tokenCoverage
+      );
+    }
+
+    // Weak description-only partial match:
+    // e.g. "expert" inside an unrelated description.
+    if (
+      strongestFieldMatch <= 0.25
+    ) {
+      return clamp01(
+        strongestFieldMatch *
+        tokenCoverage *
+        0.50
+      );
+    }
+
+    return clamp01(
+      strongestFieldMatch *
+      tokenCoverage *
+      0.75
+    );
+  }
+
+  // =======================================================
+  // 🔹 SINGLE-TOKEN QUERY
+  // =======================================================
+
+  return clamp01(
+    strongestFieldMatch
+  );
+};
+
 /* =========================================================
    📊 SIGNAL NORMALIZATION
 ========================================================= */
@@ -495,6 +710,12 @@ const nameMatch =
     context
   );
 
+const lexicalRelevance =
+  getLexicalRelevanceScore(
+    business,
+    context
+  );
+
 let finalScore =
   baseScore;
 
@@ -507,17 +728,28 @@ if (nameMatch === 1) {
 }
 
 // =====================================================
-// 🥈 PARTIAL NAME MATCH
+// 🥈 STRONG NAME MATCH
 // =====================================================
 
 else if (nameMatch > 0) {
   finalScore =
     Math.max(
       finalScore,
-      0.85 + (nameMatch * 0.10)
+      0.82 + (nameMatch * 0.08)
     );
 }
 
+// =====================================================
+// 🥉 LEXICAL RELEVANCE
+// =====================================================
+
+else if (lexicalRelevance > 0) {
+  finalScore =
+    Math.max(
+      finalScore,
+      lexicalRelevance * 0.78
+    );
+}
 
           return {
             ...business,
@@ -548,6 +780,7 @@ else if (nameMatch > 0) {
   trusted: signals.trusted,
   premium: signals.premium,
   nameMatch,
+  lexicalRelevance,
 },
           };
 

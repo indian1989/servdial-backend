@@ -18,13 +18,34 @@ const paymentSettingsSchema = new mongoose.Schema(
     // PAYMENT METHODS
     // =========================
 
-    upi: {
+        upi: {
       enabled: {
         type: Boolean,
         default: true,
       },
 
+      // =========================
+      // UPI ID
+      // =========================
+
       upiId: {
+        type: String,
+        trim: true,
+      },
+
+      // =========================
+      // UPI QR CODE
+      // =========================
+      // QR image is stored on Cloudinary.
+      // Only the secure URL and public ID are
+      // stored in MongoDB.
+
+      qrCode: {
+        type: String,
+        trim: true,
+      },
+
+      qrCodePublicId: {
         type: String,
         trim: true,
       },

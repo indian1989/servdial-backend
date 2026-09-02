@@ -85,8 +85,7 @@ export const unifiedSearch = asyncHandler(async (req, res) => {
           citySlug || null,
 
         // Frontend detected city
-        city:
-          city || null,
+        city: null,
 
         categorySlug:
           categorySlug || null,
@@ -111,7 +110,7 @@ export const unifiedSearch = asyncHandler(async (req, res) => {
   // INVALID CITY
   // =====================================================
 
-  if (context.debug?.invalidCity) {
+  if (context.cityResolutionFailed) {
 
     return res.json({
       success: true,
@@ -140,16 +139,16 @@ export const unifiedSearch = asyncHandler(async (req, res) => {
           true,
 
         requestedCitySlug:
-          context.debug?.requestedCitySlug || null,
+  context.requestedCitySlug || null,
 
-        requestedCityCandidate:
-          context.debug?.requestedCityCandidate || null,
+requestedCityCandidate:
+  context.requestedCityCandidate || null,
 
-        resolvedCitySlug:
-          null,
+resolvedCitySlug:
+  null,
 
-        message:
-          `City "${context.debug?.requestedCityCandidate || context.citySlug}" was not found.`,
+message:
+  `City "${context.requestedCityCandidate || context.requestedCitySlug || context.citySlug}" was not found.`,
       },
     });
   }
@@ -200,16 +199,16 @@ export const unifiedSearch = asyncHandler(async (req, res) => {
         context.categorySlug || null,
 
       invalidCity:
-        context.debug?.invalidCity || false,
+        context.cityResolutionFailed || false,
 
       requestedCitySlug:
-        context.debug?.requestedCitySlug || null,
+        context.requestedCitySlug || null,
 
       requestedCityCandidate:
-        context.debug?.requestedCityCandidate || null,
+        context.requestedCityCandidate || null,
 
       resolvedCitySlug:
-        context.debug?.resolvedCitySlug || null,
+  context.citySlug || null,
 
       cityResolutionFailed:
         context.cityResolutionFailed || false,
