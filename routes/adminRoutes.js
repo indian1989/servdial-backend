@@ -5,6 +5,8 @@ import express from "express";
 import {
   getDashboardStats,
   getAnalytics,
+  getVisitorAnalytics,
+  getSearchAnalytics,
   getSystemSettings,
   updateSystemSettings,
   getActivityLogs,
@@ -20,6 +22,18 @@ import {
   protect,
   authorizeRoles,
 } from "../middleware/authMiddleware.js";
+import {
+  getBusinessFunnelAnalytics,
+} from "../controllers/analytics/businessFunnelAnalyticsController.js";
+
+import {
+  getVisitorJourneyAnalytics,
+} from "../controllers/analytics/visitorJourneyAnalyticsController.js";
+
+import {
+  getAcquisitionAnalytics,
+} from "../controllers/analytics/acquisitionAnalyticsController.js";
+
 
 const router = express.Router();
 
@@ -51,6 +65,31 @@ router.get(
 router.get(
   "/analytics",
   getAnalytics
+);
+
+router.get(
+  "/visitor-analytics",
+  getVisitorAnalytics
+);
+
+router.get(
+  "/search-analytics",
+  getSearchAnalytics
+);
+
+router.get(
+  "/business-funnel-analytics",
+  getBusinessFunnelAnalytics
+);
+
+router.get(
+  "/visitor-journey-analytics",
+  getVisitorJourneyAnalytics
+);
+
+router.get(
+  "/acquisition-analytics",
+  getAcquisitionAnalytics
 );
 
 

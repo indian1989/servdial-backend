@@ -159,6 +159,9 @@ import paymentSettingsRoutes from "./routes/paymentSettingsRoutes.js";
 // NOTIFICATIONS
 import notificationRoutes from "./routes/notificationRoutes.js";
 
+// VISITORS
+import analyticsTrackingRoutes from "./routes/analyticsTrackingRoutes.js";
+
 // =================================================
 // ROOT API
 // =================================================
@@ -308,6 +311,13 @@ app.use(
 app.use(
   "/api/notifications",
   notificationRoutes
+);
+
+// VISITOR ANALYTICS
+
+app.use(
+  "/api/analytics",
+  analyticsTrackingRoutes
 );
 
 // FEATURES

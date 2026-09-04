@@ -3,6 +3,10 @@ import asyncHandler from "express-async-handler";
 import { buildSearchContext } from "../services/search/queryIntelligenceEngine.js";
 import { unifiedSearchEngine } from "../services/search/unifiedSearchEngine.js";
 
+import {
+  trackSearch,
+} from "../services/analytics/searchTrackingService.js";
+
 /**
  * =========================================================
  * 🔎 UNIFIED SEARCH CONTROLLER
@@ -36,6 +40,8 @@ export const unifiedSearch = asyncHandler(async (req, res) => {
     lng,
     distance = 10,
     limit = 20,
+    visitorId,
+    sessionId,
   } = req.query;
 
 
@@ -111,6 +117,51 @@ export const unifiedSearch = asyncHandler(async (req, res) => {
   // =====================================================
 
   if (context.cityResolutionFailed) {
+try {
+  await trackSearch({
+    visitorId,
+    sessionId,
+    user: req.user || null,
+
+    query: cleanedQuery,
+
+    path:
+      req.originalUrl?.split("?")[0] ||
+      "/search",
+
+    city:
+      context.cityId || null,
+
+    category:
+      context.categoryId || null,
+
+    citySlug:
+      context.citySlug || "",
+
+    categorySlug:
+      context.categorySlug || "",
+
+    resultCount: 0,
+
+    filters:
+      context.filters || {},
+
+    metadata: {
+      intent:
+        context.intent || "",
+
+      searchIntent:
+        context.searchIntent || "",
+
+      invalidCity: true,
+    },
+  });
+} catch (analyticsError) {
+  console.warn(
+    "⚠️ Search analytics tracking failed:",
+    analyticsError?.message || analyticsError
+  );
+}
 
     return res.json({
       success: true,
@@ -166,6 +217,50 @@ message:
         Number(limit) || 20,
     });
 
+    try {
+  await trackSearch({
+    visitorId,
+    sessionId,
+    user: req.user || null,
+
+    query: cleanedQuery,
+
+    path:
+      req.originalUrl?.split("?")[0] ||
+      "/search",
+
+    city:
+      context.cityId || null,
+
+    category:
+      context.categoryId || null,
+
+    citySlug:
+      context.citySlug || "",
+
+    categorySlug:
+      context.categorySlug || "",
+
+    resultCount:
+      results.length,
+
+    filters:
+      context.filters || {},
+
+    metadata: {
+      intent:
+        context.intent || "",
+
+      searchIntent:
+        context.searchIntent || "",
+    },
+  });
+} catch (analyticsError) {
+  console.warn(
+    "⚠️ Search analytics tracking failed:",
+    analyticsError?.message || analyticsError
+  );
+}
 
   // =====================================================
   // RESPONSE

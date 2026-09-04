@@ -3,7 +3,6 @@ import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
 
 import {
-  getBusinesses,
   claimBusiness,
   getBusinessBySlug,
   trackBusinessView,
@@ -19,6 +18,12 @@ import {
   getSimilarBusinesses,
   getPopularSearches,
 } from "../controllers/business/businessDiscoveryController.js";
+
+import {
+  getBusinesses,
+  getBusinessById,
+  getRandomCityBusinesses,
+} from "../controllers/business/businessReadController.js";
 
 import {
   unifiedSearch,
@@ -75,6 +80,11 @@ router.get(
 router.get(
   "/nearby",
   getNearbyBusinesses
+);
+
+router.get(
+  "/random",
+  getRandomCityBusinesses
 );
 
 /* =========================

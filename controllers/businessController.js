@@ -29,15 +29,6 @@ export {
   getBusinessBySlug,
 };
 
-import {
-  getBusinesses,
-  getBusinessById,
-} from "./business/businessReadController.js";
-
-export {
-  getBusinesses,
-  getBusinessById,
-};
 
 import {
   updateBusinessHours,
