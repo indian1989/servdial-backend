@@ -198,7 +198,7 @@ const buildPageViewData = ({
   query = "",
 
   referrer = "",
-  source = "unknown",
+  source = "",
 
   utmSource = "",
   utmMedium = "",
@@ -370,7 +370,7 @@ export const trackPageView = async ({
   query = "",
 
   referrer = "",
-  source = "unknown",
+  source = "",
 
   utmSource = "",
   utmMedium = "",

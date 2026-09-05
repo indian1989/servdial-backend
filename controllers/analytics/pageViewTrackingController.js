@@ -12,17 +12,24 @@ import {
 export const trackPageViewController =
   asyncHandler(async (req, res) => {
     const {
-      visitorId,
-      sessionId,
-      path,
-      pageTitle,
-      pageType,
-      businessId,
-      categoryId,
-      cityId,
-      query,
-      context = {},
-    } = req.body || {};
+  visitorId,
+  sessionId,
+  path,
+  pageTitle,
+  pageType,
+  businessId,
+  categoryId,
+  cityId,
+  query,
+  referrer,
+  source,
+  utmSource,
+  utmMedium,
+  utmCampaign,
+  utmTerm,
+  utmContent,
+  context = {},
+} = req.body || {};
 
     if (!visitorId) {
       return res.status(400).json({
@@ -46,19 +53,26 @@ export const trackPageViewController =
     }
 
     const result = await trackPageView({
-      req,
-      visitorId,
-      sessionId,
-      path,
-      pageTitle,
-      pageType,
-      businessId: businessId || null,
-      categoryId: categoryId || null,
-      cityId: cityId || null,
-      query: query || "",
-      context,
-      user: req.user || null,
-    });
+  req,
+  visitorId,
+  sessionId,
+  path,
+  pageTitle,
+  pageType,
+  businessId: businessId || null,
+  categoryId: categoryId || null,
+  cityId: cityId || null,
+  query: query || "",
+  referrer,
+  source,
+  utmSource,
+  utmMedium,
+  utmCampaign,
+  utmTerm,
+  utmContent,
+  context,
+  user: req.user || null,
+});
 
     if (!result?.success) {
       return res.status(400).json({
