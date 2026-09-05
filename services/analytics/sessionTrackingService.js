@@ -1,4 +1,4 @@
-// backend/services/analytics/visitorTrackingService.js
+// backend/services/analytics/sessionTrackingService.js
 import VisitorSession from "../../models/VisitorSession.js";
 import Visitor from "../../models/Visitor.js";
 
