@@ -1510,7 +1510,7 @@ export const getPopularSearches =
               "active",
 
           })
-          .select("_id name slug")
+          .select("_id name slug stateSlug")
           .lean();
 
 
@@ -1684,9 +1684,9 @@ export const getPopularSearches =
               category.count,
 
             url:
-              cityDoc
-                ? `/${cityDoc.slug}/${category.slug}`
-                : `/${category.slug}`,
+  cityDoc
+    ? `/${cityDoc.stateSlug}/${cityDoc.slug}/${category.slug}`
+    : `/category/${category.slug}`,
 
           })
         );

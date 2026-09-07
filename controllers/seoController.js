@@ -355,6 +355,7 @@ export const getCityCategoryPage = async (req, res) => {
             slug: city.slug,
             district: city.district,
             state: city.state,
+            stateSlug: city.stateSlug,
             country: city.country,
           },
 
@@ -403,6 +404,7 @@ export const getCityCategoryPage = async (req, res) => {
           slug: city.slug,
           district: city.district,
           state: city.state,
+          stateSlug: city.stateSlug,
           country: city.country,
         },
 
@@ -585,6 +587,7 @@ export const getCityCategoryPage = async (req, res) => {
           slug: city.slug,
           district: city.district,
           state: city.state,
+          stateSlug: city.stateSlug,
           country: city.country,
         },
 
@@ -627,14 +630,32 @@ export const getCityCategoryPage = async (req, res) => {
 
 
     /* =====================================================
-       CATEGORY IS CURRENT
-       
-       Continue normally.
-    ===================================================== */
+   CATEGORY IS CURRENT
+   
+   Continue normally.
+===================================================== */
 
-    let businesses = [];
-    let subCategories = [];
+let businesses = [];
+let subCategories = [];
 
+
+/* =====================================================
+   PARENT CATEGORY
+   Used for breadcrumb on leaf/subcategory pages
+===================================================== */
+
+let parentCategory = null;
+
+if (category.parentCategory) {
+
+  parentCategory =
+    await Category.findById(
+      category.parentCategory
+    )
+      .select("name slug")
+      .lean();
+
+}
 
     /* =====================================================
        PARENT CATEGORY
@@ -793,15 +814,18 @@ console.log(
         slug: city.slug,
         district: city.district,
         state: city.state,
+        stateSlug: city.stateSlug,
         country: city.country,
       },
 
       category: {
-        name: category.name,
-        slug: category.slug,
-      },
+  name: category.name,
+  slug: category.slug,
+},
 
-      subCategories,
+parentCategory,
+
+subCategories,
 
       seo: {
         title:

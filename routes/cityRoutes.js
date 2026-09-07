@@ -4,6 +4,7 @@ import {
   getAllCities,
   getCityBySlug,
   getTrendingCities,
+  getStates,
 } from "../controllers/cityController.js";
 
 const router = express.Router();
@@ -12,6 +13,9 @@ const router = express.Router();
 
 // 🔥 Trending cities (must come first)
 router.get("/trending", getTrendingCities);
+
+// 🔥 All states
+router.get("/states", getStates);
 
 // 🔥 All cities
 router.get("/", getAllCities);

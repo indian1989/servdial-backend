@@ -129,9 +129,9 @@ export const getBusinesses = asyncHandler(
           )
 
           .populate(
-            "categoryId",
-            "name slug uiType features"
-          )
+  "cityId",
+  "name slug district state stateSlug country latitude longitude"
+)
 
           .sort({
             createdAt:
@@ -459,6 +459,459 @@ export const getRandomCityBusinesses = asyncHandler(
       meta: {
         total: businesses.length,
         city: city || null,
+        limit: safeLimit,
+      },
+    });
+  }
+);
+
+
+/* =========================================================
+   GET RANDOM STATE BUSINESSES
+   - Approved businesses only
+   - Non-deleted only
+   - State specific
+   - Random category/city/business mix
+   - Optimized: single aggregation pipeline
+========================================================= */
+
+export const getRandomStateBusinesses = asyncHandler(
+  async (req, res) => {
+    const {
+  state,
+  city,
+  limit = 20,
+} = req.query;
+
+    const safeLimit = Math.min(
+      Math.max(Number(limit) || 20, 1),
+      50
+    );
+
+    /* =========================
+       VALIDATE STATE
+    ========================= */
+
+    if (!state) {
+      return res.json({
+        success: true,
+        data: [],
+        meta: {
+          total: 0,
+          state: null,
+          limit: safeLimit,
+        },
+      });
+    }
+
+        /* =========================
+       FIND ACTIVE CITIES
+       IN STATE
+       + OPTIONAL CITY FILTER
+    ========================= */
+
+    const cityQuery = {
+      state: {
+        $regex: `^${String(state).trim()}$`,
+        $options: "i",
+      },
+      status: "active",
+    };
+
+
+    /* =========================
+       CITY FILTER
+    ========================= */
+
+    if (city) {
+
+      cityQuery.name = {
+        $regex: `^${String(city).trim()}$`,
+        $options: "i",
+      };
+
+    }
+
+
+    const cityDocs =
+      await City.find(
+        cityQuery
+      )
+        .select("_id")
+        .lean();
+
+    if (!cityDocs.length) {
+      return res.json({
+        success: true,
+        data: [],
+        meta: {
+          total: 0,
+          state,
+          limit: safeLimit,
+        },
+      });
+    }
+
+    const cityIds =
+      cityDocs.map(
+        (city) => city._id
+      );
+
+    /* =========================
+       BUSINESS QUERY
+    ========================= */
+
+    const query = {
+      status: "approved",
+      isDeleted: false,
+      cityId: {
+        $in: cityIds,
+      },
+    };
+
+    /* =========================
+       RANDOM BUSINESSES
+       + CITY
+       + CATEGORY
+       IN ONE PIPELINE
+    ========================= */
+
+    const businesses =
+      await Business.aggregate([
+        {
+          $match: query,
+        },
+
+        {
+          $sample: {
+            size: safeLimit,
+          },
+        },
+
+        /* =========================
+           CITY
+        ========================= */
+
+        {
+          $lookup: {
+            from: "cities",
+            let: {
+              cityId: "$cityId",
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: [
+                      "$_id",
+                      "$$cityId",
+                    ],
+                  },
+                },
+              },
+              {
+                $project: {
+                  name: 1,
+                  slug: 1,
+                  district: 1,
+                  state: 1,
+                  country: 1,
+                  latitude: 1,
+                  longitude: 1,
+                },
+              },
+            ],
+            as: "cityData",
+          },
+        },
+
+        /* =========================
+           CATEGORY
+        ========================= */
+
+        {
+          $lookup: {
+            from: "categories",
+            let: {
+              categoryId: "$categoryId",
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: [
+                      "$_id",
+                      "$$categoryId",
+                    ],
+                  },
+                },
+              },
+              {
+                $project: {
+                  name: 1,
+                  slug: 1,
+                  uiType: 1,
+                  features: 1,
+                },
+              },
+            ],
+            as: "categoryData",
+          },
+        },
+
+        /* =========================
+           KEEP SAME SHAPE AS
+           MONGOOSE POPULATE()
+        ========================= */
+
+        {
+          $set: {
+            cityId: {
+              $arrayElemAt: [
+                "$cityData",
+                0,
+              ],
+            },
+            categoryId: {
+              $arrayElemAt: [
+                "$categoryData",
+                0,
+              ],
+            },
+          },
+        },
+
+        {
+          $project: {
+            cityData: 0,
+            categoryData: 0,
+          },
+        },
+      ]);
+
+    return res.json({
+      success: true,
+      data: businesses,
+      meta: {
+  total: businesses.length,
+  state,
+  city: city || null,
+  limit: safeLimit,
+},
+    });
+  }
+);
+
+/* =========================================================
+   GET RANDOM CATEGORY BUSINESSES
+   - Approved businesses only
+   - Non-deleted only
+   - Category + child categories
+   - Random city/business mix
+   - Optimized aggregation
+========================================================= */
+
+export const getRandomCategoryBusinesses = asyncHandler(
+  async (req, res) => {
+    const {
+      category,
+      limit = 20,
+    } = req.query;
+
+    const safeLimit = Math.min(
+      Math.max(Number(limit) || 20, 1),
+      50
+    );
+
+    if (!category) {
+      return res.json({
+        success: true,
+        data: [],
+        meta: {
+          total: 0,
+          category: null,
+          limit: safeLimit,
+        },
+      });
+    }
+
+    /* =========================
+       FIND CATEGORY + CHILDREN
+    ========================= */
+
+    const categoryDoc =
+      await Category.findOne({
+        slug: String(category).toLowerCase(),
+        status: "active",
+      })
+        .select("_id")
+        .lean();
+
+    if (!categoryDoc) {
+      return res.json({
+        success: true,
+        data: [],
+        meta: {
+          total: 0,
+          category,
+          limit: safeLimit,
+        },
+      });
+    }
+
+    const categoryIds =
+      await Category.find({
+        $or: [
+          { _id: categoryDoc._id },
+          { parentCategory: categoryDoc._id },
+        ],
+        status: "active",
+      })
+        .select("_id")
+        .lean();
+
+    const categoryIdList =
+      categoryIds.map(
+        (item) => item._id
+      );
+
+    /* =========================
+       BUSINESS QUERY
+    ========================= */
+
+    const query = {
+      status: "approved",
+      isDeleted: false,
+      categoryId: {
+        $in: categoryIdList,
+      },
+    };
+
+    /* =========================
+       RANDOM BUSINESSES
+       + CITY
+       + CATEGORY
+    ========================= */
+
+    const businesses =
+      await Business.aggregate([
+        {
+          $match: query,
+        },
+
+        {
+          $sample: {
+            size: safeLimit,
+          },
+        },
+
+        /* =========================
+           CITY
+        ========================= */
+
+        {
+          $lookup: {
+            from: "cities",
+            let: {
+              cityId: "$cityId",
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: [
+                      "$_id",
+                      "$$cityId",
+                    ],
+                  },
+                },
+              },
+              {
+                $project: {
+                  name: 1,
+                  slug: 1,
+                  district: 1,
+                  state: 1,
+                  stateSlug: 1,
+                  country: 1,
+                  latitude: 1,
+                  longitude: 1,
+                },
+              },
+            ],
+            as: "cityData",
+          },
+        },
+
+        /* =========================
+           CATEGORY
+        ========================= */
+
+        {
+          $lookup: {
+            from: "categories",
+            let: {
+              categoryId: "$categoryId",
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: [
+                      "$_id",
+                      "$$categoryId",
+                    ],
+                  },
+                },
+              },
+              {
+                $project: {
+                  name: 1,
+                  slug: 1,
+                  uiType: 1,
+                  features: 1,
+                },
+              },
+            ],
+            as: "categoryData",
+          },
+        },
+
+        /* =========================
+           SAME SHAPE AS POPULATE()
+        ========================= */
+
+        {
+          $set: {
+            cityId: {
+              $arrayElemAt: [
+                "$cityData",
+                0,
+              ],
+            },
+            categoryId: {
+              $arrayElemAt: [
+                "$categoryData",
+                0,
+              ],
+            },
+          },
+        },
+
+        {
+          $project: {
+            cityData: 0,
+            categoryData: 0,
+          },
+        },
+      ]);
+
+    return res.json({
+      success: true,
+      data: businesses,
+      meta: {
+        total: businesses.length,
+        category,
         limit: safeLimit,
       },
     });

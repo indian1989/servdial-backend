@@ -485,14 +485,19 @@ if (requestedCitySlug) {
       )
 
         .populate(
-          "cityId",
-          "name slug state district"
-        )
+  "cityId",
+  "name slug state district stateSlug"
+)
 
-        .populate(
-          "categoryId",
-          "name slug uiType features"
-        )
+.populate(
+  "categoryId",
+  "name slug uiType features"
+)
+
+.populate(
+  "parentCategoryId",
+  "name slug"
+)
 
         .lean();
 

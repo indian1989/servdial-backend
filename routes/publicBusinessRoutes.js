@@ -23,6 +23,8 @@ import {
   getBusinesses,
   getBusinessById,
   getRandomCityBusinesses,
+  getRandomStateBusinesses,
+  getRandomCategoryBusinesses
 } from "../controllers/business/businessReadController.js";
 
 import {
@@ -87,6 +89,15 @@ router.get(
   getRandomCityBusinesses
 );
 
+router.get(
+  "/random-state",
+  getRandomStateBusinesses
+);
+
+router.get(
+  "/random-category",
+  getRandomCategoryBusinesses
+);
 /* =========================
    🔥 POPULAR SEARCHES
 ========================= */
