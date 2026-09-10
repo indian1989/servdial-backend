@@ -127,6 +127,8 @@ import adminCityRoutes from "./routes/adminCityRoutes.js";
 
 import adminRoutes from "./routes/adminRoutes.js";
 
+// TEMPORARY LISTINGS
+import temporaryListingRoutes from "./routes/temporaryListingRoutes.js";
 
 // FEATURES
 
@@ -318,6 +320,13 @@ app.use(
 app.use(
   "/api/analytics",
   analyticsTrackingRoutes
+);
+
+// TEMPORARY LISTINGS
+
+app.use(
+  "/api/temporary-listings",
+  temporaryListingRoutes
 );
 
 // FEATURES
