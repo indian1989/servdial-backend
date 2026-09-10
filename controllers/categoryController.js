@@ -67,7 +67,6 @@ const validateCategoryName = (name) => {
 
 };
 
-
 /* =========================================================
    VALIDATE PARENT CATEGORY + CIRCULAR TREE
 ========================================================= */
@@ -79,6 +78,9 @@ const validateParentCategory = async ({
 
   /* =======================================================
      ROOT CATEGORY
+     
+     parentCategory = null
+     → Level 0
   ======================================================= */
 
   if (
@@ -95,9 +97,7 @@ const validateParentCategory = async ({
   ======================================================= */
 
   if (
-    !isValidObjectId(
-      parentCategory
-    )
+    !isValidObjectId(parentCategory)
   ) {
     throw new Error(
       "Invalid parent category"
@@ -115,8 +115,7 @@ const validateParentCategory = async ({
 
   if (
     categoryId &&
-    parentId ===
-      String(categoryId)
+    parentId === String(categoryId)
   ) {
     throw new Error(
       "Category cannot be its own parent"
@@ -129,43 +128,49 @@ const validateParentCategory = async ({
   ======================================================= */
 
   const parent =
-  await Category.findById(
-    parentCategory
-  )
-  .select(
-    "_id parentCategory status level"
-  )
-  .lean();
+    await Category.findById(
+      parentCategory
+    )
+    .select(
+      "_id parentCategory status level"
+    )
+    .lean();
 
 
-if (!parent) {
-  throw new Error(
-    "Parent category not found"
-  );
-}
-
-
-/* =======================================================
-   PARENT MUST BE ROOT CATEGORY
-======================================================= */
-
-if (
-  Number(parent.level) !== 0
-) {
-  throw new Error(
-    "Sub category cannot be used as a parent category"
-  );
-}
+  if (!parent) {
+    throw new Error(
+      "Parent category not found"
+    );
+  }
 
 
   /* =======================================================
-     OPTIONAL SAFETY:
+     MAXIMUM 3 LEVELS
+     
+     Level 0 → can have Level 1
+     Level 1 → can have Level 2
+     Level 2 → cannot have children
+  ======================================================= */
+
+  const parentLevel =
+    Number(parent.level);
+
+
+  if (
+    ![0, 1].includes(parentLevel)
+  ) {
+    throw new Error(
+      "Child subcategory cannot be used as a parent category"
+    );
+  }
+
+
+  /* =======================================================
      PARENT MUST BE ACTIVE
   ======================================================= */
 
   if (
-    parent.status !==
-    "active"
+    parent.status !== "active"
   ) {
     throw new Error(
       "Parent category must be active"
@@ -190,9 +195,7 @@ if (
     parent._id;
 
 
-  while (
-    currentId
-  ) {
+  while (currentId) {
 
     const currentKey =
       String(currentId);
@@ -203,9 +206,7 @@ if (
     ----------------------------------------------- */
 
     if (
-      visited.has(
-        currentKey
-      )
+      visited.has(currentKey)
     ) {
       throw new Error(
         "Circular category hierarchy detected"
@@ -213,9 +214,7 @@ if (
     }
 
 
-    visited.add(
-      currentKey
-    );
+    visited.add(currentKey);
 
 
     /* -----------------------------------------------
@@ -223,8 +222,7 @@ if (
     ----------------------------------------------- */
 
     if (
-      currentKey ===
-      String(categoryId)
+      currentKey === String(categoryId)
     ) {
       throw new Error(
         "Circular category hierarchy detected"
@@ -636,10 +634,41 @@ try {
       });
     }
 
-    const level =
-  validatedParentCategory
-    ? 1
-    : 0;
+    /* =====================================================
+   CALCULATE CATEGORY LEVEL
+
+   No parent
+   → Level 0
+
+   Parent Level 0
+   → Level 1
+
+   Parent Level 1
+   → Level 2
+===================================================== */
+
+let level = 0;
+
+if (validatedParentCategory) {
+
+  const parent =
+    await Category.findById(
+      validatedParentCategory
+    )
+    .select("_id level")
+    .lean();
+
+  if (!parent) {
+    return res.status(400).json({
+      success: false,
+      message: "Parent category not found",
+    });
+  }
+
+  level =
+    Number(parent.level) + 1;
+
+}
 
     const finalFeatures = [...new Set([...(features || []), "offers"])];
 
@@ -849,13 +878,46 @@ if (
   }
 
 
-  category.parentCategory =
-    validatedParentCategory;
+  /* =====================================================
+   SET PARENT CATEGORY + LEVEL
+
+   null
+   → Level 0
+
+   Parent Level 0
+   → Level 1
+
+   Parent Level 1
+   → Level 2
+===================================================== */
+
+category.parentCategory =
+  validatedParentCategory;
+
+if (!validatedParentCategory) {
+
+  category.level = 0;
+
+} else {
+
+  const parent =
+    await Category.findById(
+      validatedParentCategory
+    )
+    .select("_id level")
+    .lean();
+
+  if (!parent) {
+    return res.status(400).json({
+      success: false,
+      message: "Parent category not found",
+    });
+  }
 
   category.level =
-    validatedParentCategory
-      ? 1
-      : 0;
+    Number(parent.level) + 1;
+
+}
 
 }
 

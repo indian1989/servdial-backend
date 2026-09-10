@@ -67,18 +67,14 @@ export const generateBusinessSlug = async (
      - slugHistory
   ======================================================= */
 
-  const sameCityBusinesses =
-    await Business.find({
-
-      cityId,
-
-      isDeleted: false,
-
-    })
-      .select(
-        "slug slugHistory urlHistory"
-      )
-      .lean();
+  const existingBusinesses =
+  await Business.find({
+    isDeleted: false,
+  })
+    .select(
+      "slug slugHistory urlHistory"
+    )
+    .lean();
 
 
   /* =======================================================
@@ -115,16 +111,16 @@ export const generateBusinessSlug = async (
        CURRENT BUSINESS / OLD SLUG IN TARGET CITY
     ----------------------------------------------- */
 
-    const currentCityConflict =
-  sameCityBusinesses.some(
+    const currentSlugConflict =
+  existingBusinesses.some(
     (business) =>
       business.slug === candidate
   );
 
 
-    if (currentCityConflict) {
-      return true;
-    }
+    if (currentSlugConflict) {
+  return true;
+}
 
 
     /* -----------------------------------------------

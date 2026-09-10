@@ -76,11 +76,11 @@ const categorySchema = new mongoose.Schema(
     },
 
     level: {
-      type: Number,
-      enum: [0, 1], // 0 = parent, 1 = leaf
-      default: 0,
-      index: true,
-    },
+  type: Number,
+  enum: [0, 1, 2], // 0 = parent, 1 = subcategory, 2 = child subcategory
+  default: 0,
+  index: true,
+},
 
 
     /* =====================================================
