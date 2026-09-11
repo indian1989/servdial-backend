@@ -108,7 +108,6 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
   .populate("cityId", "name slug")
 .populate("categoryId", "name slug")
   .sort({ featurePriority: -1, averageRating: -1 })
-  .limit(20)
   .lean(),
 
     // ================= TOP RATED =================
@@ -304,7 +303,7 @@ console.log(
     success: true,
     data: {
       categories,
-      featuredBusinesses: rankedFeatured.slice(0, 8),
+      featuredBusinesses: rankedFeatured,
       topRatedBusinesses: rankedTopRated.slice(0, 8),
       latestBusinesses: latestRaw.slice(0, 8),
       nearbyBusinesses: formattedNearby.slice(0, 8),
