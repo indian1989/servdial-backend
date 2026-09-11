@@ -33,7 +33,7 @@ await City.find({
  status:"active"
 })
 .select(
- "slug name district state"
+  "slug name district state stateSlug"
 )
 .lean();
 
@@ -77,7 +77,7 @@ category.slug,
 
 
 url:
-`${baseUrl}/${city.slug}/${category.slug}`,
+`${baseUrl}/${city.stateSlug}/${city.slug}/${category.slug}`,
 
 
 title:
@@ -237,6 +237,7 @@ export const getCityCategoryPage = async (req, res) => {
     if (requestedCategorySlug === "all") {
       const businesses = await Business.find({
         status: "approved",
+        isDeleted: false,
 
         $or: [
           {
@@ -291,16 +292,6 @@ export const getCityCategoryPage = async (req, res) => {
         )
         .lean();
 
-        console.log(
-  "📞 SEO BEFORE RANK CALL DEBUG:",
-  {
-    phone: businesses?.[0]?.phone,
-    landline: businesses?.[0]?.landline,
-    id: businesses?.[0]?._id,
-    name: businesses?.[0]?.name,
-  }
-);
-
       const ranked = rankBusinesses(
         businesses,
         {
@@ -310,16 +301,6 @@ export const getCityCategoryPage = async (req, res) => {
           timeOfDay: new Date().getHours(),
         }
       );
-
-      console.log(
-  "📞 SEO AFTER RANK CALL DEBUG:",
-  {
-    phone: ranked?.[0]?.phone,
-    landline: ranked?.[0]?.landline,
-    id: ranked?.[0]?._id,
-    name: ranked?.[0]?.name,
-  }
-);
 
       const locationText =
         normalizeLocation(
@@ -346,7 +327,7 @@ export const getCityCategoryPage = async (req, res) => {
           canonicalCitySlug,
 
           redirectUrl:
-            `${baseUrl}/${canonicalCitySlug}/all`,
+  `${baseUrl}/${city.stateSlug}/${canonicalCitySlug}/all`,
 
           data: ranked,
 
@@ -370,7 +351,7 @@ export const getCityCategoryPage = async (req, res) => {
               `Find trusted local businesses in ${locationText} on ServDial.`,
 
             canonical:
-              `${baseUrl}/${canonicalCitySlug}/all`,
+  `${baseUrl}/${city.stateSlug}/${canonicalCitySlug}/all`,
           },
 
           faq: [
@@ -419,7 +400,7 @@ export const getCityCategoryPage = async (req, res) => {
             `Find trusted local businesses in ${locationText} on ServDial.`,
 
           canonical:
-            `${baseUrl}/${canonicalCitySlug}/all`,
+  `${baseUrl}/${city.stateSlug}/${canonicalCitySlug}/all`,
         },
 
         faq: [
@@ -580,7 +561,7 @@ export const getCityCategoryPage = async (req, res) => {
           category.slug,
 
         redirectUrl:
-          `${baseUrl}/${canonicalCitySlug}/${category.slug}`,
+  `${baseUrl}/${city.stateSlug}/${canonicalCitySlug}/${category.slug}`,
 
         city: {
           name: city.name,
@@ -618,7 +599,7 @@ export const getCityCategoryPage = async (req, res) => {
             )}.`,
 
           canonical:
-            `${baseUrl}/${canonicalCitySlug}/${category.slug}`,
+  `${baseUrl}/${city.stateSlug}/${canonicalCitySlug}/${category.slug}`,
         },
 
         meta: {
@@ -676,6 +657,7 @@ if (category.parentCategory) {
           cityId: city._id,
           categoryId: category._id,
           status: "approved",
+          isDeleted: false,
         })
           .populate(
             "categoryId",
@@ -729,6 +711,7 @@ if (category.parentCategory) {
             },
 
             status: "approved",
+            isDeleted: false,
           })
             .populate(
               "categoryId",
@@ -743,16 +726,6 @@ if (category.parentCategory) {
        RANK BUSINESSES
     ===================================================== */
 
-    console.log(
-  "📞 CATEGORY BEFORE RANK CALL DEBUG:",
-  businesses?.map((b) => ({
-    id: b?._id,
-    name: b?.name,
-    phone: b?.phone,
-    landline: b?.landline,
-  }))
-);
-
 const ranked =
   rankBusinesses(
     businesses,
@@ -764,16 +737,6 @@ const ranked =
         new Date().getHours(),
     }
   );
-
-console.log(
-  "📞 CATEGORY AFTER RANK CALL DEBUG:",
-  ranked?.map((b) => ({
-    id: b?._id,
-    name: b?.name,
-    phone: b?.phone,
-    landline: b?.landline,
-  }))
-);
 
     /* =====================================================
        LOCATION
@@ -835,7 +798,7 @@ subCategories,
           `Find verified ${category.name} businesses in ${locationText}. Compare ratings, reviews, contact details and trusted services on ServDial.`,
 
         canonical:
-          `${baseUrl}/${canonicalCitySlug}/${category.slug}`,
+  `${baseUrl}/${city.stateSlug}/${canonicalCitySlug}/${category.slug}`,
       },
 
       faq: [
