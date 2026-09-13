@@ -68,32 +68,56 @@ export const getBusinesses = asyncHandler(
 
 
     /* =====================================================
-       CATEGORY FILTER
-    ===================================================== */
+   CATEGORY FILTER
+   - Level 1 category → primary category
+   - Level 2 category → parent primary + secondary category
+===================================================== */
 
-    if (category) {
+if (category) {
 
-      const categoryDoc =
-        await Category.findOne({
+  const categoryDoc =
+    await Category.findOne({
 
-          slug:
-            category,
+      slug:
+        String(category).toLowerCase(),
 
-          status:
-            "active",
+      status:
+        "active",
 
-        })
-        .select("_id");
+    })
+    .select("_id parentCategory");
 
 
-      if (categoryDoc) {
+  if (categoryDoc) {
 
-        query.categoryId =
-          categoryDoc._id;
+    /* ================================================
+       LEVEL 2 / LEAF CATEGORY
+       ================================================ */
 
-      }
+    if (categoryDoc.parentCategory) {
+
+      query.categoryId =
+        categoryDoc.parentCategory;
+
+      query.secondaryCategoryIds =
+        categoryDoc._id;
 
     }
+
+    /* ================================================
+       LEVEL 1 / PRIMARY CATEGORY
+       ================================================ */
+
+    else {
+
+      query.categoryId =
+        categoryDoc._id;
+
+    }
+
+  }
+
+}
 
 
     /* =====================================================
@@ -740,12 +764,12 @@ export const getRandomCategoryBusinesses = asyncHandler(
     ========================= */
 
     const categoryDoc =
-      await Category.findOne({
-        slug: String(category).toLowerCase(),
-        status: "active",
-      })
-        .select("_id")
-        .lean();
+  await Category.findOne({
+    slug: String(category).toLowerCase(),
+    status: "active",
+  })
+    .select("_id parentCategory level")
+    .lean();
 
     if (!categoryDoc) {
       return res.json({
@@ -759,34 +783,76 @@ export const getRandomCategoryBusinesses = asyncHandler(
       });
     }
 
-    const categoryIds =
-      await Category.find({
-        $or: [
-          { _id: categoryDoc._id },
-          { parentCategory: categoryDoc._id },
-        ],
-        status: "active",
-      })
-        .select("_id")
-        .lean();
+   /* =====================================================
+   CATEGORY QUERY
+   - Level 0 → parent category → direct Level 1 categories
+   - Level 1 → primary category
+   - Level 2 → parent primary + secondary category
+===================================================== */
 
-    const categoryIdList =
-      categoryIds.map(
-        (item) => item._id
-      );
+let query = {
+  status: "approved",
+  isDeleted: false,
+};
 
-    /* =========================
-       BUSINESS QUERY
-    ========================= */
 
-    const query = {
-      status: "approved",
-      isDeleted: false,
-      categoryId: {
-        $in: categoryIdList,
-      },
-    };
+/* =====================================================
+   LEVEL 0 / PARENT CATEGORY
+   Example:
+   Restaurants & Food
+===================================================== */
 
+if (categoryDoc.level === 0) {
+
+  const childCategories =
+    await Category.find({
+      parentCategory: categoryDoc._id,
+      level: 1,
+      status: "active",
+    })
+      .select("_id")
+      .lean();
+
+  query.categoryId = {
+    $in: childCategories.map(
+      (item) => item._id
+    ),
+  };
+
+}
+
+
+/* =====================================================
+   LEVEL 1 / PRIMARY CATEGORY
+   Example:
+   Restaurant
+===================================================== */
+
+else if (categoryDoc.level === 1) {
+
+  query.categoryId =
+    categoryDoc._id;
+
+}
+
+
+/* =====================================================
+   LEVEL 2 / LEAF CATEGORY
+   Example:
+   Barbeque Restaurant
+===================================================== */
+
+else if (categoryDoc.level === 2) {
+
+  query.categoryId =
+    categoryDoc.parentCategory;
+
+  query.secondaryCategoryIds =
+    categoryDoc._id;
+
+}
+
+   
     /* =========================
        RANDOM BUSINESSES
        + CITY

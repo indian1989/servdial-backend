@@ -638,56 +638,71 @@ if (category.parentCategory) {
 
 }
 
-    /* =====================================================
-       PARENT CATEGORY
-       OR
-       LEAF CATEGORY
+       /* =====================================================
+       CATEGORY HIERARCHY
+       
+       Level 0 = Parent Category
+       Level 1 = Subcategory
+       Level 2 = Leaf Category
     ===================================================== */
 
-    if (category.parentCategory) {
+  if (category.level === 2) {
+
+  /*
+  =====================================================
+  LEVEL 2 — LEAF CATEGORY
+
+  Business.categoryId
+    = Level 1 parent/subcategory
+
+  Business.secondaryCategoryIds
+    = Level 2 leaf categories
+  =====================================================
+  */
+
+  businesses =
+    await Business.find({
+      cityId: city._id,
+
+      categoryId:
+        category.parentCategory,
+
+      secondaryCategoryIds:
+        category._id,
+
+      status: "approved",
+      isDeleted: false,
+    })
+      .populate(
+        "categoryId",
+        "name slug"
+      )
+      .lean();
+
+} else {
 
       /*
       =====================================================
-      LEAF CATEGORY
-      =====================================================
-      */
-
-      businesses =
-        await Business.find({
-          cityId: city._id,
-          categoryId: category._id,
-          status: "approved",
-          isDeleted: false,
-        })
-          .populate(
-            "categoryId",
-            "name slug"
-          )
-          .lean();
-
-    } else {
-
-      /*
-      =====================================================
-      PARENT CATEGORY
+      LEVEL 0 / LEVEL 1
+       
+      Get direct children only.
       =====================================================
       */
 
       subCategories =
         await Category.find({
-          parentCategory:
-            category._id,
-
+          parentCategory: category._id,
           status: "active",
         })
           .select(
-            "name slug icon image"
+            "name slug icon image level parentCategory"
           )
           .sort({
             order: 1,
             name: 1,
           })
           .lean();
+
 
       const childIds =
         subCategories.map(
@@ -697,11 +712,33 @@ if (category.parentCategory) {
 
       /*
       =====================================================
-      BUSINESSES FROM ALL CHILD CATEGORIES
+      BUSINESSES
+       
+      LEVEL 0:
+        businesses from all direct Level 1 categories
+
+      LEVEL 1:
+        businesses directly assigned to this category
       =====================================================
       */
 
-      if (childIds.length > 0) {
+      if (category.level === 1) {
+
+        businesses =
+          await Business.find({
+            cityId: city._id,
+            categoryId: category._id,
+            status: "approved",
+            isDeleted: false,
+          })
+            .populate(
+              "categoryId",
+              "name slug"
+            )
+            .lean();
+
+      } else if (childIds.length > 0) {
+
         businesses =
           await Business.find({
             cityId: city._id,
