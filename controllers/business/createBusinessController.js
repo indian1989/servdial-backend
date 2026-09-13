@@ -744,6 +744,28 @@ if (!category) {
 
 }
 
+/* =====================================================
+   RESOLVE CITY
+===================================================== */
+
+const city =
+  await City.findById(
+    cityId
+  );
+
+if (!city) {
+
+  return res.status(404).json({
+
+    success: false,
+
+    message:
+      "City not found",
+
+  });
+
+}
+
 
 /* =====================================================
    BUSINESS CATEGORY VALIDATION
