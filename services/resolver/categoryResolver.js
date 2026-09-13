@@ -488,16 +488,16 @@ const getDirectChildren = async (
  *
  * Example:
  *
- * Services
- *   └── Home Services
- *         ├── Plumbing
- *         └── Electrical
+ * Restaurants & Food
+ *   └── Restaurant
+ *         ├── Family Restaurant
+ *         └── Buffet Restaurant
  *
- * Resolving "Services" returns:
+ * Resolving "Restaurants & Food" returns:
  *
  * [
- *   PlumbingId,
- *   ElectricalId
+ *   Family RestaurantId,
+ *   Buffet RestaurantId
  * ]
  *
  * If the requested category itself has no children:

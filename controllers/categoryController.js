@@ -843,14 +843,11 @@ if (
       category.description = description;
     }
 
-    /* =====================================================
-       PARENT CATEGORY + LEVEL
-    ===================================================== */
+  /* =====================================================
+   PARENT CATEGORY + LEVEL
+===================================================== */
 
-    if (
-  parentCategory !==
-  undefined
-) {
+if (parentCategory !== undefined) {
 
   let validatedParentCategory;
 
@@ -858,68 +855,103 @@ if (
 
     validatedParentCategory =
       await validateParentCategory({
-
-        categoryId:
-          category._id,
-
-        parentCategory:
-          parentCategory || null,
-
+        categoryId: category._id,
+        parentCategory: parentCategory || null,
       });
 
   } catch (err) {
 
     return res.status(400).json({
       success: false,
-      message:
-        err.message,
+      message: err.message,
     });
 
   }
 
 
   /* =====================================================
-   SET PARENT CATEGORY + LEVEL
+     CALCULATE NEW LEVEL
+  ===================================================== */
 
-   null
-   → Level 0
+  let newLevel = 0;
 
-   Parent Level 0
-   → Level 1
+  if (validatedParentCategory) {
 
-   Parent Level 1
-   → Level 2
-===================================================== */
+    const parent =
+      await Category.findById(
+        validatedParentCategory
+      )
+      .select("_id level")
+      .lean();
 
-category.parentCategory =
-  validatedParentCategory;
+    if (!parent) {
+      return res.status(400).json({
+        success: false,
+        message: "Parent category not found",
+      });
+    }
 
-if (!validatedParentCategory) {
+    newLevel =
+      Number(parent.level) + 1;
 
-  category.level = 0;
-
-} else {
-
-  const parent =
-    await Category.findById(
-      validatedParentCategory
-    )
-    .select("_id level")
-    .lean();
-
-  if (!parent) {
-    return res.status(400).json({
-      success: false,
-      message: "Parent category not found",
-    });
   }
 
+
+  const oldLevel =
+    Number(category.level);
+
+
+  /* =====================================================
+     CHECK WHETHER CATEGORY HAS CHILDREN
+  ===================================================== */
+
+  const hasChildren =
+    await Category.exists({
+      parentCategory: category._id,
+    });
+
+
+  /* =====================================================
+     PREVENT RE-PARENTING OF CATEGORY WITH CHILDREN
+
+     This keeps the hierarchy safe.
+
+     Example:
+
+     Level 1
+       └── Level 2
+
+     The Level 1 category cannot be moved
+     to Level 2 because its child would
+     become an invalid Level 3 category.
+  ===================================================== */
+
+  if (
+    hasChildren &&
+    newLevel !== oldLevel
+  ) {
+
+    return res.status(400).json({
+      success: false,
+      message:
+        "This category has child categories and cannot be moved to a different hierarchy level.",
+    });
+
+  }
+
+
+  /* =====================================================
+     SET NEW PARENT + LEVEL
+  ===================================================== */
+
+  category.parentCategory =
+    validatedParentCategory;
+
   category.level =
-    Number(parent.level) + 1;
+    newLevel;
 
 }
 
-}
 
 
     /* =====================================================

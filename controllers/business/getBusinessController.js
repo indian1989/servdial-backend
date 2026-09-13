@@ -499,6 +499,11 @@ if (requestedCitySlug) {
   "name slug"
 )
 
+.populate(
+  "secondaryCategoryIds",
+  "name slug uiType features"
+)
+
         .lean();
 
 

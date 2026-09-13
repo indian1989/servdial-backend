@@ -96,6 +96,13 @@ urlHistory: [
       required: false,
     },
 
+    secondaryCategoryIds: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Category",
+  },
+],
+
     // 🔥 SEO SLUG CACHE (VERY IMPORTANT)
 
 categorySlug: {

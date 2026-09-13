@@ -77,7 +77,7 @@ const categorySchema = new mongoose.Schema(
 
     level: {
   type: Number,
-  enum: [0, 1, 2], // 0 = parent, 1 = subcategory, 2 = child subcategory
+  enum: [0, 1, 2], // 0 = Parent, 1 = Sub Category, 2 = Leaf Category
   default: 0,
   index: true,
 },
@@ -301,6 +301,66 @@ categorySchema.pre(
 
     try {
 
+            /* ===================================================
+         HIERARCHY VALIDATION
+
+         Level 0 → Parent Category
+         Level 1 → Sub Category
+         Level 2 → Leaf Category
+
+         Rules:
+         - Level 0 must NOT have a parent
+         - Level 1 must have Level 0 parent
+         - Level 2 must have Level 1 parent
+      =================================================== */
+
+      if (this.level === 0) {
+
+        if (this.parentCategory) {
+          return next(
+            new Error(
+              "Level 0 Parent Category cannot have a parentCategory."
+            )
+          );
+        }
+
+      } else {
+
+        if (!this.parentCategory) {
+          return next(
+            new Error(
+              `Level ${this.level} category must have a parentCategory.`
+            )
+          );
+        }
+
+        const parent =
+          await mongoose.models.Category
+            .findById(this.parentCategory)
+            .select("_id level")
+            .lean();
+
+        if (!parent) {
+          return next(
+            new Error(
+              "Invalid parentCategory: parent category not found."
+            )
+          );
+        }
+
+        const expectedParentLevel =
+          this.level - 1;
+
+        if (parent.level !== expectedParentLevel) {
+          return next(
+            new Error(
+              `Invalid category hierarchy: Level ${this.level} category must have a Level ${expectedParentLevel} parent.`
+            )
+          );
+        }
+
+      }
+      
       /* ===================================================
          NORMALIZE NAME
       =================================================== */

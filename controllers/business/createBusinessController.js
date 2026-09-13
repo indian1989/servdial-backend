@@ -52,6 +52,7 @@ export const createBusiness = asyncHandler(
     const {
   name,
   categoryId,
+  secondaryCategoryIds,
   cityId,
   pincode,
   address,
@@ -720,53 +721,362 @@ if (duplicateContactNumbers.length > 0) {
 
 }
 
-    /* =====================================================
-       RESOLVE CITY
-    ===================================================== */
+  /* =====================================================
+   RESOLVE CATEGORY
+===================================================== */
 
-    const city =
-      await City.findById(
-        cityId
-      );
-
-
-    if (!city) {
-
-      return res.status(404).json({
-
-        success: false,
-
-        message:
-          "City not found",
-
-      });
-
-    }
+const category =
+  await Category.findById(
+    categoryId
+  );
 
 
-    /* =====================================================
-       RESOLVE CATEGORY
-    ===================================================== */
+if (!category) {
 
-    const category =
-      await Category.findById(
-        categoryId
-      );
+  return res.status(404).json({
+
+    success: false,
+
+    message:
+      "Category not found",
+
+  });
+
+}
 
 
-    if (!category) {
+/* =====================================================
+   BUSINESS CATEGORY VALIDATION
 
-      return res.status(404).json({
+   FINAL CATEGORY RULE:
 
-        success: false,
+   Level 0 → Parent Category
+   Level 1 → Sub Category = PRIMARY
+   Level 2 → Child / Leaf Category = SECONDARY
 
-        message:
-          "Category not found",
+   Business.categoryId:
+   - Level 1 only
 
-      });
+   Business.secondaryCategoryIds:
+   - Level 2 only
+   - Must belong to selected Level 1
+   - Optional
+   - Maximum 5
+   - Unique
+===================================================== */
 
-    }
+const categoryLevel =
+  Number(category.level);
 
+
+/* -----------------------------------------------------
+   PRIMARY CATEGORY MUST BE LEVEL 1
+----------------------------------------------------- */
+
+if (categoryLevel !== 1) {
+
+  return res.status(400).json({
+
+    success: false,
+
+    code:
+      "INVALID_PRIMARY_CATEGORY",
+
+    message:
+      "Business primary category must be a Sub Category.",
+
+  });
+
+}
+
+
+/* -----------------------------------------------------
+   PRIMARY CATEGORY MUST BELONG TO LEVEL 0
+----------------------------------------------------- */
+
+if (
+  !category.parentCategory
+) {
+
+  return res.status(400).json({
+
+    success: false,
+
+    code:
+      "INVALID_CATEGORY_HIERARCHY",
+
+    message:
+      "Primary category must belong to a Parent Category.",
+
+  });
+
+}
+
+
+const parentCategory =
+  await Category.findById(
+    category.parentCategory
+  )
+    .select(
+      "_id level"
+    )
+    .lean();
+
+
+if (
+  !parentCategory ||
+  Number(parentCategory.level) !== 0
+) {
+
+  return res.status(400).json({
+
+    success: false,
+
+    code:
+      "INVALID_CATEGORY_HIERARCHY",
+
+    message:
+      "Primary category must belong directly to a Parent Category.",
+
+  });
+
+}
+
+
+/* =====================================================
+   SECONDARY CATEGORIES
+===================================================== */
+
+let cleanSecondaryCategoryIds = [];
+
+
+if (
+  secondaryCategoryIds !== undefined &&
+  secondaryCategoryIds !== null
+) {
+
+  /* ---------------------------------------------------
+     MUST BE ARRAY
+  --------------------------------------------------- */
+
+  if (
+    !Array.isArray(
+      secondaryCategoryIds
+    )
+  ) {
+
+    return res.status(400).json({
+
+      success: false,
+
+      code:
+        "INVALID_SECONDARY_CATEGORIES",
+
+      message:
+        "Secondary categories must be an array.",
+
+    });
+
+  }
+
+
+  /* ---------------------------------------------------
+     MAXIMUM 5
+  --------------------------------------------------- */
+
+  if (
+    secondaryCategoryIds.length > 5
+  ) {
+
+    return res.status(400).json({
+
+      success: false,
+
+      code:
+        "SECONDARY_CATEGORY_LIMIT",
+
+      message:
+        "A maximum of 5 secondary categories can be selected.",
+
+    });
+
+  }
+
+
+  /* ---------------------------------------------------
+     UNIQUE IDS
+  --------------------------------------------------- */
+
+  const uniqueSecondaryIds = [
+    ...new Set(
+      secondaryCategoryIds.map(
+        (id) => String(id)
+      )
+    ),
+  ];
+
+
+  if (
+    uniqueSecondaryIds.length !==
+    secondaryCategoryIds.length
+  ) {
+
+    return res.status(400).json({
+
+      success: false,
+
+      code:
+        "DUPLICATE_SECONDARY_CATEGORY",
+
+      message:
+        "Duplicate secondary categories are not allowed.",
+
+    });
+
+  }
+
+
+  /* ---------------------------------------------------
+     VALID OBJECT IDS
+  --------------------------------------------------- */
+
+  if (
+    uniqueSecondaryIds.some(
+      (id) =>
+        !isValidObjectId(id)
+    )
+  ) {
+
+    return res.status(400).json({
+
+      success: false,
+
+      code:
+        "INVALID_SECONDARY_CATEGORY",
+
+      message:
+        "One or more secondary category IDs are invalid.",
+
+    });
+
+  }
+
+
+  /* ---------------------------------------------------
+     PRIMARY CANNOT BE SECONDARY
+  --------------------------------------------------- */
+
+  if (
+    uniqueSecondaryIds.includes(
+      String(category._id)
+    )
+  ) {
+
+    return res.status(400).json({
+
+      success: false,
+
+      code:
+        "PRIMARY_SECONDARY_CONFLICT",
+
+      message:
+        "Primary category cannot also be a secondary category.",
+
+    });
+
+  }
+
+
+  /* ---------------------------------------------------
+     LOAD SECONDARY CATEGORIES
+  --------------------------------------------------- */
+
+  const secondaryCategories =
+    await Category.find({
+
+      _id: {
+        $in:
+          uniqueSecondaryIds,
+      },
+
+    })
+      .select(
+        "_id level parentCategory"
+      )
+      .lean();
+
+
+  if (
+    secondaryCategories.length !==
+    uniqueSecondaryIds.length
+  ) {
+
+    return res.status(400).json({
+
+      success: false,
+
+      code:
+        "INVALID_SECONDARY_CATEGORY",
+
+      message:
+        "One or more secondary categories were not found.",
+
+    });
+
+  }
+
+
+  /* ---------------------------------------------------
+     VALIDATE LEVEL + PARENT
+  --------------------------------------------------- */
+
+  const invalidSecondary =
+    secondaryCategories.find(
+      (secondary) =>
+
+        Number(
+          secondary.level
+        ) !== 2 ||
+
+        String(
+          secondary.parentCategory
+        ) !==
+        String(
+          category._id
+        )
+    );
+
+
+  if (
+    invalidSecondary
+  ) {
+
+    return res.status(400).json({
+
+      success: false,
+
+      code:
+        "INVALID_SECONDARY_CATEGORY",
+
+      message:
+        "Secondary categories must be Child / Leaf Categories belonging to the selected primary category.",
+
+    });
+
+  }
+
+
+  /* ---------------------------------------------------
+     CONVERT TO OBJECT IDS
+  --------------------------------------------------- */
+
+  cleanSecondaryCategoryIds =
+    uniqueSecondaryIds.map(
+      (id) =>
+        new mongoose.Types.ObjectId(id)
+    );
+
+}
 
     /* =====================================================
        ADDRESS
@@ -1053,7 +1363,10 @@ if (duplicateContactNumbers.length > 0) {
 
     categoryId,
 
-        cityId,
+secondaryCategoryIds:
+  cleanSecondaryCategoryIds,
+
+cityId,
 
         cityName:
           city.name.toLowerCase(),
@@ -1363,7 +1676,12 @@ paymentOptions:
         .populate(
           "categoryId",
           "name slug uiType features"
-        );
+        )
+
+        .populate(
+  "secondaryCategoryIds",
+  "name slug uiType features"
+);
 
 
     /* =====================================================

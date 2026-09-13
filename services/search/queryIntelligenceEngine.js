@@ -377,7 +377,7 @@ const cityResolutionFailed =
       );
   }
 
-  /* =======================================================
+    /* =======================================================
      CATEGORY IDS
   ======================================================= */
 
@@ -385,11 +385,21 @@ const cityResolutionFailed =
     categoryContext?.primaryCategoryId ||
     null;
 
+  /*
+   * IMPORTANT:
+   *
+   * Business.categoryId is the canonical
+   * PRIMARY CATEGORY (Level 1).
+   *
+   * Therefore categoryIds must NOT contain
+   * Level-2 leaf/secondary category IDs.
+   *
+   * Primary category remains the only category
+   * ID used as the Business.categoryId SSOT.
+   */
   const categoryIds =
-    Array.isArray(
-      categoryContext?.leafCategoryIds
-    )
-      ? categoryContext.leafCategoryIds
+    categoryId
+      ? [categoryId]
       : [];
 
   /* =======================================================
