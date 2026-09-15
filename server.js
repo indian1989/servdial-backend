@@ -27,6 +27,7 @@ app.use(
   cors({
     origin: [
       process.env.FRONTEND_URL,
+      "https://servdial-frontend-ssr.onrender.com",
       "http://localhost:5173",
       "http://localhost:3000",
     ].filter(Boolean),
