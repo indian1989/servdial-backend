@@ -82,7 +82,13 @@ const generateBusinessFAQ = ({
 
 
   const address =
-    business?.address || "";
+  [
+    business?.address?.street,
+    business?.address?.area,
+    business?.address?.landmark,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
 
 
