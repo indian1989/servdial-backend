@@ -1349,9 +1349,10 @@ if (
         area:
           safeAddress.area,
 
-        description:
-          description ||
-          "",
+         services:
+      Array.isArray(services)
+        ? services
+        : [],
 
         isVerified:
           false,

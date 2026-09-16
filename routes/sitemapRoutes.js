@@ -5,13 +5,14 @@ import express from "express";
 import {
   sitemapIndex,
   staticSitemap,
+  stateSitemap,
   citySitemap,
+  temporaryListingSitemap,
   categorySitemap,
   cityCategorySitemap,
   cityPagesSitemap,
   businessSitemap
 } from "../controllers/sitemapController.js";
-
 
 const router = express.Router();
 
@@ -39,7 +40,18 @@ router.get(
 );
 
 
+router.get("/sitemap-states.xml", stateSitemap);
+router.get("/sitemap-states-:page(\\d+).xml", stateSitemap);
 
+router.get(
+  "/sitemap-temporary-listings.xml",
+  temporaryListingSitemap
+);
+
+router.get(
+  "/sitemap-temporary-listings-:page(\\d+).xml",
+  temporaryListingSitemap
+);
 
 // =================================================
 // CITY SITEMAPS

@@ -202,43 +202,99 @@ export const generateLocalBusinessSchema = (business = {}) => {
 ================================================= */
 
 export const generateBreadcrumbSchema = ({
+  state,
+  stateSlug,
   city,
-  category,
-  businessName,
   citySlug,
+  parentCategory,
+  parentCategorySlug,
+  category,
   categorySlug,
+  businessName,
   businessSlug,
-}) => ({
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-
-  itemListElement: [
+}) => {
+  const items = [
     {
       "@type": "ListItem",
       position: 1,
       name: "Home",
-      item: "https://servdial.com",
+      item: "https://servdial.com/",
     },
-    {
+  ];
+
+  let position = 2;
+
+  // State
+  if (state && stateSlug) {
+    items.push({
       "@type": "ListItem",
-      position: 2,
+      position: position++,
+      name: titleCase(state),
+      item: `https://servdial.com/${stateSlug}`,
+    });
+  }
+
+  // City
+  if (city && citySlug) {
+    items.push({
+      "@type": "ListItem",
+      position: position++,
       name: titleCase(city),
-      item: `https://servdial.com/${citySlug}`,
-    },
-    {
+      item: `https://servdial.com/${stateSlug}/${citySlug}`,
+    });
+  }
+
+  // Parent Category
+  if (
+    parentCategory &&
+    parentCategorySlug &&
+    stateSlug &&
+    citySlug
+  ) {
+    items.push({
       "@type": "ListItem",
-      position: 3,
+      position: position++,
+      name: titleCase(parentCategory),
+      item: `https://servdial.com/${stateSlug}/${citySlug}/${parentCategorySlug}`,
+    });
+  }
+
+  // Subcategory / Primary Category
+  if (
+    category &&
+    categorySlug &&
+    stateSlug &&
+    citySlug
+  ) {
+    items.push({
+      "@type": "ListItem",
+      position: position++,
       name: titleCase(category),
-      item: `https://servdial.com/${citySlug}/${categorySlug}`,
-    },
-    {
+      item: `https://servdial.com/${stateSlug}/${citySlug}/${categorySlug}`,
+    });
+  }
+
+  // Business
+  if (
+    businessName &&
+    businessSlug &&
+    citySlug &&
+    categorySlug
+  ) {
+    items.push({
       "@type": "ListItem",
-      position: 4,
+      position: position++,
       name: businessName,
       item: `https://servdial.com/${citySlug}/${categorySlug}/${businessSlug}`,
-    },
-  ],
-});
+    });
+  }
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items,
+  };
+};
 
 /* =================================================
    WEBSITE SCHEMA

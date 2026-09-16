@@ -53,13 +53,76 @@ export const createTemporaryListing = asyncHandler(
       });
     }
 
-    if (!phone && !landline) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "At least one contact number is required: Mobile or Landline",
-      });
-    }
+    const listingMethod =
+  metadata?.listingMethod || "Online";
+
+const website =
+  metadata?.website
+    ? String(metadata.website).trim()
+    : "";
+
+const address =
+  metadata?.address
+    ? String(metadata.address).trim()
+    : "";
+
+const cleanInputPhone =
+  phone
+    ? String(phone).trim()
+    : "";
+
+const cleanInputLandline =
+  landline
+    ? String(landline).trim()
+    : "";
+
+/* ==================================================
+   ACCESS / CONTACT VALIDATION
+
+   Online  → Website required
+   Offline → Address required
+   Both    → Website + Address required
+
+   At least one usable access/contact method
+   must exist.
+================================================== */
+
+if (
+  (listingMethod === "Online" ||
+    listingMethod === "Both") &&
+  !website
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Website / Auction Link is required for online listings",
+  });
+}
+
+if (
+  (listingMethod === "Offline" ||
+    listingMethod === "Both") &&
+  !address
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Address / Location is required for offline listings",
+  });
+}
+
+if (
+  !website &&
+  !address &&
+  !cleanInputPhone &&
+  !cleanInputLandline
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Please provide a Website / Auction Link, Address / Location, Mobile Number, or Landline Number",
+  });
+}
 
     /* ==================================================
        EXPIRY DATE

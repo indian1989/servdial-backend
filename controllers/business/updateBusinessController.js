@@ -2569,14 +2569,10 @@ if (
           : business.name;
 
 
-      const finalDescription =
-        updates.description !==
-        undefined
-
-          ? updates.description
-
-          : business.description ||
-            "";
+     const finalServices =
+  updates.services !== undefined
+    ? updates.services
+    : business.services || [];
 
 
       const finalIsVerified =
@@ -2623,8 +2619,8 @@ if (
             finalAddress?.area ||
             "",
 
-          description:
-            finalDescription,
+          services:
+      finalServices,
 
           isVerified:
             finalIsVerified,
