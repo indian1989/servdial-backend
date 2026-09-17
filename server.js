@@ -160,6 +160,11 @@ import geocodeRoutes from "./routes/geocodeRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import paymentSettingsRoutes from "./routes/paymentSettingsRoutes.js";
 
+// BLOG
+
+import blogRoutes from "./routes/blogRoutes.js";
+import blogCategoryRoutes from "./routes/blogCategoryRoutes.js";
+
 // NOTIFICATIONS
 import notificationRoutes from "./routes/notificationRoutes.js";
 
@@ -329,6 +334,18 @@ app.use(
 app.use(
   "/api/temporary-listings",
   temporaryListingRoutes
+);
+
+// BLOG
+
+app.use(
+  "/api/blog",
+  blogRoutes
+);
+
+app.use(
+  "/api/blog-categories",
+  blogCategoryRoutes
 );
 
 // FEATURES
