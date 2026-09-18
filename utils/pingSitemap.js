@@ -8,7 +8,9 @@ const ping = (url) =>
       .on("error", () => resolve());
   });
 
-const BASE_URL = "https://servdial.com";
+const BASE_URL =
+  process.env.FRONTEND_URL ||
+  "https://www.servdial.com";
 
 export const pingGoogleSitemap = async () => {
   try {

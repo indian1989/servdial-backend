@@ -1,8 +1,10 @@
+// backend/services/seo/pingSearchEngines.js
+
 import axios from "axios";
 
 const SITEMAP_URL =
   process.env.SITEMAP_URL ||
-  "https://api.servdial.com/sitemap.xml";
+  "https://www.servdial.com/sitemap.xml";
 
 export const pingSearchEngines = async () => {
   try {

@@ -1,10 +1,9 @@
-// backend/services/seo/pingSearchEngines.js
-
+// backend/utils/seoPing.js
 import axios from "axios";
 
 const FRONTEND_URL =
   process.env.FRONTEND_URL ||
-  "https://servdial.com";
+  "https://www.servdial.com";
 
 const SITEMAP_URL =
   process.env.SITEMAP_URL ||
