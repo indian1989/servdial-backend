@@ -94,7 +94,7 @@ export const generateLocalBusinessSchema = (business = {}) => {
 
   const businessUrl =
     business.url ||
-    `https://servdial.com/${business.citySlug}/${business.categorySlug}/${business.slug}`;
+    `https://www.servdial.com/${business.citySlug}/${business.categorySlug}/${business.slug}`;
 
   const addressText = buildAddress(business.address);
 
@@ -114,7 +114,7 @@ export const generateLocalBusinessSchema = (business = {}) => {
         ? business.images
         : business.logo
         ? [business.logo]
-        : ["https://servdial.com/logo.png"]),
+        : ["https://www.servdial.com/logo.png"]),
 
     telephone: business.phone || undefined,
 
@@ -218,7 +218,7 @@ export const generateBreadcrumbSchema = ({
       "@type": "ListItem",
       position: 1,
       name: "Home",
-      item: "https://servdial.com/",
+      item: "https://www.servdial.com/",
     },
   ];
 
@@ -230,7 +230,7 @@ export const generateBreadcrumbSchema = ({
       "@type": "ListItem",
       position: position++,
       name: titleCase(state),
-      item: `https://servdial.com/${stateSlug}`,
+      item: `https://www.servdial.com/${stateSlug}`,
     });
   }
 
@@ -240,7 +240,7 @@ export const generateBreadcrumbSchema = ({
       "@type": "ListItem",
       position: position++,
       name: titleCase(city),
-      item: `https://servdial.com/${stateSlug}/${citySlug}`,
+      item: `https://www.servdial.com/${stateSlug}/${citySlug}`,
     });
   }
 
@@ -255,7 +255,7 @@ export const generateBreadcrumbSchema = ({
       "@type": "ListItem",
       position: position++,
       name: titleCase(parentCategory),
-      item: `https://servdial.com/${stateSlug}/${citySlug}/${parentCategorySlug}`,
+      item: `https://www.servdial.com/${stateSlug}/${citySlug}/${parentCategorySlug}`,
     });
   }
 
@@ -270,7 +270,7 @@ export const generateBreadcrumbSchema = ({
       "@type": "ListItem",
       position: position++,
       name: titleCase(category),
-      item: `https://servdial.com/${stateSlug}/${citySlug}/${categorySlug}`,
+      item: `https://www.servdial.com/${stateSlug}/${citySlug}/${categorySlug}`,
     });
   }
 
@@ -285,7 +285,7 @@ export const generateBreadcrumbSchema = ({
       "@type": "ListItem",
       position: position++,
       name: businessName,
-      item: `https://servdial.com/${citySlug}/${categorySlug}/${businessSlug}`,
+      item: `https://www.servdial.com/${citySlug}/${categorySlug}/${businessSlug}`,
     });
   }
 
@@ -305,11 +305,11 @@ export const generateWebsiteSchema = () => ({
   "@type": "WebSite",
 
   name: "ServDial",
-  url: "https://servdial.com",
+  url: "https://www.servdial.com",
 
   potentialAction: {
     "@type": "SearchAction",
-    target: "https://servdial.com/search?q={search_term_string}",
+    target: "https://www.servdial.com/search?q={search_term_string}",
     "query-input": "required name=search_term_string",
   },
 });

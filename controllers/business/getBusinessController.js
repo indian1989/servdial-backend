@@ -557,7 +557,7 @@ if (requestedCitySlug) {
     ===================================================== */
 
     const canonicalUrl =
-      `https://servdial.com/` +
+      `https://www.servdial.com/` +
       `${canonicalCitySlug}/` +
       `${canonicalCategorySlug}/` +
       `${canonicalBusinessSlug}`;

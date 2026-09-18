@@ -27,7 +27,7 @@ const generateBlogSEO = ({
 
   const seoDescription = descriptionSource.slice(0, 320);
 
-  const canonicalUrl = `https://servdial.com/blog/${slug}`;
+  const canonicalUrl = `https://www.servdial.com/blog/${slug}`;
 
   const image = featuredImage?.trim() || "";
 

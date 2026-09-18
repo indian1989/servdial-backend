@@ -13,7 +13,7 @@ import {
   normalizeLocation,
 } from "../utils/locationHelper.js";
 
-const baseUrl = "https://servdial.com";
+const baseUrl = "https://www.servdial.com";
 
 
 

@@ -295,7 +295,7 @@ if (name) {
     businessSlug
   ) {
     canonical =
-    `https://servdial.com/${citySlug}/${categorySlug}/${businessSlug}`;
+    `https://www.servdial.com/${citySlug}/${categorySlug}/${businessSlug}`;
   }
   
   // 🔥 CATEGORY PAGE
@@ -304,19 +304,19 @@ if (name) {
     categorySlug
   ) {
     canonical =
-    `https://servdial.com/${citySlug}/${categorySlug}`;
+    `https://www.servdial.com/${citySlug}/${categorySlug}`;
   }
 
   // 🔥 CITY PAGE
   else if (citySlug) {
     canonical =
-    `https://servdial.com/${citySlug}`;
+    `https://www.servdial.com/${citySlug}`;
   }
 
   // 🔥 FALLBACK
   else {
     canonical =
-    `https://servdial.com/${c
+    `https://www.servdial.com/${c
       .toLowerCase()
       .replace(/\s+/g, "-")}/${cat
         .toLowerCase()

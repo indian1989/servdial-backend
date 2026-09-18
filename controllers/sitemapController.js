@@ -7,7 +7,7 @@ import { getCache, setCache } from "../utils/memoryCache.js";
 /* ========================= CONFIG ========================= */
 
 const FRONTEND_URL =
-  process.env.FRONTEND_URL || "https://servdial.com";
+  process.env.FRONTEND_URL || "https://www.servdial.com";
 
 const PAGE_SIZE = 50000;
 
