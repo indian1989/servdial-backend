@@ -747,6 +747,7 @@ const oldParentCategory =
       status,
       description,
       parentCategory,
+      level,
       isTrending,
       uiType,
       features,
@@ -847,108 +848,233 @@ if (
    PARENT CATEGORY + LEVEL
 ===================================================== */
 
-if (parentCategory !== undefined) {
+if (
+  parentCategory !== undefined ||
+  level !== undefined
+) {
 
-  let validatedParentCategory;
+  const selectedLevel =
+    level !== undefined
+      ? Number(level)
+      : Number(category.level);
 
-  try {
-
-    validatedParentCategory =
-      await validateParentCategory({
-        categoryId: category._id,
-        parentCategory: parentCategory || null,
-      });
-
-  } catch (err) {
-
-    return res.status(400).json({
-      success: false,
-      message: err.message,
-    });
-
-  }
-
-
-  /* =====================================================
-     CALCULATE NEW LEVEL
-  ===================================================== */
-
-  let newLevel = 0;
-
-  if (validatedParentCategory) {
-
-    const parent =
-      await Category.findById(
-        validatedParentCategory
-      )
-      .select("_id level")
-      .lean();
-
-    if (!parent) {
-      return res.status(400).json({
-        success: false,
-        message: "Parent category not found",
-      });
-    }
-
-    newLevel =
-      Number(parent.level) + 1;
-
-  }
-
-
-  const oldLevel =
-    Number(category.level);
-
-
-  /* =====================================================
-     CHECK WHETHER CATEGORY HAS CHILDREN
-  ===================================================== */
-
-  const hasChildren =
-    await Category.exists({
-      parentCategory: category._id,
-    });
-
-
-  /* =====================================================
-     PREVENT RE-PARENTING OF CATEGORY WITH CHILDREN
-
-     This keeps the hierarchy safe.
-
-     Example:
-
-     Level 1
-       └── Level 2
-
-     The Level 1 category cannot be moved
-     to Level 2 because its child would
-     become an invalid Level 3 category.
-  ===================================================== */
+  /* ===================================================
+     VALIDATE LEVEL
+  =================================================== */
 
   if (
-    hasChildren &&
-    newLevel !== oldLevel
+    ![0, 1, 2].includes(
+      selectedLevel
+    )
   ) {
 
     return res.status(400).json({
       success: false,
       message:
-        "This category has child categories and cannot be moved to a different hierarchy level.",
+        "Category level must be 0, 1 or 2",
     });
 
   }
 
 
-  /* =====================================================
-     SET NEW PARENT + LEVEL
-  ===================================================== */
+  /* ===================================================
+     LEVEL 0
+     
+     Level 0 cannot have parent
+  =================================================== */
 
-  category.parentCategory =
-    validatedParentCategory;
+  if (
+    selectedLevel === 0
+  ) {
 
-  category.level =
-    newLevel;
+    if (
+      parentCategory !== undefined &&
+      parentCategory !== null &&
+      parentCategory !== ""
+    ) {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Level 0 category cannot have a parent category",
+      });
+
+    }
+
+    const hasChildren =
+      await Category.exists({
+        parentCategory:
+          category._id,
+      });
+
+    /* ===============================================
+       A category with children must remain at
+       the same hierarchy level.
+    =============================================== */
+
+    if (
+      hasChildren &&
+      Number(category.level) !== 0
+    ) {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "This category has child categories and cannot be moved to Level 0.",
+      });
+
+    }
+
+    category.parentCategory = null;
+    category.level = 0;
+
+  } else {
+
+    /* =================================================
+       LEVEL 1 / LEVEL 2
+       
+       Parent is mandatory
+    ================================================= */
+
+    if (
+      !parentCategory
+    ) {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          `Level ${selectedLevel} category must have a parent category.`,
+      });
+
+    }
+
+
+    /* =================================================
+       VALIDATE PARENT
+    ================================================= */
+
+    let validatedParentCategory;
+
+    try {
+
+      validatedParentCategory =
+        await validateParentCategory({
+          categoryId:
+            category._id,
+
+          parentCategory:
+            parentCategory,
+        });
+
+    } catch (err) {
+
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+      });
+
+    }
+
+
+    /* =================================================
+       LOAD PARENT LEVEL
+    ================================================= */
+
+    const parent =
+      await Category.findById(
+        validatedParentCategory
+      )
+      .select(
+        "_id level status"
+      )
+      .lean();
+
+
+    if (!parent) {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Parent category not found",
+      });
+
+    }
+
+
+    /* =================================================
+       PARENT LEVEL MUST MATCH
+       
+       Level 1 → Level 0 parent
+       Level 2 → Level 1 parent
+    ================================================= */
+
+    const expectedParentLevel =
+      selectedLevel - 1;
+
+
+    if (
+      Number(parent.level) !==
+      expectedParentLevel
+    ) {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          `Invalid category hierarchy: Level ${selectedLevel} category must have a Level ${expectedParentLevel} parent.`,
+      });
+
+    }
+
+
+    /* =================================================
+       CHECK WHETHER CATEGORY HAS CHILDREN
+    ================================================= */
+
+    const hasChildren =
+      await Category.exists({
+        parentCategory:
+          category._id,
+      });
+
+
+    /* =================================================
+       PREVENT LEVEL CHANGE WHEN CHILDREN EXIST
+       
+       Example:
+       
+       Level 1
+         └── Level 2
+       
+       Level 1 cannot become Level 2 because its
+       existing children would become Level 3.
+    ================================================= */
+
+    if (
+      hasChildren &&
+      Number(category.level) !==
+        selectedLevel
+    ) {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "This category has child categories and cannot be moved to a different hierarchy level.",
+      });
+
+    }
+
+
+    /* =================================================
+       SET NEW PARENT + LEVEL
+    ================================================= */
+
+    category.parentCategory =
+      validatedParentCategory;
+
+    category.level =
+      selectedLevel;
+
+  }
 
 }
 
@@ -1009,30 +1135,37 @@ category.keywords = generateCategoryKeywords({
        CACHE RESET
     ===================================================== */
 
-   await invalidateCategoryCache({
-
-  categoryId:
-    category._id,
-
-  slug:
-    category.slug,
-
-  oldSlug,
-
-  parentCategoryId:
-    category.parentCategory,
-
-  oldParentCategoryId:
-    oldParentCategory,
-
-});
+  try {
+  await invalidateCategoryCache({
+    categoryId: category._id,
+    slug: category.slug,
+    oldSlug,
+    parentCategoryId: category.parentCategory,
+    oldParentCategoryId: oldParentCategory,
+  });
+} catch (cacheError) {
+  console.error(
+    "updateCategory cache invalidation failed:",
+    cacheError
+  );
+}
 
 
-    /* =====================================================
-       SEARCH ENGINE PING
-    ===================================================== */
+/* =====================================================
+   SEARCH ENGINE PING
 
-    await pingSearchEngines();
+   Search engine notification must NOT make a
+   successful category update fail.
+===================================================== */
+
+try {
+  await pingSearchEngines();
+} catch (pingError) {
+  console.error(
+    "updateCategory search engine ping failed:",
+    pingError
+  );
+}
 
     /* =====================================================
        RESPONSE
