@@ -710,15 +710,28 @@ export const getBanners = async (req, res) => {
       ]
     };
 
-    // CITY FILTER SAFE
-    if (cityId) {
-      baseFilter.$and.push({
-        $or: [
-          { cityId },
-          { cityId: null }
-        ]
-      });
-    }
+    // =========================
+// CITY TARGETING
+// =========================
+
+// If a city is supplied, show:
+// 1. banners targeted to that city
+// 2. explicitly global banners
+if (cityId) {
+  baseFilter.$and.push({
+    $or: [
+      { cityId: cityId },
+      { cityId: null }
+    ]
+  });
+} else {
+  // No city context:
+// Only explicitly global banners are allowed.
+// Never return city-targeted banners globally.
+  baseFilter.$and.push({
+    cityId: null
+  });
+}
 
     // CATEGORY FILTER SAFE
     if (categoryId) {

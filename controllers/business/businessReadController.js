@@ -983,3 +983,188 @@ else if (categoryDoc.level === 2) {
     });
   }
 );
+
+/* =========================================================
+   GET RANDOM GLOBAL BUSINESSES
+   - Approved businesses only
+   - Non-deleted only
+   - Entire ServDial database
+   - Random city/category/business mix
+   - Optimized: single aggregation pipeline
+========================================================= */
+
+export const getRandomGlobalBusinesses = asyncHandler(
+  async (req, res) => {
+
+    const {
+      limit = 20,
+    } = req.query;
+
+
+    const safeLimit = Math.min(
+      Math.max(Number(limit) || 20, 1),
+      50
+    );
+
+
+    /* =========================
+       GLOBAL BUSINESS QUERY
+       No city/state/category filter
+    ========================= */
+
+    const query = {
+      status: "approved",
+      isDeleted: false,
+    };
+
+
+    /* =========================
+       RANDOM BUSINESSES
+       + CITY
+       + CATEGORY
+       IN ONE PIPELINE
+    ========================= */
+
+    const businesses =
+      await Business.aggregate([
+        {
+          $match: query,
+        },
+
+        {
+          $sample: {
+            size: safeLimit,
+          },
+        },
+
+        /* =========================
+           CITY
+        ========================= */
+
+        {
+          $lookup: {
+            from: "cities",
+
+            let: {
+              cityId: "$cityId",
+            },
+
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: [
+                      "$_id",
+                      "$$cityId",
+                    ],
+                  },
+                },
+              },
+
+              {
+                $project: {
+                  name: 1,
+                  slug: 1,
+                  district: 1,
+                  state: 1,
+                  stateSlug: 1,
+                  country: 1,
+                  latitude: 1,
+                  longitude: 1,
+                },
+              },
+            ],
+
+            as: "cityData",
+          },
+        },
+
+
+        /* =========================
+           CATEGORY
+        ========================= */
+
+        {
+          $lookup: {
+            from: "categories",
+
+            let: {
+              categoryId: "$categoryId",
+            },
+
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: [
+                      "$_id",
+                      "$$categoryId",
+                    ],
+                  },
+                },
+              },
+
+              {
+                $project: {
+                  name: 1,
+                  slug: 1,
+                  uiType: 1,
+                  features: 1,
+                },
+              },
+            ],
+
+            as: "categoryData",
+          },
+        },
+
+
+        /* =========================
+           SAME SHAPE AS POPULATE()
+        ========================= */
+
+        {
+          $set: {
+            cityId: {
+              $arrayElemAt: [
+                "$cityData",
+                0,
+              ],
+            },
+
+            categoryId: {
+              $arrayElemAt: [
+                "$categoryData",
+                0,
+              ],
+            },
+          },
+        },
+
+
+        {
+          $project: {
+            cityData: 0,
+            categoryData: 0,
+          },
+        },
+      ]);
+
+
+    /* =========================
+       RESPONSE
+    ========================= */
+
+    return res.json({
+      success: true,
+
+      data: businesses,
+
+      meta: {
+        total: businesses.length,
+        scope: "global",
+        limit: safeLimit,
+      },
+    });
+  }
+);
