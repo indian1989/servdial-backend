@@ -1889,43 +1889,138 @@ if (
       }
 
 
-      /* =====================================================
-         SERVICE COVERAGE
-      ===================================================== */
+ /* =====================================================
+   SERVICE COVERAGE
+===================================================== */
 
-      if (
-        updates.serviceCoverage !==
-        undefined
-      ) {
+if (
+  updates.serviceCoverage !==
+  undefined
+) {
 
-        if (
-          !updates.serviceCoverage ||
-          typeof updates.serviceCoverage !==
-            "object"
-        ) {
+  if (
+    !updates.serviceCoverage ||
+    typeof updates.serviceCoverage !==
+      "object"
+  ) {
 
-          updates.serviceCoverage = {
+    updates.serviceCoverage = {
 
-            type:
-              "city",
+      type: "city",
 
-            mode:
-              "selected",
+      mode: "selected",
 
-            cities:
-              [],
+      cities: [],
 
-            states:
-              [],
+      areas: [],
 
-            countries:
-              [],
+      states: [],
 
-          };
+      countries: [],
 
-        }
+    };
 
-      }
+  } else {
+
+    updates.serviceCoverage = {
+
+      ...updates.serviceCoverage,
+
+      type:
+        normalizeString(
+          updates.serviceCoverage.type
+        ) || "city",
+
+      mode:
+        normalizeString(
+          updates.serviceCoverage.mode
+        ) || "selected",
+
+      cities:
+        Array.isArray(
+          updates.serviceCoverage.cities
+        )
+          ? updates.serviceCoverage.cities
+          : [],
+
+      areas:
+        Array.isArray(
+          updates.serviceCoverage.areas
+        )
+          ? updates.serviceCoverage.areas
+              .filter(
+                (area) =>
+                  area &&
+                  typeof area === "object" &&
+                  normalizeString(
+                    area.name
+                  )
+              )
+              .map(
+                (area) => ({
+
+                  name:
+                    normalizeString(
+                      area.name
+                    ),
+
+                  cityId:
+                    area.cityId ||
+                    updates.serviceCoverage.areaCityId ||
+                    "",
+
+                  cityName:
+                    normalizeString(
+                      area.cityName ||
+                      updates.serviceCoverage.areaCityName
+                    ) || "",
+
+                  district:
+                    normalizeString(
+                      area.district
+                    ) || "",
+
+                  state:
+                    normalizeString(
+                      area.state
+                    ) || "",
+
+                  country:
+                    normalizeString(
+                      area.country
+                    ) || "India",
+
+                  countryCode:
+                    String(
+                      area.countryCode ||
+                      "IN"
+                    )
+                      .trim()
+                      .toUpperCase(),
+
+                })
+              )
+          : [],
+
+      states:
+        Array.isArray(
+          updates.serviceCoverage.states
+        )
+          ? updates.serviceCoverage.states
+          : [],
+
+      countries:
+        Array.isArray(
+          updates.serviceCoverage.countries
+        )
+          ? updates.serviceCoverage.countries
+          : [],
+
+    };
+
+  }
+
+}
 
 
       /* =====================================================
@@ -1961,6 +2056,62 @@ if (
               ]
 
             : [];
+
+      }
+
+            /* =====================================================
+         INFORMATIONAL BUSINESS FEATURES
+      ===================================================== */
+
+      if (
+        updates.businessFeatures !==
+        undefined
+      ) {
+
+        const informationalGroups = [
+          "accessibility",
+          "serviceOptions",
+          "amenities",
+          "payments",
+          "parking",
+          "customerExperience",
+          "bookingOptions",
+          "deliveryPickup",
+          "facilities",
+          "safety",
+        ];
+
+        const normalizedBusinessFeatures = {};
+
+        for (
+          const group of informationalGroups
+        ) {
+
+          const values =
+            Array.isArray(
+              updates.businessFeatures?.[group]
+            )
+              ? updates.businessFeatures[group]
+              : [];
+
+          normalizedBusinessFeatures[group] =
+            [
+              ...new Set(
+                values
+                  .map(
+                    (value) =>
+                      String(value)
+                        .trim()
+                        .toLowerCase()
+                  )
+                  .filter(Boolean)
+              ),
+            ];
+
+        }
+
+        updates.businessFeatures =
+          normalizedBusinessFeatures;
 
       }
 
@@ -2746,12 +2897,12 @@ if (
 
           .populate(
             "categoryId",
-            "name slug uiType features"
+            "name slug uiType features informationalFeatures"
           )
 
           .populate(
   "secondaryCategoryIds",
-  "name slug uiType features"
+  "name slug uiType features informationalFeatures"
 );
 
 

@@ -491,7 +491,7 @@ if (requestedCitySlug) {
 
 .populate(
   "categoryId",
-  "name slug uiType features"
+  "name slug uiType features informationalFeatures"
 )
 
 .populate(
@@ -501,7 +501,7 @@ if (requestedCitySlug) {
 
 .populate(
   "secondaryCategoryIds",
-  "name slug uiType features"
+  "name slug uiType features informationalFeatures"
 )
 
         .lean();

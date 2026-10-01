@@ -83,6 +83,7 @@ export const createBusiness = asyncHandler(
   responseTime,
   homeService,
   paymentOptions,
+  businessFeatures,
   foodType,
   pricing,
   catalog,
@@ -1566,26 +1567,93 @@ landlineCountryCode:
             : [],
 
 
-        serviceCoverage:
-          serviceCoverage ||
-          {
+      serviceCoverage:
+  serviceCoverage &&
+  typeof serviceCoverage === "object"
+    ? {
+        ...serviceCoverage,
 
-            type:
-              "city",
+        type:
+          typeof serviceCoverage.type === "string" &&
+          serviceCoverage.type.trim()
+            ? serviceCoverage.type.trim()
+            : "city",
 
-            mode:
-              "selected",
+        mode:
+          typeof serviceCoverage.mode === "string" &&
+          serviceCoverage.mode.trim()
+            ? serviceCoverage.mode.trim()
+            : "selected",
 
-            cities:
-              [],
+        cities:
+          Array.isArray(serviceCoverage.cities)
+            ? serviceCoverage.cities
+            : [],
 
-            states:
-              [],
+        areas:
+          Array.isArray(serviceCoverage.areas)
+            ? serviceCoverage.areas
+                .filter(
+                  (area) =>
+                    area &&
+                    typeof area === "object" &&
+                    typeof area.name === "string" &&
+                    area.name.trim()
+                )
+                .map((area) => ({
+                  name: area.name.trim(),
 
-            countries:
-              [],
+                  cityId:
+                    area.cityId || "",
 
-          },
+                  cityName:
+                    typeof area.cityName === "string"
+                      ? area.cityName.trim()
+                      : "",
+
+                  district:
+                    typeof area.district === "string"
+                      ? area.district.trim()
+                      : "",
+
+                  state:
+                    typeof area.state === "string"
+                      ? area.state.trim()
+                      : "",
+
+                  country:
+                    typeof area.country === "string" &&
+                    area.country.trim()
+                      ? area.country.trim()
+                      : "India",
+
+                  countryCode:
+                    String(
+                      area.countryCode || "IN"
+                    )
+                      .trim()
+                      .toUpperCase(),
+                }))
+            : [],
+
+        states:
+          Array.isArray(serviceCoverage.states)
+            ? serviceCoverage.states
+            : [],
+
+        countries:
+          Array.isArray(serviceCoverage.countries)
+            ? serviceCoverage.countries
+            : [],
+      }
+    : {
+        type: "city",
+        mode: "selected",
+        cities: [],
+        areas: [],
+        states: [],
+        countries: [],
+      },
 
 
         restaurantBooking:
@@ -1653,11 +1721,18 @@ paymentOptions:
       ]
     : [],
 
+// ================= INFORMATIONAL BUSINESS FEATURES =================
 
-        boost:
-          Boolean(
-            boost
-          ),
+businessFeatures:
+  businessFeatures &&
+  typeof businessFeatures === "object"
+    ? businessFeatures
+    : {},
+
+boost:
+  Boolean(
+   boost
+  ),
 
 
         isFeatured:

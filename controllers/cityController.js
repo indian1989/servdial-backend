@@ -1,4 +1,6 @@
+import mongoose from "mongoose";
 import City from "../models/City.js";
+import Business from "../models/Business.js";
 import memoryCache from "../utils/memoryCache.js";
 import { pingSearchEngines } from "../services/seo/pingSearchEngines.js";
 
@@ -512,6 +514,250 @@ export const getTrendingCities = async (req, res) => {
   }
 };
 
+/* =========================================================
+   GET AREAS BY CITY
+   Areas are sourced from saved Business.address.area
+========================================================= */
+export const getAreasByCity = async (req, res) => {
+  try {
+    const { cityId } = req.params;
+
+    // -----------------------------------------------------
+    // VALIDATE CITY ID
+    // -----------------------------------------------------
+    if (!mongoose.Types.ObjectId.isValid(cityId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid cityId",
+      });
+    }
+
+    // -----------------------------------------------------
+    // FIND CITY
+    // -----------------------------------------------------
+    const city = await City.findById(cityId)
+      .select(
+        "_id name district state country countryCode location"
+      )
+      .lean();
+
+    if (!city) {
+      return res.status(404).json({
+        success: false,
+        message: "City not found",
+      });
+    }
+
+    // -----------------------------------------------------
+    // GET SAVED BUSINESS AREAS FOR THIS CITY
+    // -----------------------------------------------------
+    const businesses = await Business.find({
+      cityId,
+      isDeleted: false,
+      "address.area": {
+        $exists: true,
+        $nin: ["", null],
+      },
+    })
+      .select("address.area location")
+      .lean();
+
+    // -----------------------------------------------------
+    // NORMALIZE + DEDUPE AREAS
+    // -----------------------------------------------------
+    const areaMap = new Map();
+
+    for (const business of businesses) {
+      const rawArea = business?.address?.area;
+
+      if (
+        typeof rawArea !== "string" ||
+        !rawArea.trim()
+      ) {
+        continue;
+      }
+
+      const name = rawArea
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const key = name.toLowerCase();
+
+      if (!areaMap.has(key)) {
+        areaMap.set(key, {
+          name,
+          cityId: city._id,
+          cityName: city.name,
+          district: city.district || "",
+          state: city.state || "",
+          country: city.country || "India",
+          countryCode: city.countryCode || "IN",
+        });
+      }
+    }
+
+    const areas = [...areaMap.values()].sort(
+      (a, b) =>
+        a.name.localeCompare(
+          b.name,
+          undefined,
+          { sensitivity: "base" }
+        )
+    );
+
+    // -----------------------------------------------------
+    // FIND NEARBY AREAS
+    //
+    // Nearby = area-bearing businesses closest to
+    // the selected city's stored coordinates.
+    // -----------------------------------------------------
+    const cityLng =
+      Number(city.location?.coordinates?.[0]);
+
+    const cityLat =
+      Number(city.location?.coordinates?.[1]);
+
+    const distanceByArea = new Map();
+
+    // Haversine distance in KM
+    const getDistanceKm = (
+      lat1,
+      lon1,
+      lat2,
+      lon2
+    ) => {
+      const toRad = (value) =>
+        (value * Math.PI) / 180;
+
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) *
+          Math.cos(toRad(lat2)) *
+          Math.sin(dLon / 2) ** 2;
+
+      const c =
+        2 *
+        Math.atan2(
+          Math.sqrt(a),
+          Math.sqrt(1 - a)
+        );
+
+      return 6371 * c;
+    };
+
+    if (
+      Number.isFinite(cityLat) &&
+      Number.isFinite(cityLng)
+    ) {
+      for (const business of businesses) {
+        const rawArea =
+          business?.address?.area;
+
+        const lat =
+          Number(
+            business?.location?.coordinates?.[1]
+          );
+
+        const lng =
+          Number(
+            business?.location?.coordinates?.[0]
+          );
+
+        if (
+          typeof rawArea !== "string" ||
+          !rawArea.trim() ||
+          !Number.isFinite(lat) ||
+          !Number.isFinite(lng)
+        ) {
+          continue;
+        }
+
+        const areaName = rawArea
+          .trim()
+          .replace(/\s+/g, " ");
+
+        const key =
+          areaName.toLowerCase();
+
+        const distance = getDistanceKm(
+          cityLat,
+          cityLng,
+          lat,
+          lng
+        );
+
+        const existing =
+          distanceByArea.get(key);
+
+        if (
+          existing === undefined ||
+          distance < existing
+        ) {
+          distanceByArea.set(
+            key,
+            distance
+          );
+        }
+      }
+    }
+
+    const nearbyAreas = areas
+      .filter((area) =>
+        distanceByArea.has(
+          area.name.toLowerCase()
+        )
+      )
+      .sort(
+        (a, b) =>
+          distanceByArea.get(
+            a.name.toLowerCase()
+          ) -
+          distanceByArea.get(
+            b.name.toLowerCase()
+          )
+      )
+      .slice(0, 10);
+
+    // -----------------------------------------------------
+    // RESPONSE
+    // -----------------------------------------------------
+    return res.json({
+      success: true,
+      data: {
+        city: {
+          cityId: city._id,
+          name: city.name,
+          district: city.district || "",
+          state: city.state || "",
+          country: city.country || "India",
+          countryCode: city.countryCode || "IN",
+        },
+
+        areas,
+
+        nearbyAreas,
+      },
+
+      meta: {
+        totalAreas: areas.length,
+        nearbyCount: nearbyAreas.length,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "getAreasByCity error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load areas",
+    });
+  }
+};
 /* =========================================================
    BACKWARD COMPAT ALIASES (SAFETY LAYER)
 ========================================================= */

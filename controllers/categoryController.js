@@ -565,6 +565,7 @@ export const createCategory = async (req, res) => {
   description = "",
   uiType = "service",
   features = [],
+  informationalFeatures = {},
 } = req.body;
 
 
@@ -686,6 +687,7 @@ const category = await Category.create({
   description,
   uiType,
   features: finalFeatures,
+  informationalFeatures,
   keywords,
 });
 
@@ -751,6 +753,7 @@ const oldParentCategory =
       isTrending,
       uiType,
       features,
+      informationalFeatures,
     } = req.body;
 
     /* =====================================================
@@ -1101,6 +1104,25 @@ if (
       ]),
     ];
 
+        /* =====================================================
+       INFORMATIONAL FEATURES
+
+       These are separate from functional "features".
+
+       Only update when the field is explicitly provided.
+       This prevents older admin requests from accidentally
+       clearing existing informational feature settings.
+    ===================================================== */
+
+    if (
+      informationalFeatures !== undefined
+    ) {
+
+      category.informationalFeatures =
+        informationalFeatures;
+
+    }
+    
     /* =====================================================
        TRENDING
     ===================================================== */

@@ -149,6 +149,7 @@ serviceCoverage: {
 
     enum:[
       "city",      // selected cities
+      "area",      // selected areas within a city
       "state",     // selected states
       "country",   // selected countries
       "global"     // worldwide
@@ -213,6 +214,48 @@ serviceCoverage: {
 
   ],
 
+    // selected areas
+
+  areas: [
+
+    {
+      name: {
+        type: String,
+        trim: true,
+      },
+
+      cityId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "City",
+      },
+
+      cityName: {
+        type: String,
+        trim: true,
+      },
+
+      district: {
+        type: String,
+        trim: true,
+      },
+
+      state: {
+        type: String,
+        trim: true,
+      },
+
+      country: {
+        type: String,
+        trim: true,
+      },
+
+      countryCode: {
+        type: String,
+        trim: true,
+      },
+    }
+
+  ],
 
   // selected cities
 
@@ -442,6 +485,67 @@ homeService: {
 paymentOptions: {
   type: [String],
   default: [],
+},
+
+// ================= INFORMATIONAL BUSINESS FEATURES =================
+//
+// Actual features selected for this business.
+// Allowed options are controlled by Category.informationalFeatures.
+//
+// Category = what options are available for the category
+// Business = which of those options apply to this business
+//
+
+businessFeatures: {
+  accessibility: {
+    type: [String],
+    default: [],
+  },
+
+  serviceOptions: {
+    type: [String],
+    default: [],
+  },
+
+  amenities: {
+    type: [String],
+    default: [],
+  },
+
+  payments: {
+    type: [String],
+    default: [],
+  },
+
+  parking: {
+    type: [String],
+    default: [],
+  },
+
+  customerExperience: {
+    type: [String],
+    default: [],
+  },
+
+  bookingOptions: {
+    type: [String],
+    default: [],
+  },
+
+  deliveryPickup: {
+    type: [String],
+    default: [],
+  },
+
+  facilities: {
+    type: [String],
+    default: [],
+  },
+
+  safety: {
+    type: [String],
+    default: [],
+  },
 },
 
 // ================= SERVICE PRICING =================
@@ -1019,11 +1123,80 @@ businessSchema.pre("save", async function (next) {
     // ================= BASIC NORMALIZATION =================
     this.name = normalizeText(this.name);
     this.description = normalizeText(this.description);
+    // ================= INFORMATIONAL FEATURES NORMALIZATION =================
+
+if (this.businessFeatures) {
+
+  const informationalGroups = [
+    "accessibility",
+    "serviceOptions",
+    "amenities",
+    "payments",
+    "parking",
+    "customerExperience",
+    "bookingOptions",
+    "deliveryPickup",
+    "facilities",
+    "safety",
+  ];
+
+  informationalGroups.forEach((group) => {
+
+    const values =
+      Array.isArray(this.businessFeatures[group])
+        ? this.businessFeatures[group]
+        : [];
+
+    this.businessFeatures[group] = [
+      ...new Set(
+        values
+          .map((value) =>
+            String(value)
+              .trim()
+              .toLowerCase()
+          )
+          .filter(Boolean)
+      ),
+    ];
+
+  });
+
+}
+
 if (this.address) {
     this.address.street = normalizeText(this.address.street);
     this.address.area = normalizeText(this.address.area);
     this.address.landmark = normalizeText(this.address.landmark);
   }
+
+// ================= SERVICE COVERAGE AREA NORMALIZATION =================
+
+if (
+  this.serviceCoverage &&
+  Array.isArray(this.serviceCoverage.areas)
+) {
+  this.serviceCoverage.areas =
+    this.serviceCoverage.areas
+      .filter(
+        (area) =>
+          area &&
+          typeof area.name === "string" &&
+          area.name.trim()
+      )
+      .map((area) => ({
+        ...area.toObject?.() || area,
+        name: normalizeText(area.name),
+        cityName: normalizeText(area.cityName),
+        district: normalizeText(area.district),
+        state: normalizeText(area.state),
+        country: normalizeText(area.country),
+        countryCode: String(
+          area.countryCode || ""
+        )
+          .trim()
+          .toUpperCase(),
+      }));
+}
 
     if (this.district) this.district = normalizeText(this.district);
     if (this.state) this.state = normalizeText(this.state);

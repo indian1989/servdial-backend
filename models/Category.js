@@ -171,6 +171,72 @@ const categorySchema = new mongoose.Schema(
       },
     ],
 
+        /* =====================================================
+       INFORMATIONAL FEATURES
+
+       These control which informational feature groups
+       and options are available for a category.
+
+       IMPORTANT:
+       These are different from "features" above.
+
+       "features" = functional modules
+       "informationalFeatures" = business information
+    ===================================================== */
+
+    informationalFeatures: {
+
+      accessibility: {
+        type: [String],
+        default: [],
+      },
+
+      serviceOptions: {
+        type: [String],
+        default: [],
+      },
+
+      amenities: {
+        type: [String],
+        default: [],
+      },
+
+      payments: {
+        type: [String],
+        default: [],
+      },
+
+      parking: {
+        type: [String],
+        default: [],
+      },
+
+      customerExperience: {
+        type: [String],
+        default: [],
+      },
+
+      bookingOptions: {
+        type: [String],
+        default: [],
+      },
+
+      deliveryPickup: {
+        type: [String],
+        default: [],
+      },
+
+      facilities: {
+        type: [String],
+        default: [],
+      },
+
+      safety: {
+        type: [String],
+        default: [],
+      },
+
+    },
 
     /* =====================================================
        SEO
@@ -412,6 +478,55 @@ categorySchema.pre(
 
       }
 
+            /* ===================================================
+         NORMALIZE INFORMATIONAL FEATURES
+
+         - lowercase
+         - trim
+         - remove duplicates
+         - keep each informational group independent
+      =================================================== */
+
+      if (this.informationalFeatures) {
+
+        const informationalGroups = [
+          "accessibility",
+          "serviceOptions",
+          "amenities",
+          "payments",
+          "parking",
+          "customerExperience",
+          "bookingOptions",
+          "deliveryPickup",
+          "facilities",
+          "safety",
+        ];
+
+        informationalGroups.forEach((group) => {
+
+          const values =
+            Array.isArray(
+              this.informationalFeatures[group]
+            )
+              ? this.informationalFeatures[group]
+              : [];
+
+          this.informationalFeatures[group] = [
+            ...new Set(
+              values
+                .map((value) =>
+                  String(value)
+                    .trim()
+                    .toLowerCase()
+                )
+                .filter(Boolean)
+            ),
+          ];
+
+        });
+
+      }
+      
       /* ===================================================
    NORMALIZE SLUG
 =================================================== */
