@@ -3,6 +3,7 @@ import asyncHandler from "express-async-handler";
 import Category from "../models/Category.js";
 import Business from "../models/Business.js";
 import City from "../models/City.js";
+import Banner from "../models/Banner.js";
 import { resolveCity } from "../services/resolver/cityResolver.js";
 import { rankBusinesses } from "../utils/rankBusinesses.js";
 import { buildCategoryTree } from "../utils/buildCategoryTree.js";
@@ -37,11 +38,6 @@ export const getHomepageData = asyncHandler(async (req, res) => {
   isDeleted: false,
   ...cityFilter,
 };
-
-
-// 👇 ADD THIS NEXT
-const testCount = await Business.countDocuments(baseBusinessFilter);
-console.log("🔥 MATCHING BUSINESSES:", testCount);
 
   const baseSelect = `
   name
@@ -88,6 +84,7 @@ console.log("🔥 MATCHING BUSINESSES:", testCount);
     nearbyRaw,
     recommendedRaw,
     cities,
+    homepageTopBanners,
   ] = await Promise.all([
     // ================= CATEGORIES =================
     Category.find({
@@ -231,7 +228,7 @@ lat && lng
   .limit(40)
   .lean(),
 
-    // ================= FEATURED CITIES =================
+        // ================= FEATURED CITIES =================
     City.find({
       isFeatured: true,
       status: "active",
@@ -239,23 +236,53 @@ lat && lng
       .sort({ name: 1 })
       .limit(8)
       .lean(),
+
+    // ================= HOMEPAGE TOP BANNERS =================
+    Banner.find({
+      status: "approved",
+      isActive: true,
+      paymentStatus: {
+        $in: ["paid", "not_required"],
+      },
+
+      placement: "homepage_top",
+
+      $and: [
+        {
+          $or: [
+            { startDate: { $lte: new Date() } },
+            { startDate: null },
+            { startDate: { $exists: false } },
+          ],
+        },
+        {
+          $or: [
+            { endDate: { $gte: new Date() } },
+            { endDate: null },
+            { endDate: { $exists: false } },
+          ],
+        },
+        {
+          $or: cityDoc
+            ? [
+                { cityId: cityDoc._id },
+                { cityId: null },
+              ]
+            : [
+                { cityId: null },
+              ],
+        },
+      ],
+    })
+      .select(
+        "title image link placement cityId categoryId businessId order"
+      )
+      .sort({
+        order: 1,
+        createdAt: -1,
+      })
+      .lean(),
   ]);
-
-  console.log(
-  "🔥 FEATURED RAW PLAN:",
-  featuredRaw.map(b => ({
-    name: b.name,
-    plan: b.plan
-  }))
-);
-
-console.log(
-  "🔥 RECOMMENDED RAW PLAN:",
-  recommendedRaw.map(b => ({
-    name: b.name,
-    plan: b.plan
-  }))
-);
 
   // ================= RANKING =================
   const [
@@ -309,6 +336,7 @@ console.log(
       nearbyBusinesses: formattedNearby.slice(0, 8),
       recommendedBusinesses: rankedRecommended.slice(0, 8),
       cities,
+      homepageTopBanners,
     },
     meta: {
       city: cityDoc

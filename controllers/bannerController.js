@@ -685,30 +685,37 @@ export const getBanners = async (req, res) => {
   placement
 } = req.query;
 
-    const baseFilter = {
+        const baseFilter = {
       status: "approved",
       isActive: true,
-      $or: [
-  { paymentStatus: "paid" },
-  { paymentStatus: "not_required" }
-],
-      $and: [
-        {
-          $or: [
-            { startDate: { $lte: now } },
-            { startDate: null },
-            { startDate: { $exists: false } }
-          ]
-        },
-        {
-          $or: [
-            { endDate: { $gte: now } },
-            { endDate: null },
-            { endDate: { $exists: false } }
-          ]
-        }
-      ]
+      paymentStatus: {
+        $in: ["paid", "not_required"]
+      }
     };
+
+    // =========================
+    // ACTIVE DATE RANGE
+    // =========================
+    // Keep banners that have either:
+    // - no start date, or already started
+    // - no end date, or not yet expired
+
+    baseFilter.$and = [
+      {
+        $or: [
+          { startDate: { $lte: now } },
+          { startDate: null },
+          { startDate: { $exists: false } }
+        ]
+      },
+      {
+        $or: [
+          { endDate: { $gte: now } },
+          { endDate: null },
+          { endDate: { $exists: false } }
+        ]
+      }
+    ];
 
     // =========================
 // CITY TARGETING
@@ -765,11 +772,11 @@ if (businessId) {
     }
 
     const banners = await Banner.find(baseFilter)
-      .sort({ order: 1, createdAt: -1 })
-      .lean()
-      .select(
-  "title image link placement cityId categoryId businessId order"
-);
+  .select(
+    "title image link placement cityId categoryId businessId order"
+  )
+  .sort({ order: 1, createdAt: -1 })
+  .lean();
 
     return res.json({
       success: true,

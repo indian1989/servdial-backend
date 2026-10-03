@@ -243,21 +243,23 @@ approvedAt: {
 
 // ================= INDEXES =================
 
+// Targeting lookup
 bannerSchema.index({
   cityId: 1,
   categoryId: 1,
   businessId: 1,
   placement: 1
 });
+
+// Public banner filtering
 bannerSchema.index({
   status: 1,
   isActive: 1,
-  placement: 1
+  paymentStatus: 1,
+  placement: 1,
 });
 
-bannerSchema.index({ paymentStatus: 1 });
-bannerSchema.index({ createdBy: 1 });
-bannerSchema.index({ order: 1, createdAt: -1 });
+// Public banner targeting + placement
 bannerSchema.index({
   status: 1,
   isActive: 1,
@@ -267,5 +269,31 @@ bannerSchema.index({
   categoryId: 1,
   businessId: 1
 });
+
+// Public homepage targeting + display order
+bannerSchema.index({
+  status: 1,
+  isActive: 1,
+  paymentStatus: 1,
+  placement: 1,
+  cityId: 1,
+  order: 1,
+  createdAt: -1
+});
+
+// Scheduling lookup
+bannerSchema.index({
+  status: 1,
+  isActive: 1,
+  paymentStatus: 1,
+  placement: 1,
+  startDate: 1,
+  endDate: 1
+});
+
+// Existing supporting indexes
+bannerSchema.index({ paymentStatus: 1 });
+bannerSchema.index({ createdBy: 1 });
+bannerSchema.index({ order: 1, createdAt: -1 });
 
 export default mongoose.model("Banner", bannerSchema);
