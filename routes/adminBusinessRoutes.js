@@ -3,6 +3,7 @@ import express from "express";
 
 import {
   getAllBusinessesAdmin,
+  getBusinessByIdAdmin,
   approveBusiness,
   rejectBusiness,
   deleteBusinessAdmin,
@@ -41,6 +42,7 @@ router.get("/business-stats", getBusinessStats);
    ADMIN BUSINESS LIST
 ====================================================== */
 router.get("/", getAllBusinessesAdmin);
+router.get("/:id", getBusinessByIdAdmin);
 
 /* ======================================================
    CREATE / UPDATE BUSINESS (ADMIN SEED FLOW)

@@ -4,18 +4,47 @@ import { pingSearchEngines } from "../services/seo/pingSearchEngines.js";
 
 /* ======================================================
    GET ALL BUSINESSES (ADMIN)
+   - Lightweight list data only
+   - Full business document is loaded on Edit
 ====================================================== */
 export const getAllBusinessesAdmin = asyncHandler(async (req, res) => {
   const businesses = await Business.find()
     .setOptions({ includeAll: true })
+    .select(
+      "_id name images address cityId categoryId claimStatus isClaimed status isFeatured isVerified plan createdAt"
+    )
     .populate("cityId", "name slug")
     .populate("categoryId", "name slug")
-    .populate("owner", "name email role")
     .sort({ createdAt: -1 });
 
   res.json({
     success: true,
     data: businesses,
+  });
+});
+
+/* ======================================================
+   GET SINGLE BUSINESS (ADMIN EDIT)
+   - Full business document
+   - Used only when admin opens Edit
+====================================================== */
+export const getBusinessByIdAdmin = asyncHandler(async (req, res) => {
+  const business = await Business.findById(req.params.id)
+    .setOptions({ includeAll: true })
+    .populate("cityId")
+    .populate("categoryId")
+    .populate("owner", "name email role");
+
+  if (!business) {
+    return res.status(404).json({
+      success: false,
+      message: "Business not found",
+    });
+  }
+
+  res.json({
+    success: true,
+    data: business,
   });
 });
 
