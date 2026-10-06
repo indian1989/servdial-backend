@@ -45,14 +45,46 @@ import {
 export const trackVisitorController = asyncHandler(
   async (req, res) => {
     const result = await trackVisitor({
-      req,
-      visitorId:
-        req.body?.visitorId ||
-        req.headers["x-visitor-id"] ||
-        null,
-      user: req.user || null,
-      context: req.body?.context || {},
-    });
+  req,
+
+  visitorId:
+    req.body?.visitorId ||
+    req.headers["x-visitor-id"] ||
+    null,
+
+  user:
+    req.user || null,
+
+  context:
+    req.body?.context || {},
+
+  userAgent:
+    req.get("user-agent") || "",
+
+  referrer:
+    req.body?.referrer ||
+    req.get("referer") ||
+    req.get("referrer") ||
+    "",
+
+  source:
+    req.body?.source || "",
+
+  utmSource:
+    req.body?.utmSource || "",
+
+  utmMedium:
+    req.body?.utmMedium || "",
+
+  utmCampaign:
+    req.body?.utmCampaign || "",
+
+  utmTerm:
+    req.body?.utmTerm || "",
+
+  utmContent:
+    req.body?.utmContent || "",
+});
 
     if (!result?.success) {
       return res.status(400).json({

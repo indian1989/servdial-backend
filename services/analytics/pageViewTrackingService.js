@@ -8,6 +8,15 @@ import {
   incrementSessionPageViews,
 } from "./sessionTrackingService.js";
 
+import {
+  normalizeSource,
+  normalizeReferrer,
+  getReferrerDomain,
+  isInternalReferrer,
+  detectDeviceType,
+  detectBrowser,
+  detectOperatingSystem,
+} from "./visitorTrackingService.js";
 /**
  * =========================================================
  * 📄 PAGE VIEW TRACKING SERVICE
@@ -178,6 +187,254 @@ export const detectPageType = (
 
 /**
  * =========================================================
+ * RESOLVE PAGE VIEW ACQUISITION
+ * =========================================================
+ *
+ * Priority:
+ *
+ * 1. Explicit incoming acquisition data
+ * 2. Active session acquisition data
+ * 3. Visitor first-touch acquisition data
+ *
+ * Internal ServDial referrers are never treated as
+ * external acquisition.
+ *
+ * =========================================================
+ */
+const resolvePageViewAcquisition = ({
+  source = "",
+  referrer = "",
+
+  utmSource = "",
+  utmMedium = "",
+  utmCampaign = "",
+  utmTerm = "",
+  utmContent = "",
+
+  session = null,
+  visitor = null,
+} = {}) => {
+  const incomingReferrer =
+    normalizeReferrer(referrer);
+
+  const sessionReferrer =
+    normalizeReferrer(
+      session?.referrer || ""
+    );
+
+  const visitorReferrer =
+    normalizeReferrer(
+      visitor?.referrer || ""
+    );
+
+  const resolvedReferrer =
+    incomingReferrer ||
+    sessionReferrer ||
+    visitorReferrer ||
+    "";
+
+  const externalReferrer =
+    isInternalReferrer(
+      resolvedReferrer
+    )
+      ? ""
+      : resolvedReferrer;
+
+  const resolvedUtmSource =
+    safeString(utmSource) ||
+    safeString(session?.utmSource) ||
+    safeString(visitor?.utmSource);
+
+  const resolvedUtmMedium =
+    safeString(utmMedium) ||
+    safeString(session?.utmMedium) ||
+    safeString(visitor?.utmMedium);
+
+  const resolvedUtmCampaign =
+    safeString(utmCampaign) ||
+    safeString(session?.utmCampaign) ||
+    safeString(visitor?.utmCampaign);
+
+  const resolvedUtmTerm =
+    safeString(utmTerm) ||
+    safeString(session?.utmTerm) ||
+    safeString(visitor?.utmTerm);
+
+  const resolvedUtmContent =
+    safeString(utmContent) ||
+    safeString(session?.utmContent) ||
+    safeString(visitor?.utmContent);
+
+  let resolvedSource =
+    safeString(source);
+
+  /*
+   * If no current source was supplied, use the active
+   * session acquisition source first, then visitor
+   * first-touch source.
+   */
+  if (!resolvedSource) {
+    resolvedSource =
+      safeString(session?.source) ||
+      safeString(visitor?.source) ||
+      "";
+  }
+
+  /*
+   * Normalize the source through the same canonical
+   * acquisition taxonomy used by Visitor analytics.
+   */
+  resolvedSource =
+    normalizeSource(
+      resolvedSource
+    );
+
+  /*
+   * Never allow internal navigation to become external
+   * acquisition.
+   */
+  if (
+    externalReferrer === ""
+    &&
+    resolvedSource === "referral"
+  ) {
+    resolvedSource =
+      safeString(
+        session?.source
+      ) ||
+      safeString(
+        visitor?.source
+      ) ||
+      "direct";
+
+    resolvedSource =
+      normalizeSource(
+        resolvedSource
+      );
+  }
+
+  /*
+   * UTM data is authoritative for campaign traffic.
+   *
+   * Reuse the same classification logic as the visitor
+   * service by applying the medium here.
+   */
+  const normalizedMedium =
+    resolvedUtmMedium
+      .toLowerCase();
+
+  const hasUtm =
+    Boolean(
+      resolvedUtmSource ||
+      resolvedUtmMedium ||
+      resolvedUtmCampaign ||
+      resolvedUtmTerm ||
+      resolvedUtmContent
+    );
+
+  if (hasUtm) {
+    if (
+      [
+        "cpc",
+        "ppc",
+        "paid_search",
+        "paidsearch",
+        "sem",
+      ].includes(
+        normalizedMedium
+      )
+    ) {
+      resolvedSource =
+        "paid_search";
+    } else if (
+      [
+        "paid_social",
+        "paidsocial",
+        "social_paid",
+      ].includes(
+        normalizedMedium
+      )
+    ) {
+      resolvedSource =
+        "paid_social";
+    } else if (
+      [
+        "email",
+        "e-mail",
+        "newsletter",
+      ].includes(
+        normalizedMedium
+      )
+    ) {
+      resolvedSource =
+        "email";
+    } else if (
+      [
+        "display",
+        "banner",
+        "programmatic",
+      ].includes(
+        normalizedMedium
+      )
+    ) {
+      resolvedSource =
+        "display";
+    } else {
+      resolvedSource =
+        "campaign";
+    }
+  }
+
+  /*
+   * If an external referrer exists but source was
+   * direct/unknown, classify it as referral.
+   *
+   * More specific organic/social classification should
+   * already come from the acquisition layer.
+   */
+  if (
+    externalReferrer &&
+    (
+      resolvedSource === "direct" ||
+      resolvedSource === "unknown"
+    ) &&
+    !hasUtm
+  ) {
+    resolvedSource =
+      "referral";
+  }
+
+  return {
+    source:
+      resolvedSource || "unknown",
+
+    referrer:
+      externalReferrer,
+
+    referrerDomain:
+      getReferrerDomain(
+        externalReferrer
+      ),
+
+    utmSource:
+      resolvedUtmSource,
+
+    utmMedium:
+      resolvedUtmMedium,
+
+    utmCampaign:
+      resolvedUtmCampaign,
+
+    utmTerm:
+      resolvedUtmTerm,
+
+    utmContent:
+      resolvedUtmContent,
+  };
+};
+
+/**
+ * =========================================================
  * BUILD PAGE VIEW DATA
  * =========================================================
  */
@@ -222,7 +479,7 @@ const buildPageViewData = ({
       pageType
     );
 
-  const visitorType =
+    const visitorType =
     user?.role === "provider"
       ? "provider"
       : user
@@ -230,6 +487,66 @@ const buildPageViewData = ({
       : session?.visitorType ||
         visitor?.visitorType ||
         "guest";
+
+  const acquisition =
+    resolvePageViewAcquisition({
+      source,
+      referrer,
+
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmTerm,
+      utmContent,
+
+      session,
+      visitor,
+    });
+
+  const resolvedUserAgent =
+    safeString(
+      visitor?.userAgent ||
+      session?.userAgent ||
+      ""
+    );
+
+  const resolvedDeviceType =
+    safeString(deviceType) ||
+    session?.deviceType ||
+    visitor?.deviceType ||
+    (
+      resolvedUserAgent
+        ? detectDeviceType(
+            resolvedUserAgent
+          )
+        : "unknown"
+    );
+
+  const resolvedBrowser =
+    safeString(browser) ||
+    session?.browser ||
+    visitor?.browser ||
+    (
+      resolvedUserAgent
+        ? detectBrowser(
+            resolvedUserAgent
+          )
+        : ""
+    );
+
+  const resolvedOperatingSystem =
+    safeString(
+      operatingSystem
+    ) ||
+    session?.operatingSystem ||
+    visitor?.operatingSystem ||
+    (
+      resolvedUserAgent
+        ? detectOperatingSystem(
+            resolvedUserAgent
+          )
+        : ""
+    );
 
   return {
     visitorId:
@@ -272,52 +589,38 @@ const buildPageViewData = ({
     query:
       safeString(query),
 
-    referrer:
-      safeString(referrer) ||
-      session.referrer ||
-      visitor.referrer ||
-      "",
+       referrer:
+      acquisition.referrer,
+
+    referrerDomain:
+      acquisition.referrerDomain,
 
     source:
-      safeString(source) ||
-      session.source ||
-      visitor.source ||
-      "unknown",
+      acquisition.source,
 
     utmSource:
-      safeString(utmSource),
+      acquisition.utmSource,
 
     utmMedium:
-      safeString(utmMedium),
+      acquisition.utmMedium,
 
     utmCampaign:
-      safeString(utmCampaign),
+      acquisition.utmCampaign,
 
     utmTerm:
-      safeString(utmTerm),
+      acquisition.utmTerm,
 
     utmContent:
-      safeString(utmContent),
+      acquisition.utmContent,
 
     deviceType:
-      safeString(deviceType) ||
-      session.deviceType ||
-      visitor.deviceType ||
-      "unknown",
+      resolvedDeviceType,
 
     browser:
-      safeString(browser) ||
-      session.browser ||
-      visitor.browser ||
-      "",
+      resolvedBrowser,
 
     operatingSystem:
-      safeString(
-        operatingSystem
-      ) ||
-      session.operatingSystem ||
-      visitor.operatingSystem ||
-      "",
+      resolvedOperatingSystem,
 
     country:
       safeString(country) ||
@@ -358,6 +661,7 @@ export const trackPageView = async ({
   sessionId = null,
 
   user = null,
+  userAgent = "",
 
   path = "",
   pageTitle = "",
@@ -482,6 +786,7 @@ export const trackPageView = async ({
           resolvedVisitorId,
 
         user,
+        userAgent,
 
         entryPage:
           safeString(entryPage) ||
@@ -582,9 +887,14 @@ export const trackPageView = async ({
         utmTerm,
         utmContent,
 
-        deviceType,
-        browser,
-        operatingSystem,
+        deviceType:
+          safeString(deviceType),
+
+        browser:
+          safeString(browser),
+
+        operatingSystem:
+          safeString(operatingSystem),
 
         country,
         state,

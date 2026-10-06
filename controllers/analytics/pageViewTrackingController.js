@@ -11,7 +11,7 @@ import {
 
 export const trackPageViewController =
   asyncHandler(async (req, res) => {
-    const {
+   const {
   visitorId,
   sessionId,
   path,
@@ -28,6 +28,15 @@ export const trackPageViewController =
   utmCampaign,
   utmTerm,
   utmContent,
+  deviceType,
+  browser,
+  operatingSystem,
+  country,
+  state,
+  cityName,
+  durationSeconds = 0,
+  entryPage,
+  landingPage,
   context = {},
 } = req.body || {};
 
@@ -53,25 +62,58 @@ export const trackPageViewController =
     }
 
     const result = await trackPageView({
-  req,
   visitorId,
   sessionId,
+
+  user: req.user || null,
+
+  userAgent:
+    req.get("user-agent") || "",
+
   path,
   pageTitle,
   pageType,
-  businessId: businessId || null,
-  categoryId: categoryId || null,
-  cityId: cityId || null,
-  query: query || "",
-  referrer,
+
+  business:
+    businessId || null,
+
+  category:
+    categoryId || null,
+
+  city:
+    cityId || null,
+
+  query:
+    query || "",
+
+  referrer:
+    referrer ||
+    req.get("referer") ||
+    req.get("referrer") ||
+    "",
+
   source,
+
   utmSource,
   utmMedium,
   utmCampaign,
   utmTerm,
   utmContent,
+
+  deviceType,
+  browser,
+  operatingSystem,
+
+  country,
+  state,
+  cityName,
+
+  durationSeconds,
+
+  entryPage,
+  landingPage,
+
   context,
-  user: req.user || null,
 });
 
     if (!result?.success) {
@@ -118,24 +160,23 @@ export const updatePageViewDurationController =
     }
 
     const result =
-      await updatePageViewDuration(
-        pageViewId,
-        durationSeconds
-      );
+  await updatePageViewDuration(
+    pageViewId,
+    durationSeconds
+  );
 
-    if (!result?.success) {
-      return res.status(400).json({
-        success: false,
-        message:
-          result?.message ||
-          "Unable to update page view duration.",
-      });
-    }
+if (!result) {
+  return res.status(404).json({
+    success: false,
+    message:
+      "Page view not found.",
+  });
+}
 
-    return res.status(200).json({
-      success: true,
-      data: result.pageView || result,
-    });
+return res.status(200).json({
+  success: true,
+  data: result,
+});
   });
 
 export const getPageViewController =

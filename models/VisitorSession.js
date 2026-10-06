@@ -118,7 +118,7 @@ const visitorSessionSchema = new mongoose.Schema(
       trim: true,
     },
 
-    deviceType: {
+        deviceType: {
       type: String,
       enum: [
         "desktop",
@@ -128,6 +128,13 @@ const visitorSessionSchema = new mongoose.Schema(
       ],
       default: "unknown",
       index: true,
+    },
+
+    userAgent: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 1000,
     },
 
     browser: {
@@ -163,24 +170,39 @@ const visitorSessionSchema = new mongoose.Schema(
       index: true,
     },
 
-    source: {
+        source: {
       type: String,
       enum: [
         "direct",
         "organic",
         "social",
         "referral",
+        "email",
+        "paid_search",
+        "paid_social",
+        "display",
         "campaign",
+        "other",
         "unknown",
       ],
       default: "unknown",
       index: true,
     },
 
-    referrer: {
+        referrer: {
       type: String,
       default: "",
       trim: true,
+      maxlength: 2000,
+    },
+
+    referrerDomain: {
+      type: String,
+      default: "",
+      trim: true,
+      lowercase: true,
+      maxlength: 255,
+      index: true,
     },
 
     utmSource: {
@@ -256,6 +278,31 @@ visitorSessionSchema.index({
 
 visitorSessionSchema.index({
   source: 1,
+  startedAt: -1,
+});
+
+visitorSessionSchema.index({
+  referrerDomain: 1,
+  startedAt: -1,
+});
+
+visitorSessionSchema.index({
+  utmSource: 1,
+  startedAt: -1,
+});
+
+visitorSessionSchema.index({
+  utmMedium: 1,
+  startedAt: -1,
+});
+
+visitorSessionSchema.index({
+  utmCampaign: 1,
+  startedAt: -1,
+});
+
+visitorSessionSchema.index({
+  deviceType: 1,
   startedAt: -1,
 });
 

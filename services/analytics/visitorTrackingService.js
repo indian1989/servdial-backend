@@ -1,52 +1,111 @@
 // backend/services/analytics/visitorTrackingService.js
+
 import Visitor from "../../models/Visitor.js";
 
 /**
  * =========================================================
- * 👤 VISITOR TRACKING SERVICE
+ * 👤 SERVDIAL — VISITOR TRACKING SERVICE
  * =========================================================
  *
  * RESPONSIBILITY:
  *
  * - Identify visitor
  * - Support guest / user / provider
- * - Create visitor when first seen
- * - Update lastSeenAt
+ * - Create visitor on first visit
+ * - Maintain first-touch acquisition data
+ * - Update visitor activity
  * - Associate authenticated user/provider
+ * - Capture device / browser / operating system
  * - Never use IP as visitor identity
  *
- * FLOW:
+ * ANALYTICS FLOW:
  *
  * Request
  *   ↓
- * Identify visitor
+ * Visitor ID
  *   ↓
- * Guest / User / Provider
+ * Visitor Type
  *   ↓
- * Find/Create Visitor
+ * Find / Create Visitor
  *   ↓
- * Update lastSeenAt
+ * First-touch attribution
+ *   ↓
+ * Update activity / identity
  *   ↓
  * Return visitor context
  *
+ * IMPORTANT:
+ *
+ * First-touch acquisition fields are intentionally NOT
+ * overwritten on every page view.
+ *
+ * This prevents a visitor arriving from Google, then
+ * navigating internally, from becoming "direct".
  * =========================================================
  */
 
-/**
- * ---------------------------------------------------------
- * SAFE STRING
- * ---------------------------------------------------------
- */
-const safeString = (value = "") => {
-  return String(value || "").trim();
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
+const VISITOR_TYPES = [
+  "guest",
+  "user",
+  "provider",
+];
+
+const TRAFFIC_SOURCES = [
+  "direct",
+  "organic",
+  "social",
+  "referral",
+  "email",
+  "paid_search",
+  "paid_social",
+  "display",
+  "campaign",
+  "other",
+  "unknown",
+];
+
+const MAX_STRING_LENGTH = 500;
+const MAX_REFERRER_LENGTH = 2000;
+
+
+/* =========================================================
+   SAFE STRING
+========================================================= */
+
+const safeString = (value = "", maxLength = MAX_STRING_LENGTH) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value)
+    .trim()
+    .slice(0, maxLength);
 };
 
-/**
- * ---------------------------------------------------------
- * VISITOR TYPE
- * ---------------------------------------------------------
- */
-const getVisitorType = (user) => {
+
+/* =========================================================
+   SAFE OBJECT ID VALUE
+========================================================= */
+
+const getUserId = (user) => {
+  if (!user?._id) {
+    return null;
+  }
+
+  return user._id;
+};
+
+
+/* =========================================================
+   VISITOR TYPE
+========================================================= */
+
+const getVisitorType = (user = null) => {
   if (!user) {
     return "guest";
   }
@@ -55,27 +114,162 @@ const getVisitorType = (user) => {
     return "provider";
   }
 
+  if (
+    user.role === "admin" ||
+    user.role === "superadmin"
+  ) {
+    return null;
+  }
+
   return "user";
 };
 
-/**
- * ---------------------------------------------------------
- * DEVICE TYPE
- * ---------------------------------------------------------
- */
+
+/* =========================================================
+   NORMALIZE TRAFFIC SOURCE
+========================================================= */
+
+const normalizeSource = (source = "") => {
+  const value = safeString(source).toLowerCase();
+
+  if (!value) {
+    return "unknown";
+  }
+
+  if (TRAFFIC_SOURCES.includes(value)) {
+    return value;
+  }
+
+  /*
+   * Backward compatibility for older analytics data.
+   */
+  if (value === "paid") {
+    return "campaign";
+  }
+
+  if (value === "ads") {
+    return "campaign";
+  }
+
+  return "other";
+};
+
+
+/* =========================================================
+   NORMALIZE REFERRER
+========================================================= */
+
+const normalizeReferrer = (referrer = "") => {
+  return safeString(
+    referrer,
+    MAX_REFERRER_LENGTH
+  );
+};
+
+
+/* =========================================================
+   REFERRER DOMAIN
+========================================================= */
+
+const getReferrerDomain = (referrer = "") => {
+  const value = normalizeReferrer(referrer);
+
+  if (!value) {
+    return "";
+  }
+
+  try {
+    /*
+     * document.referrer normally contains a full URL.
+     *
+     * URL also handles protocol-relative URLs after adding
+     * a temporary protocol.
+     */
+    const url = new URL(
+      value,
+      "https://servdial.com"
+    );
+
+    let hostname = safeString(
+      url.hostname,
+      255
+    ).toLowerCase();
+
+    if (!hostname) {
+      return "";
+    }
+
+    /*
+     * Remove leading www for consistent analytics grouping.
+     */
+    hostname = hostname.replace(/^www\./, "");
+
+    return hostname;
+  } catch {
+    /*
+     * If the referrer is malformed, preserve raw referrer
+     * but do not create a misleading domain.
+     */
+    return "";
+  }
+};
+
+
+/* =========================================================
+   INTERNAL REFERRER CHECK
+========================================================= */
+
+const isInternalReferrer = (referrer = "") => {
+  const domain = getReferrerDomain(referrer);
+
+  if (!domain) {
+    return false;
+  }
+
+  const internalDomains = [
+    "servdial.com",
+    "localhost",
+    "127.0.0.1",
+  ];
+
+  return internalDomains.some(
+    (internalDomain) =>
+      domain === internalDomain ||
+      domain.endsWith(`.${internalDomain}`)
+  );
+};
+
+
+/* =========================================================
+   DEVICE TYPE
+========================================================= */
+
 const detectDeviceType = (userAgent = "") => {
-  const ua = safeString(userAgent).toLowerCase();
+  const ua = safeString(
+    userAgent,
+    2000
+  ).toLowerCase();
 
   if (!ua) {
     return "unknown";
   }
 
-  if (/ipad|tablet|playbook|silk/i.test(ua)) {
+  /*
+   * Tablets first because many tablet UAs also contain
+   * Android / mobile-like tokens.
+   */
+  if (
+    /ipad|tablet|playbook|silk/i.test(ua) ||
+    (
+      /android/i.test(ua) &&
+      !/mobile/i.test(ua)
+    )
+  ) {
     return "tablet";
   }
 
   if (
-    /mobile|iphone|ipod|android.*mobile|windows phone/i.test(
+    /mobi|iphone|ipod|android.*mobile|windows phone/i.test(
       ua
     )
   ) {
@@ -83,7 +277,9 @@ const detectDeviceType = (userAgent = "") => {
   }
 
   if (
-    /windows|macintosh|linux|cros|x11/i.test(ua)
+    /windows|macintosh|mac os x|linux|cros|x11/i.test(
+      ua
+    )
   ) {
     return "desktop";
   }
@@ -91,112 +287,164 @@ const detectDeviceType = (userAgent = "") => {
   return "unknown";
 };
 
-/**
- * ---------------------------------------------------------
- * BROWSER
- * ---------------------------------------------------------
- */
+
+/* =========================================================
+   BROWSER
+========================================================= */
+
 const detectBrowser = (userAgent = "") => {
-  const ua = safeString(userAgent);
+  const ua = safeString(
+    userAgent,
+    2000
+  );
 
   if (!ua) {
     return "";
   }
 
-  if (/edg\//i.test(ua)) {
+  /*
+   * Order matters.
+   *
+   * Edge and Opera contain Chrome tokens in their UA.
+   */
+  if (
+    /edg\/|edga\/|edgios\//i.test(ua)
+  ) {
     return "Edge";
   }
 
-  if (/opr\//i.test(ua)) {
+  if (
+    /opr\/|opera/i.test(ua)
+  ) {
     return "Opera";
   }
 
-  if (/chrome\//i.test(ua) && !/edg\//i.test(ua)) {
-    return "Chrome";
-  }
-
-  if (/firefox\//i.test(ua)) {
+  if (
+    /firefox\/|fxios\//i.test(ua)
+  ) {
     return "Firefox";
   }
 
-  if (/safari\//i.test(ua) && !/chrome\//i.test(ua)) {
+  if (
+    /crios\//i.test(ua)
+  ) {
+    return "Chrome";
+  }
+
+  if (
+    /chrome\//i.test(ua) &&
+    !/edg\//i.test(ua) &&
+    !/opr\//i.test(ua)
+  ) {
+    return "Chrome";
+  }
+
+  if (
+    /safari\//i.test(ua) &&
+    !/chrome\//i.test(ua) &&
+    !/crios\//i.test(ua) &&
+    !/android/i.test(ua)
+  ) {
     return "Safari";
   }
 
-  if (/msie|trident/i.test(ua)) {
+  if (
+    /msie|trident/i.test(ua)
+  ) {
     return "Internet Explorer";
   }
 
   return "Unknown";
 };
 
-/**
- * ---------------------------------------------------------
- * OPERATING SYSTEM
- * ---------------------------------------------------------
- */
+
+/* =========================================================
+   OPERATING SYSTEM
+========================================================= */
+
 const detectOperatingSystem = (userAgent = "") => {
-  const ua = safeString(userAgent);
+  const ua = safeString(
+    userAgent,
+    2000
+  );
 
   if (!ua) {
     return "Unknown";
   }
 
-  if (/windows nt/i.test(ua)) {
-    return "Windows";
-  }
-
-  if (/android/i.test(ua)) {
-    return "Android";
-  }
-
-  if (/iphone|ipad|ipod/i.test(ua)) {
+  /*
+   * iOS before macOS because iPad/iPhone UAs can contain
+   * Macintosh in newer Safari versions.
+   */
+  if (
+    /iphone|ipad|ipod/i.test(ua)
+  ) {
     return "iOS";
   }
 
-  if (/mac os x/i.test(ua)) {
+  if (
+    /android/i.test(ua)
+  ) {
+    return "Android";
+  }
+
+  if (
+    /windows phone/i.test(ua)
+  ) {
+    return "Windows Phone";
+  }
+
+  if (
+    /windows nt/i.test(ua)
+  ) {
+    return "Windows";
+  }
+
+  if (
+    /cros/i.test(ua)
+  ) {
+    return "ChromeOS";
+  }
+
+  if (
+    /macintosh|mac os x/i.test(ua)
+  ) {
     return "macOS";
   }
 
-  if (/linux/i.test(ua)) {
+  if (
+    /linux/i.test(ua)
+  ) {
     return "Linux";
-  }
-
-  if (/cros/i.test(ua)) {
-    return "ChromeOS";
   }
 
   return "Unknown";
 };
 
-/**
- * ---------------------------------------------------------
- * VISITOR ID
- * ---------------------------------------------------------
- *
- * IMPORTANT:
- *
- * Guest visitor ID should come from the client.
- *
- * Do NOT generate a new ID on every request.
- * The frontend should persist the anonymous ID and send
- * the same visitorId on subsequent requests.
- *
- * Authenticated visitors can use a stable visitorId
- * associated with their account.
- *
- * ---------------------------------------------------------
- */
+
+/* =========================================================
+   VISITOR ID
+========================================================= */
+
 const getVisitorId = ({
   visitorId,
-  user,
-}) => {
-  const clientVisitorId = safeString(visitorId);
+  user = null,
+} = {}) => {
+  const clientVisitorId = safeString(
+    visitorId,
+    200
+  );
 
+  /*
+   * Guest visitors MUST provide a stable client-side ID.
+   */
   if (clientVisitorId) {
     return clientVisitorId;
   }
 
+  /*
+   * Authenticated users have a deterministic fallback.
+   */
   if (user?._id) {
     return `user_${String(user._id)}`;
   }
@@ -204,11 +452,201 @@ const getVisitorId = ({
   return null;
 };
 
-/**
- * ---------------------------------------------------------
- * CREATE VISITOR DATA
- * ---------------------------------------------------------
- */
+
+/* =========================================================
+   FIRST-TOUCH ATTRIBUTION DATA
+========================================================= */
+
+const buildAcquisitionData = ({
+  source,
+  referrer,
+  utmSource,
+  utmMedium,
+  utmCampaign,
+  utmTerm,
+  utmContent,
+} = {}) => {
+  const normalizedReferrer =
+    normalizeReferrer(referrer);
+
+  const externalReferrer =
+    isInternalReferrer(normalizedReferrer)
+      ? ""
+      : normalizedReferrer;
+
+  const normalizedUtmSource =
+    safeString(utmSource).toLowerCase();
+
+  const normalizedUtmMedium =
+    safeString(utmMedium).toLowerCase();
+
+  const normalizedUtmCampaign =
+    safeString(utmCampaign);
+
+  const hasUtm =
+    Boolean(
+      normalizedUtmSource ||
+      normalizedUtmMedium ||
+      normalizedUtmCampaign ||
+      safeString(utmTerm) ||
+      safeString(utmContent)
+    );
+
+  let normalizedSource =
+    normalizeSource(source);
+
+  /*
+   * =======================================================
+   * SERVER-SIDE ACQUISITION CLASSIFICATION
+   * =======================================================
+   *
+   * UTM medium is more authoritative than a generic
+   * frontend "campaign" label.
+   *
+   * Examples:
+   *
+   * utm_medium=cpc
+   *      -> paid_search
+   *
+   * utm_medium=paid_social
+   *      -> paid_social
+   *
+   * utm_medium=email
+   *      -> email
+   *
+   * utm_medium=display
+   *      -> display
+   *
+   * Other UTM traffic
+   *      -> campaign
+   *
+   * No UTM
+   *      -> preserve detected source
+   */
+
+  if (hasUtm) {
+    if (
+      [
+        "cpc",
+        "ppc",
+        "paid_search",
+        "paidsearch",
+        "sem",
+      ].includes(normalizedUtmMedium)
+    ) {
+      normalizedSource = "paid_search";
+    } else if (
+      [
+        "paid_social",
+        "paidsocial",
+        "social_paid",
+      ].includes(normalizedUtmMedium)
+    ) {
+      normalizedSource = "paid_social";
+    } else if (
+      [
+        "email",
+        "e-mail",
+        "newsletter",
+      ].includes(normalizedUtmMedium)
+    ) {
+      normalizedSource = "email";
+    } else if (
+      [
+        "display",
+        "banner",
+        "programmatic",
+      ].includes(normalizedUtmMedium)
+    ) {
+      normalizedSource = "display";
+    } else {
+      normalizedSource = "campaign";
+    }
+  }
+
+  /*
+   * If there is an external referrer but the incoming source
+   * is direct/unknown, do not classify it as direct.
+   *
+   * The detailed search/social classification will be handled
+   * by the frontend + later shared acquisition logic.
+   */
+  if (
+    !hasUtm &&
+    externalReferrer &&
+    (
+      normalizedSource === "direct" ||
+      normalizedSource === "unknown"
+    )
+  ) {
+    normalizedSource = "referral";
+  }
+
+  return {
+    source:
+      normalizedSource,
+
+    referrer:
+      externalReferrer,
+
+    referrerDomain:
+      getReferrerDomain(externalReferrer),
+
+    utmSource:
+      safeString(utmSource),
+
+    utmMedium:
+      safeString(utmMedium),
+
+    utmCampaign:
+      normalizedUtmCampaign,
+
+    utmTerm:
+      safeString(utmTerm),
+
+    utmContent:
+      safeString(utmContent),
+  };
+};
+
+
+/* =========================================================
+   DEVICE DATA
+========================================================= */
+
+const buildDeviceData = (
+  userAgent = ""
+) => {
+  const ua = safeString(
+    userAgent,
+    2000
+  );
+
+  if (!ua) {
+    return {
+      userAgent: "",
+      deviceType: "unknown",
+      browser: "",
+      operatingSystem: "Unknown",
+    };
+  }
+
+  return {
+    userAgent: ua,
+    deviceType:
+      detectDeviceType(ua),
+    browser:
+      detectBrowser(ua),
+    operatingSystem:
+      detectOperatingSystem(ua),
+  };
+};
+
+
+/* =========================================================
+   CREATE VISITOR DATA
+========================================================= */
+
 const buildVisitorData = ({
   visitorId,
   visitorType,
@@ -224,29 +662,35 @@ const buildVisitorData = ({
   country,
   state,
   city,
-}) => {
+} = {}) => {
+  const now = new Date();
+
+  const acquisition =
+    buildAcquisitionData({
+      source,
+      referrer,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmTerm,
+      utmContent,
+    });
+
+  const device =
+    buildDeviceData(userAgent);
+
   return {
     visitorId,
 
     visitorType,
 
     user:
-      user?._id || null,
+      getUserId(user),
 
-    firstSeenAt: new Date(),
+    firstSeenAt: now,
+    lastSeenAt: now,
 
-    lastSeenAt: new Date(),
-
-    userAgent: safeString(userAgent),
-
-    deviceType:
-      detectDeviceType(userAgent),
-
-    browser:
-      detectBrowser(userAgent),
-
-    operatingSystem:
-      detectOperatingSystem(userAgent),
+    ...device,
 
     country:
       safeString(country),
@@ -257,36 +701,51 @@ const buildVisitorData = ({
     city:
       safeString(city),
 
-    source:
-      safeString(source) || "unknown",
-
-    referrer:
-      safeString(referrer),
-
-    utmSource:
-      safeString(utmSource),
-
-    utmMedium:
-      safeString(utmMedium),
-
-    utmCampaign:
-      safeString(utmCampaign),
-
-    utmTerm:
-      safeString(utmTerm),
-
-    utmContent:
-      safeString(utmContent),
+    ...acquisition,
 
     isActive: true,
   };
 };
 
-/**
- * =========================================================
- * IDENTIFY / TRACK VISITOR
- * =========================================================
- */
+
+/* =========================================================
+   UPDATE DEVICE CONTEXT
+========================================================= */
+
+const updateDeviceContext = (
+  visitor,
+  userAgent
+) => {
+  const ua = safeString(
+    userAgent,
+    2000
+  );
+
+  if (!ua) {
+    return;
+  }
+
+  const device =
+    buildDeviceData(ua);
+
+  visitor.userAgent =
+    device.userAgent;
+
+  visitor.deviceType =
+    device.deviceType;
+
+  visitor.browser =
+    device.browser;
+
+  visitor.operatingSystem =
+    device.operatingSystem;
+};
+
+
+/* =========================================================
+   IDENTIFY / TRACK VISITOR
+========================================================= */
+
 export const trackVisitor = async ({
   visitorId,
   user = null,
@@ -302,6 +761,11 @@ export const trackVisitor = async ({
   state = "",
   city = "",
 } = {}) => {
+
+  /* =====================================================
+     EXCLUDE ADMIN USERS
+  ===================================================== */
+
   if (
     user?.role === "admin" ||
     user?.role === "superadmin"
@@ -317,8 +781,30 @@ export const trackVisitor = async ({
     };
   }
 
+
+  /* =====================================================
+     RESOLVE VISITOR TYPE
+  ===================================================== */
+
   const resolvedVisitorType =
     getVisitorType(user);
+
+  if (!resolvedVisitorType) {
+    return {
+      success: false,
+      excluded: true,
+      visitor: null,
+      visitorId: null,
+      visitorType: null,
+      message:
+        "This user type is excluded from visitor analytics.",
+    };
+  }
+
+
+  /* =====================================================
+     RESOLVE VISITOR ID
+  ===================================================== */
 
   const resolvedVisitorId =
     getVisitorId({
@@ -326,162 +812,238 @@ export const trackVisitor = async ({
       user,
     });
 
-
-  /**
-   * -------------------------------------------------------
-   * Visitor ID is mandatory for tracking.
-   * -------------------------------------------------------
-   */
   if (!resolvedVisitorId) {
     return {
       success: false,
       visitor: null,
       visitorId: null,
-      visitorType: resolvedVisitorType,
+      visitorType:
+        resolvedVisitorType,
       message:
         "visitorId is required for guest visitor tracking.",
     };
   }
 
-  const now = new Date();
 
-  /**
-   * -------------------------------------------------------
-   * Find existing visitor
-   * -------------------------------------------------------
-   */
+  /* =====================================================
+     FIND EXISTING VISITOR
+  ===================================================== */
+
   let visitor =
     await Visitor.findOne({
       visitorId:
         resolvedVisitorId,
     });
 
-  /**
-   * -------------------------------------------------------
-   * CREATE NEW VISITOR
-   * -------------------------------------------------------
-   */
+
+  /* =====================================================
+     CREATE NEW VISITOR
+  ===================================================== */
+
   if (!visitor) {
-    visitor =
-      await Visitor.create(
-        buildVisitorData({
-          visitorId:
-            resolvedVisitorId,
+    try {
+      visitor =
+        await Visitor.create(
+          buildVisitorData({
+            visitorId:
+              resolvedVisitorId,
 
-          visitorType:
-            resolvedVisitorType,
+            visitorType:
+              resolvedVisitorType,
 
-          user,
+            user,
 
-          userAgent,
+            userAgent,
 
-          source,
-          referrer,
+            source,
 
-          utmSource,
-          utmMedium,
-          utmCampaign,
-          utmTerm,
-          utmContent,
+            referrer,
 
-          country,
-          state,
-          city,
-        })
-      );
+            utmSource,
 
+            utmMedium,
+
+            utmCampaign,
+
+            utmTerm,
+
+            utmContent,
+
+            country,
+
+            state,
+
+            city,
+          })
+        );
+    } catch (error) {
+
+      /*
+       * Two simultaneous first requests can race.
+       *
+       * If another request created the same visitor first,
+       * recover by loading that visitor instead of failing
+       * the analytics request.
+       */
+      if (
+        error?.code === 11000
+      ) {
+        visitor =
+          await Visitor.findOne({
+            visitorId:
+              resolvedVisitorId,
+          });
+      } else {
+        throw error;
+      }
+    }
+
+    if (visitor) {
+      return {
+        success: true,
+        visitor,
+        visitorId:
+          visitor.visitorId,
+        visitorType:
+          visitor.visitorType,
+        isNewVisitor:
+          true,
+      };
+    }
+  }
+
+
+  /* =====================================================
+     EXISTING VISITOR SAFETY CHECK
+  ===================================================== */
+
+  if (!visitor) {
     return {
-      success: true,
-      visitor,
+      success: false,
+      visitor: null,
       visitorId:
-        visitor.visitorId,
+        resolvedVisitorId,
       visitorType:
-        visitor.visitorType,
-      isNewVisitor: true,
+        resolvedVisitorType,
+      message:
+        "Unable to create or retrieve visitor.",
     };
   }
 
-  /**
-   * -------------------------------------------------------
-   * UPDATE EXISTING VISITOR
-   * -------------------------------------------------------
-   */
-  visitor.lastSeenAt = now;
 
-  visitor.isActive = true;
+  /* =====================================================
+     UPDATE ACTIVITY
+  ===================================================== */
 
-  /**
-   * -------------------------------------------------------
-   * AUTHENTICATED IDENTITY ASSOCIATION
-   * -------------------------------------------------------
-   *
-   * Guest can become user/provider after login/register.
-   *
-   * Once authenticated, associate the visitor with the
-   * authenticated account.
-   *
-   * -------------------------------------------------------
-   */
+  const now = new Date();
+
+  visitor.lastSeenAt =
+    now;
+
+  visitor.isActive =
+    true;
+
+
+  /* =====================================================
+     AUTHENTICATED IDENTITY ASSOCIATION
+  ===================================================== */
+
   if (user?._id) {
-    visitor.user = user._id;
+    visitor.user =
+      user._id;
 
     visitor.visitorType =
       resolvedVisitorType;
   }
 
-  /**
-   * -------------------------------------------------------
-   * Update context only when supplied
-   * -------------------------------------------------------
+
+  /* =====================================================
+     DEVICE / TECHNOLOGY
+  ===================================================== */
+
+  if (
+    safeString(userAgent)
+  ) {
+    updateDeviceContext(
+      visitor,
+      userAgent
+    );
+  }
+
+
+  /* =====================================================
+     IMPORTANT:
+     DO NOT OVERWRITE FIRST-TOUCH ACQUISITION
+  ===================================================== */
+
+  /*
+   * The visitor's original acquisition source/referrer/UTMs
+   * should remain stable.
+   *
+   * Example:
+   *
+   * First visit:
+   * Google → organic
+   *
+   * Later:
+   * ServDial internal navigation
+   *
+   * Visitor source must remain:
+   * organic
+   *
+   * This is essential for meaningful acquisition analytics.
    */
-  if (safeString(userAgent)) {
-    visitor.userAgent =
-      safeString(userAgent);
 
-    visitor.deviceType =
-      detectDeviceType(userAgent);
+  const hasExistingAcquisition =
+    Boolean(
+      safeString(visitor.source) &&
+      visitor.source !== "unknown"
+    );
 
-    visitor.browser =
-      detectBrowser(userAgent);
+  const incomingAcquisition =
+    buildAcquisitionData({
+      source,
+      referrer,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmTerm,
+      utmContent,
+    });
 
-    visitor.operatingSystem =
-      detectOperatingSystem(userAgent);
-  }
-
-  if (safeString(source)) {
+  if (
+    !hasExistingAcquisition &&
+    incomingAcquisition.source !== "unknown"
+  ) {
     visitor.source =
-      safeString(source);
-  }
+      incomingAcquisition.source;
 
-  if (safeString(referrer)) {
     visitor.referrer =
-      safeString(referrer);
-  }
+      incomingAcquisition.referrer;
 
-  if (safeString(utmSource)) {
+    visitor.referrerDomain =
+      incomingAcquisition.referrerDomain;
+
     visitor.utmSource =
-      safeString(utmSource);
-  }
+      incomingAcquisition.utmSource;
 
-  if (safeString(utmMedium)) {
     visitor.utmMedium =
-      safeString(utmMedium);
-  }
+      incomingAcquisition.utmMedium;
 
-  if (safeString(utmCampaign)) {
     visitor.utmCampaign =
-      safeString(utmCampaign);
-  }
+      incomingAcquisition.utmCampaign;
 
-  if (safeString(utmTerm)) {
     visitor.utmTerm =
-      safeString(utmTerm);
+      incomingAcquisition.utmTerm;
+
+    visitor.utmContent =
+      incomingAcquisition.utmContent;
   }
 
-  if (safeString(utmContent)) {
-    visitor.utmContent =
-      safeString(utmContent);
-  }
+
+  /* =====================================================
+     LOCATION
+  ===================================================== */
 
   if (safeString(country)) {
     visitor.country =
@@ -498,29 +1060,46 @@ export const trackVisitor = async ({
       safeString(city);
   }
 
+
+  /* =====================================================
+     SAVE
+  ===================================================== */
+
   await visitor.save();
+
+
+  /* =====================================================
+     RETURN VISITOR CONTEXT
+  ===================================================== */
 
   return {
     success: true,
+
     visitor,
+
     visitorId:
       visitor.visitorId,
+
     visitorType:
       visitor.visitorType,
+
     isNewVisitor: false,
   };
 };
 
-/**
- * =========================================================
- * GET VISITOR
- * =========================================================
- */
+
+/* =========================================================
+   GET VISITOR
+========================================================= */
+
 export const getVisitorById = async (
   visitorId
 ) => {
   const id =
-    safeString(visitorId);
+    safeString(
+      visitorId,
+      200
+    );
 
   if (!id) {
     return null;
@@ -531,16 +1110,19 @@ export const getVisitorById = async (
   });
 };
 
-/**
- * =========================================================
- * MARK VISITOR ACTIVE
- * =========================================================
- */
+
+/* =========================================================
+   TOUCH VISITOR
+========================================================= */
+
 export const touchVisitor = async (
   visitorId
 ) => {
   const id =
-    safeString(visitorId);
+    safeString(
+      visitorId,
+      200
+    );
 
   if (!id) {
     return null;
@@ -552,12 +1134,32 @@ export const touchVisitor = async (
     },
     {
       $set: {
-        lastSeenAt: new Date(),
-        isActive: true,
+        lastSeenAt:
+          new Date(),
+
+        isActive:
+          true,
       },
     },
     {
       new: true,
     }
   );
+};
+
+
+/* =========================================================
+   EXPORT HELPERS
+========================================================= */
+
+export {
+  getVisitorType,
+  getVisitorId,
+  detectDeviceType,
+  detectBrowser,
+  detectOperatingSystem,
+  normalizeSource,
+  normalizeReferrer,
+  getReferrerDomain,
+  isInternalReferrer,
 };

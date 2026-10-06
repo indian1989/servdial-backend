@@ -129,21 +129,35 @@ const pageViewSchema = new mongoose.Schema(
       maxlength: 500,
     },
 
-    referrer: {
+        referrer: {
       type: String,
       default: "",
       trim: true,
       maxlength: 2000,
     },
 
-    source: {
+    referrerDomain: {
+      type: String,
+      default: "",
+      trim: true,
+      lowercase: true,
+      maxlength: 255,
+      index: true,
+    },
+
+        source: {
       type: String,
       enum: [
         "direct",
         "organic",
         "social",
         "referral",
+        "email",
+        "paid_search",
+        "paid_social",
+        "display",
         "campaign",
+        "other",
         "unknown",
       ],
       default: "unknown",
@@ -288,6 +302,31 @@ pageViewSchema.index({
 
 pageViewSchema.index({
   source: 1,
+  viewedAt: -1,
+});
+
+pageViewSchema.index({
+  referrerDomain: 1,
+  viewedAt: -1,
+});
+
+pageViewSchema.index({
+  utmSource: 1,
+  viewedAt: -1,
+});
+
+pageViewSchema.index({
+  utmMedium: 1,
+  viewedAt: -1,
+});
+
+pageViewSchema.index({
+  utmCampaign: 1,
+  viewedAt: -1,
+});
+
+pageViewSchema.index({
+  deviceType: 1,
   viewedAt: -1,
 });
 

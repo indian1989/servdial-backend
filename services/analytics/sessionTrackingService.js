@@ -2,6 +2,16 @@
 import VisitorSession from "../../models/VisitorSession.js";
 import Visitor from "../../models/Visitor.js";
 
+import {
+  normalizeSource,
+  normalizeReferrer,
+  getReferrerDomain,
+  isInternalReferrer,
+  detectDeviceType,
+  detectBrowser,
+  detectOperatingSystem,
+} from "./visitorTrackingService.js";
+
 /**
  * =========================================================
  * 🔄 SESSION TRACKING SERVICE
@@ -57,6 +67,156 @@ const SESSION_TIMEOUT_MS =
  */
 const safeString = (value = "") => {
   return String(value || "").trim();
+};
+
+/**
+ * ---------------------------------------------------------
+ * RESOLVE SESSION ACQUISITION
+ * ---------------------------------------------------------
+ *
+ * Session-level acquisition should represent the source
+ * responsible for starting the session.
+ *
+ * Priority:
+ *
+ * 1. Explicit UTM/source/referrer
+ * 2. External referrer
+ * 3. Direct
+ * 4. Unknown
+ *
+ * Internal ServDial referrers are ignored.
+ *
+ * ---------------------------------------------------------
+ */
+const resolveSessionAcquisition = ({
+  source = "",
+  referrer = "",
+  utmSource = "",
+  utmMedium = "",
+  utmCampaign = "",
+  utmTerm = "",
+  utmContent = "",
+} = {}) => {
+  const normalizedUtmSource =
+    safeString(utmSource).toLowerCase();
+
+  const normalizedUtmMedium =
+    safeString(utmMedium).toLowerCase();
+
+  const normalizedUtmCampaign =
+    safeString(utmCampaign);
+
+  const normalizedUtmTerm =
+    safeString(utmTerm);
+
+  const normalizedUtmContent =
+    safeString(utmContent);
+
+  let normalizedReferrer =
+    normalizeReferrer(referrer);
+
+  if (
+    normalizedReferrer &&
+    isInternalReferrer(normalizedReferrer)
+  ) {
+    normalizedReferrer = "";
+  }
+
+  let normalizedSource =
+    normalizeSource(source);
+
+  /**
+   * -------------------------------------------------------
+   * UTM-based acquisition
+   * -------------------------------------------------------
+   */
+  if (
+    normalizedUtmSource ||
+    normalizedUtmMedium ||
+    normalizedUtmCampaign
+  ) {
+    if (
+      [
+        "cpc",
+        "ppc",
+        "paid_search",
+        "paidsearch",
+        "sem",
+      ].includes(normalizedUtmMedium)
+    ) {
+      normalizedSource = "paid_search";
+    } else if (
+      [
+        "paid_social",
+        "paidsocial",
+        "social_paid",
+      ].includes(normalizedUtmMedium)
+    ) {
+      normalizedSource = "paid_social";
+    } else if (
+      [
+        "email",
+        "e-mail",
+        "newsletter",
+      ].includes(normalizedUtmMedium)
+    ) {
+      normalizedSource = "email";
+    } else if (
+      [
+        "display",
+        "banner",
+        "programmatic",
+      ].includes(normalizedUtmMedium)
+    ) {
+      normalizedSource = "display";
+    } else {
+      normalizedSource = "campaign";
+    }
+  }
+
+  /**
+   * -------------------------------------------------------
+   * External referrer
+   * -------------------------------------------------------
+   */
+  if (
+    normalizedReferrer &&
+    (
+      normalizedSource === "direct" ||
+      normalizedSource === "unknown"
+    )
+  ) {
+    normalizedSource = "referral";
+  }
+
+  return {
+    source: normalizedSource || "unknown",
+
+    referrer:
+      normalizedReferrer,
+
+    referrerDomain:
+      normalizedReferrer
+        ? getReferrerDomain(
+            normalizedReferrer
+          )
+        : "",
+
+    utmSource:
+      normalizedUtmSource,
+
+    utmMedium:
+      normalizedUtmMedium,
+
+    utmCampaign:
+      normalizedUtmCampaign,
+
+    utmTerm:
+      normalizedUtmTerm,
+
+    utmContent:
+      normalizedUtmContent,
+  };
 };
 
 /**
@@ -120,6 +280,8 @@ const buildSessionData = ({
   entryPage = "",
   landingPage = "",
 
+  userAgent = "",
+
   deviceType = "",
   browser = "",
   operatingSystem = "",
@@ -137,12 +299,90 @@ const buildSessionData = ({
   utmTerm = "",
   utmContent = "",
 }) => {
-  const visitorType =
+    const visitorType =
     user?.role === "provider"
       ? "provider"
       : user
       ? "user"
       : visitor?.visitorType || "guest";
+
+  const acquisition =
+    resolveSessionAcquisition({
+      source:
+        source ||
+        visitor?.source ||
+        "unknown",
+
+      referrer:
+        referrer ||
+        visitor?.referrer ||
+        "",
+
+      utmSource:
+        utmSource ||
+        visitor?.utmSource ||
+        "",
+
+      utmMedium:
+        utmMedium ||
+        visitor?.utmMedium ||
+        "",
+
+      utmCampaign:
+        utmCampaign ||
+        visitor?.utmCampaign ||
+        "",
+
+      utmTerm:
+        utmTerm ||
+        visitor?.utmTerm ||
+        "",
+
+      utmContent:
+        utmContent ||
+        visitor?.utmContent ||
+        "",
+    });
+
+  const resolvedUserAgent =
+    safeString(
+      userAgent ||
+      visitor?.userAgent ||
+      ""
+    );
+
+  const resolvedDeviceType =
+    safeString(deviceType) ||
+    visitor?.deviceType ||
+    (
+      resolvedUserAgent
+        ? detectDeviceType(
+            resolvedUserAgent
+          )
+        : "unknown"
+    );
+
+  const resolvedBrowser =
+    safeString(browser) ||
+    visitor?.browser ||
+    (
+      resolvedUserAgent
+        ? detectBrowser(
+            resolvedUserAgent
+          )
+        : ""
+    );
+
+  const resolvedOperatingSystem =
+    safeString(operatingSystem) ||
+    visitor?.operatingSystem ||
+    (
+      resolvedUserAgent
+        ? detectOperatingSystem(
+            resolvedUserAgent
+          )
+        : ""
+    );
 
   return {
     sessionId,
@@ -180,20 +420,17 @@ const buildSessionData = ({
       safeString(landingPage) ||
       safeString(entryPage),
 
+    userAgent:
+      resolvedUserAgent,
+
     deviceType:
-      safeString(deviceType) ||
-      visitor?.deviceType ||
-      "unknown",
+      resolvedDeviceType,
 
     browser:
-      safeString(browser) ||
-      visitor?.browser ||
-      "",
+      resolvedBrowser,
 
     operatingSystem:
-      safeString(operatingSystem) ||
-      visitor?.operatingSystem ||
-      "",
+      resolvedOperatingSystem,
 
     country:
       safeString(country) ||
@@ -210,30 +447,35 @@ const buildSessionData = ({
       visitor?.city ||
       "",
 
-    source:
-      safeString(source) ||
-      visitor?.source ||
-      "unknown",
+        source:
+      acquisition.source,
 
     referrer:
-      safeString(referrer) ||
-      visitor?.referrer ||
-      "",
+      acquisition.referrer,
+
+    /**
+     * VisitorSession model may not yet expose
+     * referrerDomain. Keep the normalized domain
+     * available for future session-level analytics
+     * without breaking the current schema.
+     */
+    referrerDomain:
+      acquisition.referrerDomain,
 
     utmSource:
-      safeString(utmSource),
+      acquisition.utmSource,
 
     utmMedium:
-      safeString(utmMedium),
+      acquisition.utmMedium,
 
     utmCampaign:
-      safeString(utmCampaign),
+      acquisition.utmCampaign,
 
     utmTerm:
-      safeString(utmTerm),
+      acquisition.utmTerm,
 
     utmContent:
-      safeString(utmContent),
+      acquisition.utmContent,
 
     isActive: true,
   };
@@ -245,9 +487,12 @@ const buildSessionData = ({
  * =========================================================
  */
 const createSession = async ({
+  sessionId = "",
   visitorId,
   visitor,
   user = null,
+
+  userAgent = "",
 
   entryPage = "",
   landingPage = "",
@@ -269,16 +514,20 @@ const createSession = async ({
   utmTerm = "",
   utmContent = "",
 }) => {
-  const sessionId =
+    const resolvedSessionId =
+    safeString(sessionId) ||
     generateSessionId();
 
   return VisitorSession.create(
     buildSessionData({
-      sessionId,
+      sessionId:
+        resolvedSessionId,
 
       visitorId,
       visitor,
       user,
+
+      userAgent,
 
       entryPage,
       landingPage,
@@ -375,8 +624,11 @@ export const getActiveSession = async (
  * =========================================================
  */
 export const trackSession = async ({
+  sessionId = "",
   visitorId,
   user = null,
+
+  userAgent = "",
 
   entryPage = "",
   landingPage = "",
@@ -444,10 +696,77 @@ export const trackSession = async ({
    * Find existing active session
    * -------------------------------------------------------
    */
-  let session =
-    await getActiveSession(
-      resolvedVisitorId
-    );
+    let session = null;
+
+  const requestedSessionId =
+    safeString(sessionId);
+
+  /**
+   * -------------------------------------------------------
+   * Prefer the client sessionId when it belongs to
+   * this visitor.
+   *
+   * This keeps frontend and backend session identity
+   * consistent.
+   * -------------------------------------------------------
+   */
+  if (requestedSessionId) {
+    session =
+      await VisitorSession.findOne({
+        sessionId:
+          requestedSessionId,
+
+        visitorId:
+          resolvedVisitorId,
+
+        isActive: true,
+      });
+
+    if (
+      session &&
+      isSessionExpired(
+        session.lastActivityAt
+      )
+    ) {
+      session.isActive = false;
+
+      session.endedAt =
+        session.lastActivityAt ||
+        new Date();
+
+      session.durationSeconds =
+        Math.max(
+          0,
+          Math.floor(
+            (
+              new Date(
+                session.endedAt
+              ).getTime() -
+              new Date(
+                session.startedAt
+              ).getTime()
+            ) / 1000
+          )
+        );
+
+      await session.save();
+
+      session = null;
+    }
+  }
+
+  /**
+   * -------------------------------------------------------
+   * If requested session does not exist, reuse the latest
+   * active backend session.
+   * -------------------------------------------------------
+   */
+  if (!session) {
+    session =
+      await getActiveSession(
+        resolvedVisitorId
+      );
+  }
 
   /**
    * -------------------------------------------------------
@@ -457,12 +776,17 @@ export const trackSession = async ({
   if (!session) {
     session =
       await createSession({
+        sessionId:
+          requestedSessionId,
+
         visitorId:
           resolvedVisitorId,
 
         visitor,
 
         user,
+
+        userAgent,
 
         entryPage,
         landingPage,
@@ -556,6 +880,33 @@ export const trackSession = async ({
    * -------------------------------------------------------
    */
   if (safeString(deviceType)) {
+
+      if (safeString(userAgent)) {
+    session.userAgent =
+      safeString(userAgent);
+
+    if (!safeString(deviceType)) {
+      session.deviceType =
+        detectDeviceType(
+          safeString(userAgent)
+        );
+    }
+
+    if (!safeString(browser)) {
+      session.browser =
+        detectBrowser(
+          safeString(userAgent)
+        );
+    }
+
+    if (!safeString(operatingSystem)) {
+      session.operatingSystem =
+        detectOperatingSystem(
+          safeString(userAgent)
+        );
+    }
+  }
+
     session.deviceType =
       safeString(deviceType);
   }
@@ -585,39 +936,73 @@ export const trackSession = async ({
       safeString(city);
   }
 
-  if (safeString(source)) {
+    const incomingAcquisition =
+    resolveSessionAcquisition({
+      source,
+      referrer,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmTerm,
+      utmContent,
+    });
+
+  /**
+   * -------------------------------------------------------
+   * Preserve session acquisition.
+   *
+   * Do NOT replace a valid first-touch source with
+   * "unknown", "direct", or an internal referrer
+   * on subsequent page views.
+   * -------------------------------------------------------
+   */
+  const currentSessionSource =
+    normalizeSource(
+      session.source
+    );
+
+  const hasIncomingAcquisition =
+    incomingAcquisition.source !==
+      "unknown" &&
+    (
+      incomingAcquisition.referrer ||
+      incomingAcquisition.utmSource ||
+      incomingAcquisition.utmMedium ||
+      incomingAcquisition.utmCampaign ||
+      incomingAcquisition.source !==
+        "direct"
+    );
+
+  const hasSessionAcquisition =
+    currentSessionSource !==
+      "unknown" &&
+    currentSessionSource !==
+      "direct";
+
+  if (
+    !hasSessionAcquisition &&
+    hasIncomingAcquisition
+  ) {
     session.source =
-      safeString(source);
-  }
+      incomingAcquisition.source;
 
-  if (safeString(referrer)) {
     session.referrer =
-      safeString(referrer);
-  }
+      incomingAcquisition.referrer;
 
-  if (safeString(utmSource)) {
     session.utmSource =
-      safeString(utmSource);
-  }
+      incomingAcquisition.utmSource;
 
-  if (safeString(utmMedium)) {
     session.utmMedium =
-      safeString(utmMedium);
-  }
+      incomingAcquisition.utmMedium;
 
-  if (safeString(utmCampaign)) {
     session.utmCampaign =
-      safeString(utmCampaign);
-  }
+      incomingAcquisition.utmCampaign;
 
-  if (safeString(utmTerm)) {
     session.utmTerm =
-      safeString(utmTerm);
-  }
+      incomingAcquisition.utmTerm;
 
-  if (safeString(utmContent)) {
     session.utmContent =
-      safeString(utmContent);
+      incomingAcquisition.utmContent;
   }
 
   await session.save();
@@ -659,12 +1044,48 @@ export const touchSession = async (
     return null;
   }
 
-  const session =
+    const session =
     await VisitorSession.findOne({
       sessionId: id,
     });
 
   if (!session) {
+    return null;
+  }
+
+  /**
+   * -------------------------------------------------------
+   * Do not revive an expired session.
+   * -------------------------------------------------------
+   */
+  if (
+    isSessionExpired(
+      session.lastActivityAt
+    )
+  ) {
+    session.isActive = false;
+
+    session.endedAt =
+      session.lastActivityAt ||
+      new Date();
+
+    session.durationSeconds =
+      Math.max(
+        0,
+        Math.floor(
+          (
+            new Date(
+              session.endedAt
+            ).getTime() -
+            new Date(
+              session.startedAt
+            ).getTime()
+          ) / 1000
+        )
+      );
+
+    await session.save();
+
     return null;
   }
 
