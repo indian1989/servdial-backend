@@ -187,7 +187,7 @@ const getReferrerDomain = (referrer = "") => {
      */
     const url = new URL(
       value,
-      "https://servdial.com"
+      "https://www.servdial.com"
     );
 
     let hostname = safeString(

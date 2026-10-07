@@ -218,7 +218,7 @@ export const generateBreadcrumbSchema = ({
       "@type": "ListItem",
       position: 1,
       name: "Home",
-      item: "https://www.servdial.com/",
+      item: "https://www.servdial.com",
     },
   ];
 

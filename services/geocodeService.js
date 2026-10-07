@@ -6,16 +6,6 @@ const API_KEY = process.env.OPENCAGE_API_KEY;
 const OPENCAGE_URL =
   "https://api.opencagedata.com/geocode/v1/json";
 
-console.log(
-  "🔥 OPENCAGE KEY STATUS:",
-  API_KEY ? "FOUND" : "MISSING"
-);
-
-console.log(
-  "🔥 KEY LENGTH:",
-  API_KEY?.length
-);
-
 /*
 =================================================
  NORMALIZE TEXT
