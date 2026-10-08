@@ -29,6 +29,7 @@ app.use(
       process.env.FRONTEND_URL,
       "https://servdial.com",
       "https://www.servdial.com",
+      "https://comforting-tanuki-5ff825.netlify.app",
       "https://servdial.getvoroa.com",
       "https://servdial-frontend-ssr.onrender.com",
       "http://localhost:5173",
