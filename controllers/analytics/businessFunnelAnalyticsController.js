@@ -323,6 +323,44 @@ export const getBusinessFunnelAnalytics =
       }),
     ]);
 
+    
+    /**
+     * -----------------------------------------------------
+     * SHARE PLATFORM BREAKDOWN
+     * -----------------------------------------------------
+     */
+    const sharePlatforms = await VisitorEvent.aggregate([
+      {
+        $match: {
+          ...baseFilter,
+          event: "share",
+          "metadata.sharePlatform": {
+            $type: "string",
+            $ne: "",
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$metadata.sharePlatform",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          platform: "$_id",
+          count: 1,
+        },
+      },
+      {
+        $sort: {
+          count: -1,
+          platform: 1,
+        },
+      },
+    ]);
+
     /**
      * -----------------------------------------------------
      * UNIQUE BUSINESS VIEW VISITORS
@@ -788,6 +826,8 @@ export const getBusinessFunnelAnalytics =
         trend,
 
         businessPerformance,
+
+        sharePlatforms,
       },
 
       meta: {

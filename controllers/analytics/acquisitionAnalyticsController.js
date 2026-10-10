@@ -278,9 +278,11 @@ export const getAcquisitionAnalytics =
       ),
     ]);
 
+    
     /**
      * =====================================================
-     * SOURCE BREAKDOWN
+     * SOURCE BREAKDOWN — SPECIFIC PLATFORM / REFERRER
+     * Existing Traffic Sources table uses the `source` field.
      * =====================================================
      */
     const sourcePerformance =
@@ -289,14 +291,357 @@ export const getAcquisitionAnalytics =
           $match: baseFilter,
         },
 
+        // Normalize attribution fields and recover the domain
+        // from referrer when referrerDomain is not available.
+        {
+          $set: {
+            _normalizedUtmSource: {
+              $toLower: {
+                $trim: {
+                  input: {
+                    $ifNull: ["$utmSource", ""],
+                  },
+                },
+              },
+            },
+
+            _normalizedReferrerDomain: {
+              $let: {
+                vars: {
+                  savedDomain: {
+                    $toLower: {
+                      $trim: {
+                        input: {
+                          $ifNull: ["$referrerDomain", ""],
+                        },
+                      },
+                    },
+                  },
+                },
+
+                in: {
+                  $cond: [
+                    { $ne: ["$$savedDomain", ""] },
+                    {
+                      $cond: [
+                        {
+                          $regexMatch: {
+                            input: "$$savedDomain",
+                            regex: "^www\\.",
+                            options: "i",
+                          },
+                        },
+                        {
+                          $substrCP: [
+                            "$$savedDomain",
+                            4,
+                            {
+                              $subtract: [
+                                { $strLenCP: "$$savedDomain" },
+                                4,
+                              ],
+                            },
+                          ],
+                        },
+                        "$$savedDomain",
+                      ],
+                    },
+
+                    {
+                      $let: {
+                        vars: {
+                          matchedDomain: {
+                            $regexFind: {
+                              input: {
+                                $ifNull: ["$referrer", ""],
+                              },
+                              regex:
+                                "^(?:https?://)?(?:www\\.)?([^/:?#]+)",
+                              options: "i",
+                            },
+                          },
+                        },
+
+                        in: {
+                          $cond: [
+                            { $ne: ["$$matchedDomain", null] },
+                            {
+                              $toLower: {
+                                $arrayElemAt: [
+                                  "$$matchedDomain.captures",
+                                  0,
+                                ],
+                              },
+                            },
+                            "",
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+
+        // Choose a specific source label when attribution
+        // information is available; otherwise keep the category.
+        {
+          $set: {
+            _sourceLabel: {
+              $switch: {
+                branches: [
+                  // UTM source takes priority when present.
+                  {
+                    case: {
+                      $ne: ["$_normalizedUtmSource", ""],
+                    },
+                    then: {
+                      $switch: {
+                        branches: [
+                          {
+                            case: {
+                              $regexMatch: {
+                                input: "$_normalizedUtmSource",
+                                regex: "^google(?:\\.[a-z0-9-]+)+$|^google$",
+                              },
+                            },
+                            then: "Google",
+                          },
+                          {
+                            case: {
+                              $regexMatch: {
+                                input: "$_normalizedUtmSource",
+                                regex: "^(bing|bing\\.com)$",
+                              },
+                            },
+                            then: "Bing",
+                          },
+                          {
+                            case: {
+                              $regexMatch: {
+                                input: "$_normalizedUtmSource",
+                                regex: "^(facebook|facebook\\.com|fb)$",
+                              },
+                            },
+                            then: "Facebook",
+                          },
+                          {
+                            case: {
+                              $regexMatch: {
+                                input: "$_normalizedUtmSource",
+                                regex: "^(instagram|instagram\\.com|ig)$",
+                              },
+                            },
+                            then: "Instagram",
+                          },
+                          {
+                            case: {
+                              $regexMatch: {
+                                input: "$_normalizedUtmSource",
+                                regex: "^(whatsapp|whatsapp\\.com|wa)$",
+                              },
+                            },
+                            then: "WhatsApp",
+                          },
+                          {
+                            case: {
+                              $regexMatch: {
+                                input: "$_normalizedUtmSource",
+                                regex: "^(youtube|youtube\\.com)$",
+                              },
+                            },
+                            then: "YouTube",
+                          },
+                          {
+                            case: {
+                              $regexMatch: {
+                                input: "$_normalizedUtmSource",
+                                regex: "^(linkedin|linkedin\\.com)$",
+                              },
+                            },
+                            then: "LinkedIn",
+                          },
+                        ],
+                        default: {
+                          $trim: {
+                            input: {
+                              $ifNull: ["$utmSource", ""],
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+
+                  // If no UTM source exists, identify the referrer.
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)google\\.",
+                        options: "i",
+                      },
+                    },
+                    then: "Google",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)bing\\.com$",
+                        options: "i",
+                      },
+                    },
+                    then: "Bing",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)yahoo\\.",
+                        options: "i",
+                      },
+                    },
+                    then: "Yahoo",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)duckduckgo\\.com$",
+                        options: "i",
+                      },
+                    },
+                    then: "DuckDuckGo",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)facebook\\.com$",
+                        options: "i",
+                      },
+                    },
+                    then: "Facebook",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)instagram\\.com$",
+                        options: "i",
+                      },
+                    },
+                    then: "Instagram",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)whatsapp\\.com$",
+                        options: "i",
+                      },
+                    },
+                    then: "WhatsApp",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)t\\.me$|(^|\\.)telegram\\.org$",
+                        options: "i",
+                      },
+                    },
+                    then: "Telegram",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)twitter\\.com$|(^|\\.)x\\.com$|(^|\\.)t\\.co$",
+                        options: "i",
+                      },
+                    },
+                    then: "X / Twitter",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)linkedin\\.com$",
+                        options: "i",
+                      },
+                    },
+                    then: "LinkedIn",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)youtube\\.com$|(^|\\.)youtu\\.be$",
+                        options: "i",
+                      },
+                    },
+                    then: "YouTube",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex: "(^|\\.)tiktok\\.com$",
+                        options: "i",
+                      },
+                    },
+                    then: "TikTok",
+                  },
+                  {
+                    case: {
+                      $regexMatch: {
+                        input: "$_normalizedReferrerDomain",
+                        regex:
+                          "^(?:[^.]+\\.)*servdial\\.com$|^(?:localhost|127\\.0\\.0\\.1)$|^(?:[^.]+\\.)*netlify\\.app$|^(?:[^.]+\\.)*onrender\\.com$",
+                        options: "i",
+                      },
+                    },
+                    then: {
+                      $ifNull: ["$source", "direct"],
+                    },
+                  },
+                  {
+                    case: {
+                      $ne: ["$_normalizedReferrerDomain", ""],
+                    },
+                    then: "$_normalizedReferrerDomain",
+                  },
+                ],
+
+                // No referrer or UTM: preserve the saved category.
+                default: {
+                  $cond: [
+                    {
+                      $in: [
+                        {
+                          $ifNull: ["$source", "unknown"],
+                        },
+                        ["", null],
+                      ],
+                    },
+                    "unknown",
+                    "$source",
+                  ],
+                },
+              },
+            },
+          },
+        },
+
+        // Keep the existing response shape so the existing
+        // Traffic Sources table can continue using item.source.
         {
           $group: {
-            _id: {
-              $ifNull: [
-                "$source",
-                "unknown",
-              ],
-            },
+            _id: "$_sourceLabel",
 
             pageViews: {
               $sum: 1,

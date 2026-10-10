@@ -201,6 +201,7 @@ export const detectPageType = (
  *
  * =========================================================
  */
+
 const resolvePageViewAcquisition = ({
   source = "",
   referrer = "",
@@ -218,28 +219,28 @@ const resolvePageViewAcquisition = ({
     normalizeReferrer(referrer);
 
   const sessionReferrer =
-    normalizeReferrer(
-      session?.referrer || ""
-    );
+    normalizeReferrer(session?.referrer || "");
 
   const visitorReferrer =
-    normalizeReferrer(
-      visitor?.referrer || ""
-    );
+    normalizeReferrer(visitor?.referrer || "");
 
-  const resolvedReferrer =
-    incomingReferrer ||
-    sessionReferrer ||
-    visitorReferrer ||
-    "";
+  // Ignore internal referrers BEFORE choosing the
+  // acquisition referrer. Otherwise localhost/ServDial
+  // can mask a genuine external referrer.
+  const externalCandidates = [
+    incomingReferrer,
+    sessionReferrer,
+    visitorReferrer,
+  ].filter(
+    (value) =>
+      value && !isInternalReferrer(value)
+  );
 
   const externalReferrer =
-    isInternalReferrer(
-      resolvedReferrer
-    )
-      ? ""
-      : resolvedReferrer;
+    externalCandidates[0] || "";
 
+  // Preserve first-touch UTM information when the current
+  // page does not contain new UTM parameters.
   const resolvedUtmSource =
     safeString(utmSource) ||
     safeString(session?.utmSource) ||
@@ -265,73 +266,50 @@ const resolvePageViewAcquisition = ({
     safeString(session?.utmContent) ||
     safeString(visitor?.utmContent);
 
-  let resolvedSource =
-    safeString(source);
-
-  /*
-   * If no current source was supplied, use the active
-   * session acquisition source first, then visitor
-   * first-touch source.
-   */
-  if (!resolvedSource) {
-    resolvedSource =
-      safeString(session?.source) ||
-      safeString(visitor?.source) ||
-      "";
-  }
-
-  /*
-   * Normalize the source through the same canonical
-   * acquisition taxonomy used by Visitor analytics.
-   */
-  resolvedSource =
-    normalizeSource(
-      resolvedSource
-    );
-
-  /*
-   * Never allow internal navigation to become external
-   * acquisition.
-   */
-  if (
-    externalReferrer === ""
-    &&
-    resolvedSource === "referral"
-  ) {
-    resolvedSource =
-      safeString(
-        session?.source
-      ) ||
-      safeString(
-        visitor?.source
-      ) ||
-      "direct";
-
-    resolvedSource =
-      normalizeSource(
-        resolvedSource
-      );
-  }
-
-  /*
-   * UTM data is authoritative for campaign traffic.
-   *
-   * Reuse the same classification logic as the visitor
-   * service by applying the medium here.
-   */
   const normalizedMedium =
-    resolvedUtmMedium
-      .toLowerCase();
+    resolvedUtmMedium.toLowerCase().trim();
 
-  const hasUtm =
-    Boolean(
-      resolvedUtmSource ||
-      resolvedUtmMedium ||
-      resolvedUtmCampaign ||
-      resolvedUtmTerm ||
-      resolvedUtmContent
-    );
+  const hasUtm = Boolean(
+    resolvedUtmSource ||
+    resolvedUtmMedium ||
+    resolvedUtmCampaign ||
+    resolvedUtmTerm ||
+    resolvedUtmContent
+  );
 
+  // Prefer a meaningful existing session source over an
+  // incoming "direct"/"unknown" value on later page views.
+  const incomingSource =
+    normalizeSource(source);
+
+  const sessionSource =
+    normalizeSource(session?.source);
+
+  const visitorSource =
+    normalizeSource(visitor?.source);
+
+  let resolvedSource =
+    incomingSource;
+
+  const hasMeaningfulSource = (value) =>
+    Boolean(value) &&
+    !["direct", "unknown"].includes(value);
+
+  if (
+    !hasMeaningfulSource(resolvedSource) &&
+    hasMeaningfulSource(sessionSource)
+  ) {
+    resolvedSource = sessionSource;
+  }
+
+  if (
+    !hasMeaningfulSource(resolvedSource) &&
+    hasMeaningfulSource(visitorSource)
+  ) {
+    resolvedSource = visitorSource;
+  }
+
+  // UTM campaign attribution takes priority.
   if (hasUtm) {
     if (
       [
@@ -340,96 +318,106 @@ const resolvePageViewAcquisition = ({
         "paid_search",
         "paidsearch",
         "sem",
-      ].includes(
-        normalizedMedium
-      )
+      ].includes(normalizedMedium)
     ) {
-      resolvedSource =
-        "paid_search";
+      resolvedSource = "paid_search";
     } else if (
       [
         "paid_social",
         "paidsocial",
         "social_paid",
-      ].includes(
-        normalizedMedium
-      )
+      ].includes(normalizedMedium)
     ) {
-      resolvedSource =
-        "paid_social";
+      resolvedSource = "paid_social";
     } else if (
       [
         "email",
         "e-mail",
         "newsletter",
-      ].includes(
-        normalizedMedium
-      )
+      ].includes(normalizedMedium)
     ) {
-      resolvedSource =
-        "email";
+      resolvedSource = "email";
+    
     } else if (
       [
         "display",
         "banner",
         "programmatic",
-      ].includes(
-        normalizedMedium
-      )
+      ].includes(normalizedMedium)
     ) {
-      resolvedSource =
-        "display";
+      resolvedSource = "display";
+    } else if (
+      ["organic", "seo"].includes(normalizedMedium)
+    ) {
+      resolvedSource = "organic";
+    } else if (
+      [
+        "social",
+        "social-media",
+        "social_media",
+      ].includes(normalizedMedium)
+    ) {
+      resolvedSource = "social";
+    } else if (
+      ["referral", "refer"].includes(normalizedMedium)
+    ) {
+      resolvedSource = "referral";
     } else {
-      resolvedSource =
-        "campaign";
+      resolvedSource = "campaign";
+    }
+  } else if (externalReferrer) {
+    // Classify the external domain when there is no UTM.
+    const domain =
+      getReferrerDomain(externalReferrer)
+        .toLowerCase()
+        .replace(/^www\./, "");
+
+    if (
+      /(^|\.)google\./i.test(domain) ||
+      /(^|\.)bing\.com$/i.test(domain) ||
+      /(^|\.)search\.yahoo\.com$/i.test(domain) ||
+      /(^|\.)duckduckgo\.com$/i.test(domain) ||
+      /(^|\.)yandex\./i.test(domain) ||
+      /(^|\.)baidu\.com$/i.test(domain)
+    ) {
+      resolvedSource = "organic";
+    } else if (
+      /(^|\.)facebook\.com$/i.test(domain) ||
+      /(^|\.)fb\.com$/i.test(domain) ||
+      /(^|\.)instagram\.com$/i.test(domain) ||
+      /(^|\.)whatsapp\.com$/i.test(domain) ||
+      /(^|\.)whatsapp\.net$/i.test(domain) ||
+      /(^|\.)linkedin\.com$/i.test(domain) ||
+      /(^|\.)twitter\.com$/i.test(domain) ||
+      /(^|\.)x\.com$/i.test(domain) ||
+      /(^|\.)t\.co$/i.test(domain) ||
+      /(^|\.)youtube\.com$/i.test(domain) ||
+      /(^|\.)youtu\.be$/i.test(domain) ||
+      /(^|\.)tiktok\.com$/i.test(domain) ||
+      /(^|\.)pinterest\.com$/i.test(domain) ||
+      /(^|\.)reddit\.com$/i.test(domain) ||
+      /(^|\.)telegram\.org$/i.test(domain) ||
+      /(^|\.)t\.me$/i.test(domain)
+    ) {
+      resolvedSource = "social";
+    } else {
+      resolvedSource = "referral";
     }
   }
 
-  /*
-   * If an external referrer exists but source was
-   * direct/unknown, classify it as referral.
-   *
-   * More specific organic/social classification should
-   * already come from the acquisition layer.
-   */
-  if (
-    externalReferrer &&
-    (
-      resolvedSource === "direct" ||
-      resolvedSource === "unknown"
-    ) &&
-    !hasUtm
-  ) {
-    resolvedSource =
-      "referral";
-  }
-
   return {
-    source:
-      resolvedSource || "unknown",
+    source: resolvedSource || "unknown",
 
-    referrer:
-      externalReferrer,
+    referrer: externalReferrer,
 
     referrerDomain:
-      getReferrerDomain(
-        externalReferrer
-      ),
+      getReferrerDomain(externalReferrer),
 
-    utmSource:
-      resolvedUtmSource,
-
-    utmMedium:
-      resolvedUtmMedium,
-
-    utmCampaign:
-      resolvedUtmCampaign,
-
-    utmTerm:
-      resolvedUtmTerm,
-
-    utmContent:
-      resolvedUtmContent,
+    utmSource: resolvedUtmSource,
+    utmMedium: resolvedUtmMedium,
+    utmCampaign: resolvedUtmCampaign,
+    utmTerm: resolvedUtmTerm,
+    utmContent: resolvedUtmContent,
   };
 };
 

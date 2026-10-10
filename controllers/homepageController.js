@@ -285,50 +285,6 @@ lat && lng
       .lean(),
   ]);
 
-  Banner.find({
-  status: "approved",
-  isActive: true,
-  paymentStatus: {
-    $in: ["paid", "not_required"],
-  },
-  placement: "homepage_top",
-
-  $and: [
-    {
-      $or: [
-        { startDate: { $lte: new Date() } },
-        { startDate: null },
-        { startDate: { $exists: false } },
-      ],
-    },
-    {
-      $or: [
-        { endDate: { $gte: new Date() } },
-        { endDate: null },
-        { endDate: { $exists: false } },
-      ],
-    },
-    {
-      $or: cityDoc
-        ? [
-            { cityId: cityDoc._id },
-            { cityId: null },
-          ]
-        : [
-            { cityId: null },
-          ],
-    },
-  ],
-})
-.select(
-  "title image link placement cityId categoryId businessId order"
-)
-.sort({
-  order: 1,
-  createdAt: -1,
-})
-.lean()
-
   // ================= RANKING =================
   const [
     rankedFeatured,
