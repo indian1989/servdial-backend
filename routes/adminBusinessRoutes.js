@@ -21,6 +21,12 @@ import {
 } from "../controllers/businessController.js";
 
 import {
+  bulkImportBusinesses,
+  bulkImportUpload,
+  getBulkImportProgress,
+} from "../controllers/business/bulkImportBusinessController.js";
+
+import {
   protect,
   authorizeRoles,
 } from "../middleware/authMiddleware.js";
@@ -49,6 +55,16 @@ router.get("/:id", getBusinessByIdAdmin);
    - used for system-created businesses
    - later claimable by providers
 ====================================================== */
+router.get(
+  "/bulk-import/progress/:requestId",
+  getBulkImportProgress
+);
+
+router.post(
+  "/bulk-import",
+  bulkImportUpload.single("file"),
+  bulkImportBusinesses
+);
 router.post("/", createBusiness);
 router.put("/:id", updateBusiness);
 

@@ -1152,6 +1152,112 @@ export const getAcquisitionAnalytics =
         },
       ]);
 
+      
+    /**
+     * =====================================================
+     * BROWSED CITY
+     * Uses PageView.city (ServDial City ObjectId)
+     * =====================================================
+     */
+    const browsedCities =
+      await PageView.aggregate([
+        {
+          $match: baseFilter,
+        },
+        {
+          $group: {
+            _id: "$city",
+            pageViews: { $sum: 1 },
+            uniqueVisitors: { $addToSet: "$visitorId" },
+            sessions: { $addToSet: "$sessionId" },
+          },
+        },
+        {
+          $lookup: {
+            from: "cities",
+            localField: "_id",
+            foreignField: "_id",
+            as: "cityDetails",
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            city: {
+              $ifNull: [
+                { $arrayElemAt: ["$cityDetails.name", 0] },
+                "Unknown",
+              ],
+            },
+            pageViews: 1,
+            uniqueVisitors: { $size: "$uniqueVisitors" },
+            sessions: { $size: "$sessions" },
+          },
+        },
+        {
+          $sort: { pageViews: -1 },
+        },
+      ]);
+
+    /**
+     * =====================================================
+     * VISITOR ACTUAL CITY
+     * Uses only existing stored location fields
+     * =====================================================
+     */
+    const visitorCities =
+      await PageView.aggregate([
+        {
+          $match: baseFilter,
+        },
+        {
+          $group: {
+            _id: {
+              city: {
+                $cond: [
+                  {
+                    $ne: [
+                      {
+                        $trim: {
+                          input: { $ifNull: ["$cityName", ""] },
+                        },
+                      },
+                      "",
+                    ],
+                  },
+                  { $trim: { input: "$cityName" } },
+                  "Unknown",
+                ],
+              },
+              state: {
+                $ifNull: ["$state", ""],
+              },
+              country: {
+                $ifNull: ["$country", ""],
+              },
+            },
+            pageViews: { $sum: 1 },
+            uniqueVisitors: { $addToSet: "$visitorId" },
+            sessions: { $addToSet: "$sessionId" },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            city: "$_id.city",
+            state: "$_id.state",
+            country: "$_id.country",
+            pageViews: 1,
+            uniqueVisitors: { $size: "$uniqueVisitors" },
+            sessions: { $size: "$sessions" },
+          },
+        },
+        {
+          $sort: { pageViews: -1 },
+        },
+      ]);
+
+
     /**
      * =====================================================
      * PAGE TYPE BY SOURCE
@@ -1263,6 +1369,10 @@ export const getAcquisitionAnalytics =
         },
 
         sources: sourceData,
+
+        browsedCities,
+
+        visitorCities,
 
         visitorTypes:
           visitorTypePerformance,

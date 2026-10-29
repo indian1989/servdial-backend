@@ -869,8 +869,9 @@ menu: {
         default: 0,
       },
 
-      image: {
+      quantity: {
         type: String,
+        trim: true,
         default: "",
       },
 

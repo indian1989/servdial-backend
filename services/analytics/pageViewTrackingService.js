@@ -2,6 +2,7 @@
 import PageView from "../../models/PageView.js";
 import Visitor from "../../models/Visitor.js";
 import VisitorSession from "../../models/VisitorSession.js";
+import City from "../../models/City.js";
 
 import {
   trackSession,
@@ -17,6 +18,58 @@ import {
   detectBrowser,
   detectOperatingSystem,
 } from "./visitorTrackingService.js";
+
+/**
+ * Resolve the city being browsed from ServDial's own City records.
+ * Supports routes such as:
+ * /bihar/hajipur-vaishali-bihar
+ * /bihar/hajipur-vaishali-bihar/security-services
+ */
+
+const resolveBrowsedCity = async (path = "") => {
+  try {
+    const pathname = String(path || "").split("?")[0];
+
+    const segments = pathname
+      .split("/")
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment).toLowerCase());
+
+    if (!segments.length) return null;
+
+    // Pattern: /:stateSlug/:citySlug/...
+    if (segments.length >= 2) {
+      const cityByStateAndSlug = await City.findOne({
+        status: "active",
+        stateSlug: segments[0],
+        $or: [
+          { slug: segments[1] },
+          { slugHistory: segments[1] },
+        ],
+      })
+        .select("_id name state country")
+        .lean();
+
+      if (cityByStateAndSlug) return cityByStateAndSlug;
+    }
+
+    // Pattern: /:citySlug/:category/:businessSlug
+    return await City.findOne({
+      status: "active",
+      $or: [
+        { slug: segments[0] },
+        { slugHistory: segments[0] },
+      ],
+    })
+      .select("_id name state country")
+      .lean();
+  } catch (error) {
+    console.warn("Browsed city resolution failed:", error);
+    return null;
+  }
+};
+
+
 /**
  * =========================================================
  * 📄 PAGE VIEW TRACKING SERVICE
@@ -842,6 +895,14 @@ export const trackPageView = async ({
   }
 
   await visitor.save();
+
+  
+const browsedCity = await resolveBrowsedCity(path);
+
+if (browsedCity) {
+  city = browsedCity._id;
+}
+
 
   /**
    * -------------------------------------------------------
