@@ -34,6 +34,7 @@ app.use(
       "https://servdial-frontend-ssr.onrender.com",
       "http://localhost:5173",
       "http://localhost:3000",
+      "http://localhost:4173",
     ].filter(Boolean),
 
     credentials: true,

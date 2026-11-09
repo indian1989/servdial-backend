@@ -1,3 +1,4 @@
+//backend/controllers/cityController.js
 import mongoose from "mongoose";
 import City from "../models/City.js";
 import Business from "../models/Business.js";
@@ -227,102 +228,153 @@ export const deleteCity = async (req, res) => {
   }
 };
 
+
 /* =========================================================
    BULK UPLOAD (STRICT + GEO SAFE)
 ========================================================= */
 export const bulkUploadCities = async (req, res) => {
   try {
-    const cities = req.body?.cities || [];
+    const cities = req.body?.cities;
 
-    if (!Array.isArray(cities)) {
+    if (!Array.isArray(cities) || cities.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Invalid data format",
+        message: "No valid cities provided",
       });
-    }
-
-    const processed = [];
-    const skipped = [];
-
-    for (let raw of cities) {
-      try {
-        let city = normalizeCity(raw);
-
-        // ✅ STRICT VALIDATION
-        if (
-          !city.name ||
-          !city.district ||
-          !city.state ||
-          isNaN(city.latitude) ||
-          isNaN(city.longitude)
-        ) {
-          // try auto-fetch fallback
-          city = await fetchCoordinates(city);
-        }
-
-        // ❌ STILL INVALID → SKIP
-        if (
-          !city.name ||
-          !city.district ||
-          !city.state ||
-          isNaN(city.latitude) ||
-          isNaN(city.longitude)
-        ) {
-          skipped.push(raw?.name || "unknown");
-          continue;
-        }
-
-        validateCity(city);
-
-        // ✅ GEO SYNC (IMPORTANT)
-        city.location = {
-          type: "Point",
-          coordinates: [city.longitude, city.latitude],
-        };
-
-        processed.push(city);
-
-      } catch (err) {
-        skipped.push(raw?.name || "unknown");
-        console.warn("Skipped:", raw?.name);
-      }
     }
 
     let insertedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
 
-    try {
-      const result = await City.insertMany(processed, {
-        ordered: false, // ✅ continues even if duplicates exist
-      });
+    const results = [];
 
-      insertedCount = result.length;
-    } catch (err) {
-      // ✅ Ignore duplicate errors but count valid inserts
-      if (err?.insertedDocs) {
-        insertedCount = err.insertedDocs.length;
+    for (const raw of cities) {
+      const cityName = raw?.name?.trim() || "Unknown";
+      const csvRow = Number(raw?.csvRow) || null;
+
+      try {
+        let city = normalizeCity(raw);
+
+        // Validate mandatory fields before geocoding
+        validateCity(city);
+
+        // Fetch coordinates if missing or invalid
+        if (
+          !Number.isFinite(city.latitude) ||
+          !Number.isFinite(city.longitude)
+        ) {
+          city = await fetchCoordinates(city);
+        }
+
+        if (
+          !Number.isFinite(city.latitude) ||
+          !Number.isFinite(city.longitude)
+        ) {
+          throw new Error("Valid coordinates not available");
+        }
+
+        // Prevent duplicate city combination
+        const exists = await City.findOne({
+          name: city.name,
+          state: city.state,
+          district: city.district,
+        }).select("_id");
+
+        if (exists) {
+          skippedCount++;
+
+          results.push({
+            name: cityName,
+            row: csvRow,
+            status: "skipped",
+            reason: "City already exists",
+          });
+
+          continue;
+        }
+
+        // IMPORTANT:
+        // City.create() executes pre-save middleware.
+        // This generates slug, stateSlug, districtSlug
+        // and synchronizes location.
+        await City.create(city);
+
+        insertedCount++;
+
+        results.push({
+          name: cityName,
+          row: csvRow,
+          status: "created",
+        });
+
+      } catch (err) {
+        // MongoDB duplicate key error
+        if (err?.code === 11000) {
+          skippedCount++;
+
+          results.push({
+            name: cityName,
+            row: csvRow,
+            status: "skipped",
+            reason: "Duplicate city or slug",
+          });
+
+          console.warn(
+            `Duplicate city skipped: ${cityName}`,
+            err.keyValue || err.message
+          );
+
+          continue;
+        }
+
+        failedCount++;
+
+        results.push({
+          name: cityName,
+          row: csvRow,
+          status: "failed",
+          reason: err.message,
+        });
+
+        console.error(
+          `City import failed: ${cityName}`,
+          err
+        );
       }
-      console.warn("Partial insert (duplicates skipped)");
     }
 
-    clearCityCache();
     if (insertedCount > 0) {
-  await pingSearchEngines();
-}
+      clearCityCache();
+
+      try {
+        await pingSearchEngines();
+      } catch (seoError) {
+        console.warn(
+          "City imported, but search engine ping failed:",
+          seoError.message
+        );
+      }
+    }
 
     return res.json({
       success: true,
       inserted: insertedCount,
-      skipped: skipped.length,
+      skipped: skippedCount,
+      failed: failedCount,
+      results,
     });
 
   } catch (error) {
     console.error("bulkUploadCities error:", error);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
-      message: "Bulk upload failed",
+      message: error.message || "Bulk upload failed",
     });
   }
 };
+
 
 /* =========================================================
    FILTER HELPERS (ADMIN ROUTES REQUIRE THESE)

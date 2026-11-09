@@ -7,11 +7,21 @@ export const normalizeCity = (data) => {
   const state = data.state?.trim();
   const country = data.country?.trim();
 
-  const lat = Number(data.latitude);
-  const lng = Number(data.longitude);
+  const hasLatitude =
+  data.latitude !== undefined &&
+  data.latitude !== null &&
+  String(data.latitude).trim() !== "";
 
-  const latitude = isNaN(lat) ? undefined : lat;
-  const longitude = isNaN(lng) ? undefined : lng;
+const hasLongitude =
+  data.longitude !== undefined &&
+  data.longitude !== null &&
+  String(data.longitude).trim() !== "";
+
+const lat = hasLatitude ? Number(data.latitude) : NaN;
+const lng = hasLongitude ? Number(data.longitude) : NaN;
+
+const latitude = Number.isFinite(lat) ? lat : undefined;
+const longitude = Number.isFinite(lng) ? lng : undefined;
 
   return {
     name,

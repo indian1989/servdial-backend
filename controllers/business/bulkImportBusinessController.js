@@ -669,14 +669,15 @@ updateImportProgress(requestId, {
         skippedCount += 1;
 
         results.push({
-          row: rowNumber,
-          status: "skipped",
-          businessName: name,
-          message:
-            `Duplicate contact found for "${duplicates[0].name}". ` +
-            "Business skipped. Set Confirm Duplicate Contact to TRUE " +
-            "only if this contact is legitimately shared.",
-        });
+  row: rowNumber,
+  status: "skipped",
+  businessName: name,
+  cityName: city.name,
+  message:
+    `Duplicate contact found for "${duplicates[0].name}". ` +
+    "Business skipped. Set Confirm Duplicate Contact to TRUE " +
+    "only if this contact is legitimately shared.",
+});
 
                 updateImportProgress(requestId, {
           processed: index + 1,
@@ -913,13 +914,14 @@ updateImportProgress(requestId, {
 
       createdCount += 1;
 
-            results.push({
-        row: rowNumber,
-        status: "created",
-        businessId: business._id,
-        businessName: business.name,
-        message: "Imported successfully.",
-      });
+           results.push({
+  row: rowNumber,
+  status: "created",
+  businessId: business._id,
+  businessName: business.name,
+  cityName: city.name,
+  message: "Imported successfully.",
+});
     } catch (error) {
       failedCount += 1;
 
@@ -931,11 +933,12 @@ updateImportProgress(requestId, {
       });
 
       results.push({
-        row: rowNumber,
-        status: "failed",
-        businessName: name,
-        message: error.message || "Import failed.",
-      });
+  row: rowNumber,
+  status: "failed",
+  businessName: name,
+  cityName: getValue(row, "City"),
+  message: error.message || "Import failed.",
+});
     }
 
     // LIVE PROGRESS: update after each processed row

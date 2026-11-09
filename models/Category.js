@@ -113,6 +113,7 @@ const categorySchema = new mongoose.Schema(
         "appointment",
         "shopping",
         "consultation",
+        "education",
       ],
 
       default: "service",

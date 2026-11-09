@@ -13,6 +13,7 @@ import {
   approveClaim,
   rejectClaim,
   updateBusinessPlan,
+  exportBusinessesCsv,
 } from "../controllers/adminBusinessController.js";
 
 import {
@@ -43,6 +44,11 @@ router.use(authorizeRoles("admin", "superadmin"));
    BUSINESS STATS (PUT FIRST - AVOID PARAM CONFLICTS)
 ====================================================== */
 router.get("/business-stats", getBusinessStats);
+
+/* ======================================================
+   BUSINESS CSV EXPORT
+====================================================== */
+router.get("/export/csv", exportBusinessesCsv);
 
 /* ======================================================
    ADMIN BUSINESS LIST
