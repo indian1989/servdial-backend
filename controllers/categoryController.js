@@ -280,30 +280,41 @@ const buildCategoryTree = (categories) => {
   return roots;
 };
 
+
 /* ================= GET ALL ================= */
 export const getAllCategories = async (req, res) => {
   try {
     const categories = await Category.find({
-  status: "active",
-})
-  .sort({
-    order: 1,
-    name: 1,
-  })
-  .lean();
+      status: "active",
+    })
+      .sort({
+        level: 1,
+        order: 1,
+        name: 1,
+      })
+      .lean();
+
+    const tree = buildCategoryTree(categories);
+
+    res.set("Cache-Control", "no-cache");
 
     res.json({
       success: true,
       data: categories,
+      categories: categories,
+      tree,
     });
+
   } catch (err) {
     console.error("getAllCategories:", err);
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch categories",
     });
   }
 };
+
 
 /* ================= GET TREE ================= */
 export const getCategoryTree = async (req, res) => {
