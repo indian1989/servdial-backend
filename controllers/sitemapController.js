@@ -9,7 +9,7 @@ import { getCache, setCache } from "../utils/memoryCache.js";
 const FRONTEND_URL =
   process.env.FRONTEND_URL || "https://www.servdial.com";
 
-const PAGE_SIZE = 50000;
+const PAGE_SIZE = 20000;
 
 const getLastMod = (date) =>
   new Date(date || Date.now()).toISOString();
