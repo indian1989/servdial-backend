@@ -1428,6 +1428,13 @@ businessSchema.index({
   isDeleted: 1,
 });
 
+// BUSINESS SITEMAP INDEX
+businessSchema.index({
+  status: 1,
+  isDeleted: 1,
+  updatedAt: -1,
+});
+
 // RANKING INDEX
 businessSchema.index({
   isFeatured: -1,
