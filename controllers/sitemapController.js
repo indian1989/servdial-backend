@@ -578,52 +578,43 @@ export const cityCategorySitemap = async (req, res) => {
        BUILD CITY × CATEGORY URL LIST
     ===================================================== */
 
-    const pages = [];
+    
+    const skip = (page - 1) * PAGE_SIZE;
+    const end = skip + PAGE_SIZE;
 
+    const paginatedPages = [];
+    let currentIndex = 0;
+
+    outerLoop:
     for (const city of cities) {
-
       for (const category of categories) {
 
-        pages.push({
+        if (currentIndex >= skip && currentIndex < end) {
+          paginatedPages.push({
+            url:
+              `${FRONTEND_URL}/` +
+              `${city.stateSlug}/` +
+              `${city.slug}/` +
+              `${category.slug}`,
 
-          url:
-            `${FRONTEND_URL}/` +
-            `${city.stateSlug}/` +
-            `${city.slug}/` +
-            `${category.slug}`,
+            updatedAt:
+              new Date(
+                Math.max(
+                  new Date(city.updatedAt || 0).getTime(),
+                  new Date(category.updatedAt || 0).getTime()
+                )
+              ),
+          });
+        }
 
-          updatedAt:
-            new Date(
-              Math.max(
-                new Date(
-                  city.updatedAt || 0
-                ).getTime(),
+        currentIndex++;
 
-                new Date(
-                  category.updatedAt || 0
-                ).getTime()
-              )
-            ),
-
-        });
-
+        if (currentIndex >= end) {
+          break outerLoop;
+        }
       }
-
     }
 
-
-    /* =====================================================
-       PAGINATION
-    ===================================================== */
-
-    const skip =
-      (page - 1) * PAGE_SIZE;
-
-    const paginatedPages =
-      pages.slice(
-        skip,
-        skip + PAGE_SIZE
-      );
 
 
     /* =====================================================
